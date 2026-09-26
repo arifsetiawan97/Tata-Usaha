@@ -1,0 +1,6 @@
+{
+  "name": "SI-OPS Sekolah: TU, Penjaga & Layanan Kebersihan",
+  "description": "Sistem informasi manajemen layanan operasional sekolah untuk TU, Penjaga Sekolah, dan Petugas Kebersihan dengan laporan harian, bulanan, tahunan, inventaris, dan cetak dokumen resmi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
