@@ -27,8 +27,22 @@ export const RoleSelectView: React.FC = () => {
       <div className="max-w-6xl mx-auto w-full pt-4 pb-8">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-800 pb-6 text-center sm:text-left">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-16 shrink-0 flex items-center justify-center bg-slate-800/80 rounded-xl p-1 border border-slate-700">
-              <LogoKabupatenDefault className="w-11 h-14" />
+            <div className="w-14 h-16 shrink-0 flex items-center justify-center bg-slate-800/80 rounded-xl p-1.5 border border-slate-700">
+              {schoolConfig.logoAplikasiUrl ? (
+                <img 
+                  src={schoolConfig.logoAplikasiUrl} 
+                  alt="Logo Aplikasi" 
+                  className="max-h-13 max-w-full object-contain rounded"
+                />
+              ) : schoolConfig.logoKabupatenUrl ? (
+                <img 
+                  src={schoolConfig.logoKabupatenUrl} 
+                  alt="Logo Kabupaten" 
+                  className="max-h-13 max-w-full object-contain"
+                />
+              ) : (
+                <LogoKabupatenDefault className="w-11 h-14" />
+              )}
             </div>
             <div>
               <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">

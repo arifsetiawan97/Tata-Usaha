@@ -73,8 +73,22 @@ export const Header: React.FC = () => {
           <div className="flex items-center justify-between h-16 gap-3">
             {/* Left: School Identity */}
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-11 shrink-0 flex items-center justify-center">
-                <LogoKabupatenDefault className="w-8 h-10" />
+              <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                {schoolConfig.logoAplikasiUrl ? (
+                  <img 
+                    src={schoolConfig.logoAplikasiUrl} 
+                    alt="Logo Aplikasi" 
+                    className="max-h-9 max-w-[40px] object-contain rounded"
+                  />
+                ) : schoolConfig.logoSekolahUrl ? (
+                  <img 
+                    src={schoolConfig.logoSekolahUrl} 
+                    alt="Logo Sekolah" 
+                    className="max-h-9 max-w-[40px] object-contain"
+                  />
+                ) : (
+                  <LogoKabupatenDefault className="w-8 h-10" />
+                )}
               </div>
 
               <div className="min-w-0">

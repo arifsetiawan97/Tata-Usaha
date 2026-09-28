@@ -16,6 +16,7 @@ export const initialSchoolConfig: SchoolConfig = {
   website: 'www.smpn1bogorraya.sch.id',
   logoKabupatenUrl: '', // Will use inline SVG renderer if empty
   logoSekolahUrl: '',   // Will use inline SVG Tut Wuri Handayani if empty
+  logoAplikasiUrl: '',  // Custom application logo (JPEG/PNG)
   stempelEnabled: true,
   stempelTextLine1: 'DINAS PENDIDIKAN KOTA BOGOR',
   stempelTextLine2: 'SMP NEGERI 1 BOGOR RAYA',

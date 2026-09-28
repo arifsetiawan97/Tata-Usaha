@@ -18,7 +18,10 @@ import {
   Download,
   Upload,
   Layers,
-  Archive
+  Archive,
+  Loader2,
+  Brain,
+  Wand2
 } from 'lucide-react';
 
 interface AnnualReportViewProps {
@@ -84,7 +87,9 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
     saveAnnualReport, 
     generateAnnualReportFromMonthly,
     monthlyReports,
-    archiveReport
+    archiveReport,
+    inventories,
+    schoolConfig
   } = useApp();
 
   const effectiveRole = currentRole || 'TU';
@@ -100,10 +105,57 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
   const [newMilestone, setNewMilestone] = useState('');
   const [newRec, setNewRec] = useState('');
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const showNotification = (msg: string) => {
     setNoticeMessage(msg);
-    setTimeout(() => setNoticeMessage(null), 3500);
+    setTimeout(() => setNoticeMessage(null), 4000);
+  };
+
+  // ANALISIS CERDAS OTOMATIS TAHUNAN (AI / DATA SYNTHESIS)
+  const handleSmartAnalysis = async () => {
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch('/api/gemini/analyze-annual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: effectiveRole,
+          year: selectedYear,
+          monthsSummary: monthsData,
+          tasks: tasks.filter(t => t.role === effectiveRole),
+          schoolConfig,
+          inventories: inventories.filter(i => i.role === effectiveRole)
+        })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          const { summary, annualMilestones, strategicRecommendations } = json.data;
+          setReportState(prev => {
+            const updated: AnnualReport = {
+              ...prev,
+              summary: summary || prev.summary,
+              annualMilestones: Array.isArray(annualMilestones) && annualMilestones.length > 0 ? annualMilestones : prev.annualMilestones,
+              strategicRecommendations: Array.isArray(strategicRecommendations) && strategicRecommendations.length > 0 ? strategicRecommendations : prev.strategicRecommendations
+            };
+            saveAnnualReport(updated);
+            return updated;
+          });
+          showNotification(json.isAi 
+            ? '✨ Analisis cerdas AI berhasil merumuskan ringkasan eksekutif, capaian tahunan, dan rekomendasi strategis!' 
+            : '✨ Analisis cerdas otomatis tahunan berhasil disinkronkan ke seluruh dokumen!');
+        }
+      } else {
+        showNotification('Gagal menghubungi layanan analisis cerdas tahunan.');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('Terjadi kesalahan saat memproses analisis cerdas tahunan.');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   // Compute 12-month summary from tasks & monthly reports
@@ -201,7 +253,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
           }));
           showNotification('Template laporan tahunan berhasil diimpor!');
         } catch (err) {
-          alert('Gagal membaca file JSON template!');
+          showNotification('Gagal membaca file JSON template!');
         }
       };
       reader.readAsText(file);
@@ -256,6 +308,27 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
             <option value={2027}>Tahun 2027</option>
           </select>
 
+          {/* Smart Analysis AI Button */}
+          <button
+            type="button"
+            onClick={handleSmartAnalysis}
+            disabled={isAnalyzing}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 active:scale-95 rounded-lg transition-all shadow-md cursor-pointer disabled:opacity-50"
+            title="Buatkan analisis cerdas otomatis pada ringkasan tahunan, capaian, dan rencana strategis"
+          >
+            {isAnalyzing ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-200" />
+                <span>Menganalisis Kinerja Tahunan...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+                <span>Analisis Cerdas Otomatis</span>
+              </>
+            )}
+          </button>
+
           {/* Template Button */}
           <button
             type="button"
@@ -263,8 +336,8 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-200 cursor-pointer"
             title="Muat templat uraian resmi standar kedinasan tahunan"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Muat Template Resmi</span>
+            <Wand2 className="w-3.5 h-3.5 text-amber-600" />
+            <span>Template Standar</span>
           </button>
 
           {/* Sync Button */}
@@ -454,6 +527,47 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* BANNER ANALISIS CERDAS OTOMATIS TAHUNAN */}
+      <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-indigo-950 text-white p-4 sm:p-5 rounded-2xl shadow-md border border-amber-600/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center shrink-0 text-amber-300">
+            <Brain className="w-5 h-5 text-amber-300 animate-pulse" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black tracking-wide text-amber-300 uppercase">
+                Analisis Cerdas Evaluasi Tahunan
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/30 font-semibold">
+                Konsolidasi 12 Bulan & Standar Akreditasi
+              </span>
+            </div>
+            <p className="text-xs text-slate-200 leading-relaxed max-w-2xl">
+              Sistem akan mengonsolidasi seluruh laporan operasional 12 bulan ({totalYearTasks} tugas tercatat), menghitung rasio pemenuhan SPM, menyusun <strong>ringkasan eksekutif tahunan</strong>, memetakan <strong>capaian utama & indikator keberhasilan tahunan</strong>, serta merumuskan <strong>rekomendasi rencana strategis dan kebutuhan operasional tahun depan</strong>.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSmartAnalysis}
+          disabled={isAnalyzing}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 active:scale-95 text-slate-950 text-xs font-black rounded-xl transition-all shadow-lg cursor-pointer shrink-0 disabled:opacity-50"
+        >
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+              <span>Memproses Analisis Tahunan...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4 text-slate-950" />
+              <span>Jalankan Analisis Cerdas Tahunan</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Ringkasan & Capaian Tahunan */}

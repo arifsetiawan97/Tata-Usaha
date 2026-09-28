@@ -72,66 +72,43 @@ export async function exportElementToPdf(
             p.style.boxShadow = 'none';
             p.style.backgroundColor = '#ffffff';
             p.style.boxSizing = 'border-box';
+            p.style.minHeight = 'auto';
+            p.style.padding = '24px 32px';
           });
         }
       });
 
-      // Standard A4 aspect ratio: 297mm / 210mm = 1.414285
+      // Standard A4 aspect ratio: 297mm / 210mm = 1.4142857
       const a4Aspect = 297 / 210;
       const targetCanvasHeightForSinglePage = Math.round(pageCanvas.width * a4Aspect);
 
-      // If the page canvas fits within standard A4 height (with 4% safety tolerance)
-      if (pageCanvas.height <= targetCanvasHeightForSinglePage * 1.04) {
-        if (currentPdfPage > 0) {
-          pdf.addPage('a4', 'portrait');
-        }
-        currentPdfPage++;
+      if (currentPdfPage > 0) {
+        pdf.addPage('a4', 'portrait');
+      }
+      currentPdfPage++;
 
-        // Draw onto exact full A4 page-sized canvas to prevent stretching
-        const finalCanvas = document.createElement('canvas');
-        finalCanvas.width = pageCanvas.width;
-        finalCanvas.height = targetCanvasHeightForSinglePage;
-        const ctx = finalCanvas.getContext('2d');
-        if (ctx) {
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-          ctx.drawImage(pageCanvas, 0, 0);
-          const imgData = finalCanvas.toDataURL('image/jpeg', quality);
-          pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
-        } else {
-          const imgData = pageCanvas.toDataURL('image/jpeg', quality);
-          pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
-        }
+      // Create pristine A4 destination canvas
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = pageCanvas.width;
+      finalCanvas.height = targetCanvasHeightForSinglePage;
+      const ctx = finalCanvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+        
+        // Fit cleanly: scale down proportionally if content is taller than A4, ensuring 0% is ever cut or sliced
+        const scaleFactor = Math.min(1, targetCanvasHeightForSinglePage / pageCanvas.height);
+        const drawW = pageCanvas.width * scaleFactor;
+        const drawH = pageCanvas.height * scaleFactor;
+        const drawX = (finalCanvas.width - drawW) / 2;
+        const drawY = 0;
+        
+        ctx.drawImage(pageCanvas, 0, 0, pageCanvas.width, pageCanvas.height, drawX, drawY, drawW, drawH);
+        const imgData = finalCanvas.toDataURL('image/jpeg', quality);
+        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
       } else {
-        // If content exceeded single A4 height: slice gracefully without squishing or cutting!
-        let sliceY = 0;
-        while (sliceY < pageCanvas.height) {
-          if (currentPdfPage > 0) {
-            pdf.addPage('a4', 'portrait');
-          }
-          currentPdfPage++;
-
-          const remainingHeight = pageCanvas.height - sliceY;
-          const currentSliceH = Math.min(targetCanvasHeightForSinglePage, remainingHeight);
-
-          const sliceCanvas = document.createElement('canvas');
-          sliceCanvas.width = pageCanvas.width;
-          sliceCanvas.height = targetCanvasHeightForSinglePage;
-          const sliceCtx = sliceCanvas.getContext('2d');
-          if (sliceCtx) {
-            sliceCtx.fillStyle = '#ffffff';
-            sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-            sliceCtx.drawImage(
-              pageCanvas,
-              0, sliceY, pageCanvas.width, currentSliceH,
-              0, 0, pageCanvas.width, currentSliceH
-            );
-            const sliceData = sliceCanvas.toDataURL('image/jpeg', quality);
-            pdf.addImage(sliceData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
-          }
-
-          sliceY += currentSliceH;
-        }
+        const imgData = pageCanvas.toDataURL('image/jpeg', quality);
+        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
       }
     }
 

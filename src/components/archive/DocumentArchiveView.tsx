@@ -59,6 +59,7 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
   const [notification, setNotification] = useState<string | null>(null);
   const [isBapModalOpen, setIsBapModalOpen] = useState(false);
   const [inspectingDoc, setInspectingDoc] = useState<ArchiveDocument | null>(null);
+  const [docToDelete, setDocToDelete] = useState<ArchiveDocument | null>(null);
   const [inspectorName, setInspectorName] = useState('Drs. H. AHMAD FAUZI, M.Pd.');
   const [inspectorNip, setInspectorNip] = useState('NIP. 19681120 199403 1 004');
   const [inspectorInstitution, setInspectorInstitution] = useState('Pengawas Satuan Pendidikan Disdik');
@@ -436,6 +437,17 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
                     >
                       <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
                     </button>
+
+                    {/* HAPUS BERKAS ARSIP */}
+                    <button
+                      type="button"
+                      onClick={() => setDocToDelete(doc)}
+                      className="flex items-center gap-1.5 px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-lg transition-colors border border-rose-200 cursor-pointer"
+                      title="Hapus berkas arsip ini dari repositori"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span className="hidden sm:inline">Hapus</span>
+                    </button>
                   </div>
                 </div>
 
@@ -629,25 +641,74 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
             <div className="flex items-center justify-between pt-3 border-t border-slate-200">
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm(`Yakin ingin menghapus arsip ${inspectingDoc.regNumber}?`)) {
-                    deleteArchive(inspectingDoc.id);
-                    setInspectingDoc(null);
-                    showNotification('Dokumen arsip berhasil dihapus.');
-                  }
-                }}
-                className="flex items-center gap-1.5 text-xs text-rose-600 hover:text-rose-700 font-semibold"
+                onClick={() => setDocToDelete(inspectingDoc)}
+                className="flex items-center gap-1.5 text-xs text-rose-600 hover:text-rose-700 font-semibold px-2 py-1.5 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                 <span>Hapus Berkas Arsip</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setInspectingDoc(null)}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer"
               >
                 Selesai
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS BERKAS ARSIP (ANTI-GAGAL / TANPA WINDOW.CONFIRM) */}
+      {docToDelete && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-rose-200">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-900">
+                  Konfirmasi Hapus Berkas Arsip
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Apakah Anda yakin ingin menghapus berkas arsip kedinasan ini secara permanen dari repositori? Tindakan ini tidak dapat dibatalkan.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1 text-xs">
+              <div className="font-mono text-indigo-700 font-bold">{docToDelete.regNumber}</div>
+              <div className="font-bold text-slate-900">{docToDelete.title}</div>
+              <div className="text-slate-600">Nomor: {docToDelete.nomorSurat}</div>
+              <div className="text-slate-500 text-[11px]">Petugas: {docToDelete.operatorName}</div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDocToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetId = docToDelete.id;
+                  const targetReg = docToDelete.regNumber;
+                  deleteArchive(targetId);
+                  setDocToDelete(null);
+                  if (inspectingDoc?.id === targetId) {
+                    setInspectingDoc(null);
+                  }
+                  showNotification(`Berkas arsip ${targetReg} berhasil dihapus dari repositori.`);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Ya, Hapus Permanen</span>
               </button>
             </div>
           </div>

@@ -21,6 +21,39 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
     onClose();
   };
 
+  const handleUploadLogoKabupaten = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFormData(prev => ({ ...prev, logoKabupatenUrl: event.target?.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUploadLogoSekolah = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFormData(prev => ({ ...prev, logoSekolahUrl: event.target?.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUploadLogoAplikasi = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFormData(prev => ({ ...prev, logoAplikasiUrl: event.target?.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleUploadStempel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -404,12 +437,125 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
           )}
 
           {activeTab === 'kop' && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-900 text-[11px] leading-relaxed">
-                Kop surat resmi 3 Kolom:
-                <br />- <strong>Kolom 1</strong>: Logo Kabupaten / Lambang Daerah
-                <br />- <strong>Kolom 2</strong>: Identitas Resmi Sekolah (Pemerintah Daerah, Dinas, NPSN, Alamat)
-                <br />- <strong>Kolom 3</strong>: Logo Tut Wuri Handayani / Lambang Sekolah
+                Kop surat resmi 3 Kolom & Logo Aplikasi:
+                <br />- <strong>Kolom 1 (Kiri)</strong>: Logo Kabupaten / Lambang Daerah (Unggah JPEG/PNG)
+                <br />- <strong>Kolom 2 (Tengah)</strong>: Identitas Satuan Pendidikan & Alamat Lengkap
+                <br />- <strong>Kolom 3 (Kanan)</strong>: Logo Sekolah / Tut Wuri Handayani (Unggah JPEG/PNG)
+                <br />- <strong>Logo Aplikasi</strong>: Logo identitas sistem SI-OPS pada bilah navigasi dan portal masuk
+              </div>
+
+              {/* SECTION: UPLOAD LOGO KOP SURAT & LOGO APLIKASI */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                <h4 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-indigo-600" />
+                  <span>Pengaturan Logo Kop Surat & Logo Aplikasi (Format JPEG / PNG)</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  {/* 1. LOGO KABUPATEN */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-lg flex flex-col justify-between space-y-2">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-800 block">1. Logo Kabupaten / Pemda</span>
+                      <span className="text-[10px] text-slate-500 block leading-tight">Posisi: Kolom Kiri Kop Surat</span>
+                    </div>
+
+                    <div className="h-16 flex items-center justify-center bg-slate-50 border border-dashed border-slate-300 rounded p-1">
+                      {formData.logoKabupatenUrl ? (
+                        <img src={formData.logoKabupatenUrl} alt="Logo Kab" className="max-h-14 max-w-full object-contain" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic">Logo Lambang Default</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <label className="flex-1 cursor-pointer flex items-center justify-center gap-1 px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded text-[10.5px] font-semibold transition-colors">
+                        <Upload className="w-3 h-3" />
+                        <span>Upload JPEG</span>
+                        <input type="file" accept="image/jpeg,image/png,image/jpg" onChange={handleUploadLogoKabupaten} className="hidden" />
+                      </label>
+                      {formData.logoKabupatenUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, logoKabupatenUrl: '' }))}
+                          className="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded text-[10px] font-semibold border border-rose-200"
+                          title="Kembalikan ke lambang default"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 2. LOGO SEKOLAH */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-lg flex flex-col justify-between space-y-2">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-800 block">2. Logo Sekolah / Tut Wuri</span>
+                      <span className="text-[10px] text-slate-500 block leading-tight">Posisi: Kolom Kanan Kop Surat</span>
+                    </div>
+
+                    <div className="h-16 flex items-center justify-center bg-slate-50 border border-dashed border-slate-300 rounded p-1">
+                      {formData.logoSekolahUrl ? (
+                        <img src={formData.logoSekolahUrl} alt="Logo Sekolah" className="max-h-14 max-w-full object-contain" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic">Tut Wuri Handayani Default</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <label className="flex-1 cursor-pointer flex items-center justify-center gap-1 px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded text-[10.5px] font-semibold transition-colors">
+                        <Upload className="w-3 h-3" />
+                        <span>Upload JPEG</span>
+                        <input type="file" accept="image/jpeg,image/png,image/jpg" onChange={handleUploadLogoSekolah} className="hidden" />
+                      </label>
+                      {formData.logoSekolahUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, logoSekolahUrl: '' }))}
+                          className="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded text-[10px] font-semibold border border-rose-200"
+                          title="Kembalikan ke lambang default"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 3. LOGO APLIKASI */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-lg flex flex-col justify-between space-y-2">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-800 block">3. Logo Aplikasi SI-OPS</span>
+                      <span className="text-[10px] text-slate-500 block leading-tight">Posisi: Header & Halaman Masuk</span>
+                    </div>
+
+                    <div className="h-16 flex items-center justify-center bg-slate-50 border border-dashed border-slate-300 rounded p-1">
+                      {formData.logoAplikasiUrl ? (
+                        <img src={formData.logoAplikasiUrl} alt="Logo App" className="max-h-14 max-w-full object-contain" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic">Logo SI-OPS Standar</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <label className="flex-1 cursor-pointer flex items-center justify-center gap-1 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded text-[10.5px] font-semibold transition-colors">
+                        <Upload className="w-3 h-3 text-emerald-600" />
+                        <span>Ganti Logo JPEG</span>
+                        <input type="file" accept="image/jpeg,image/png,image/jpg" onChange={handleUploadLogoAplikasi} className="hidden" />
+                      </label>
+                      {formData.logoAplikasiUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, logoAplikasiUrl: '' }))}
+                          className="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded text-[10px] font-semibold border border-rose-200"
+                          title="Kembalikan ke logo standar"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -438,12 +584,12 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
               <div className="pt-2">
                 <label className="block font-semibold text-slate-700 mb-1">Upload File Cap Stempel Sekolah Resmi (Opsional)</label>
                 <p className="text-[10.5px] text-slate-500 mb-2">
-                  Jika Anda memiliki gambar cap stempel fisik sekolah (format PNG transparan), Anda dapat mengunggahnya di sini:
+                  Jika Anda memiliki gambar cap stempel fisik sekolah (format PNG transparan / JPEG), Anda dapat mengunggahnya di sini:
                 </p>
                 <div className="flex items-center gap-3">
                   <label className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-medium text-slate-700">
                     <Stamp className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Upload Cap Stempel PNG</span>
+                    <span>Upload Cap Stempel PNG/JPEG</span>
                     <input type="file" accept="image/*" onChange={handleUploadStempel} className="hidden" />
                   </label>
 

@@ -114,6 +114,7 @@ export interface SchoolConfig {
   website: string;
   logoKabupatenUrl: string;
   logoSekolahUrl: string;
+  logoAplikasiUrl?: string;
   stempelEnabled: boolean;
   stempelTextLine1: string;
   stempelTextLine2: string;

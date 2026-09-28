@@ -184,20 +184,20 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
     const customSig = signatures[targetKey];
 
     return (
-      <div className="flex flex-col items-center justify-between min-h-[145px] w-full relative">
-        <div className="w-full h-24 flex items-center justify-center relative my-1">
+      <div className="flex flex-col items-center justify-between min-h-[120px] w-full relative">
+        <div className="w-full h-20 flex items-center justify-center relative my-0.5">
           {customSig ? (
             <img 
               src={customSig} 
               alt="Tanda Tangan" 
-              className="max-h-20 max-w-[190px] object-contain drop-shadow-xs" 
+              className="max-h-16 max-w-[180px] object-contain drop-shadow-xs" 
             />
           ) : (
             <div className="flex flex-col items-center justify-center">
-              <span className="signature-font text-3xl sm:text-4xl text-blue-900 select-none tracking-wide transform -rotate-3 py-1">
+              <span className="signature-font text-2xl sm:text-3xl text-blue-900 select-none tracking-wide transform -rotate-3 py-0.5">
                 {officer.signatureData || defaultSignName}
               </span>
-              <div className="flex items-center gap-1 text-[9px] text-emerald-800 font-medium bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 no-print">
+              <div className="flex items-center gap-1 text-[8.5px] text-emerald-800 font-medium bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 no-print">
                 <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                 <span>Terverifikasi Digital</span>
               </div>
@@ -404,7 +404,7 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
       </div>
 
       {/* Official Footnote / E-Sign Disclaimer */}
-      <div className="mt-8 pt-3 border-t border-dashed border-slate-300 text-center">
+      <div className="mt-3 pt-2 border-t border-dashed border-slate-300 text-center">
         <p className="text-[9.5px] text-slate-500 italic">
           Dokumen ini merupakan laporan kedinasan resmi UPT Satuan Pendidikan yang diverifikasi dan disahkan sesuai dengan Pedoman Tata Naskah Dinas Satuan Pendidikan.
         </p>

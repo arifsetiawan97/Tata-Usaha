@@ -19,7 +19,10 @@ import {
   FileCheck2,
   Upload,
   Layers,
-  Archive
+  Archive,
+  Loader2,
+  Brain,
+  Wand2
 } from 'lucide-react';
 
 interface MonthlyReportViewProps {
@@ -99,7 +102,8 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
     saveMonthlyReport, 
     generateMonthlyReportFromTasks,
     schoolConfig,
-    archiveReport
+    archiveReport,
+    inventories
   } = useApp();
 
   const effectiveRole = currentRole || 'TU';
@@ -118,6 +122,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
   const [newObstacle, setNewObstacle] = useState('');
   const [newSolution, setNewSolution] = useState('');
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Tasks in this month for this role
   const monthTasks = tasks.filter(t => {
@@ -130,7 +135,54 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
 
   const showNotification = (msg: string) => {
     setNoticeMessage(msg);
-    setTimeout(() => setNoticeMessage(null), 3500);
+    setTimeout(() => setNoticeMessage(null), 4000);
+  };
+
+  // ANALISIS CERDAS OTOMATIS (AI / DATA SYNTHESIS)
+  const handleSmartAnalysis = async () => {
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch('/api/gemini/analyze-monthly', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: effectiveRole,
+          month: selectedMonth,
+          year: selectedYear,
+          tasks: monthTasks,
+          schoolConfig,
+          inventories: inventories.filter(i => i.role === effectiveRole)
+        })
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          const { summary, achievements, obstacles, solutions } = json.data;
+          setReportState(prev => {
+            const updated: MonthlyReport = {
+              ...prev,
+              summary: summary || prev.summary,
+              achievements: Array.isArray(achievements) && achievements.length > 0 ? achievements : prev.achievements,
+              obstacles: Array.isArray(obstacles) && obstacles.length > 0 ? obstacles : prev.obstacles,
+              solutions: Array.isArray(solutions) && solutions.length > 0 ? solutions : prev.solutions
+            };
+            saveMonthlyReport(updated);
+            return updated;
+          });
+          showNotification(json.isAi 
+            ? '✨ Analisis cerdas AI berhasil disintesis ke ringkasan, capaian, kendala, dan solusi bulanan!' 
+            : '✨ Analisis cerdas otomatis berhasil disinkronkan ke seluruh bagian laporan bulanan!');
+        }
+      } else {
+        showNotification('Gagal menghubungi layanan analisis cerdas.');
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification('Terjadi kesalahan saat memproses analisis cerdas.');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleMonthYearChange = (m: number, y: number) => {
@@ -272,6 +324,27 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
             <option value={2027}>2027</option>
           </select>
 
+          {/* Smart Analysis AI Button */}
+          <button
+            type="button"
+            onClick={handleSmartAnalysis}
+            disabled={isAnalyzing}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 active:scale-95 rounded-lg transition-all shadow-md cursor-pointer disabled:opacity-50"
+            title="Buatkan analisis cerdas otomatis pada ringkasan, capaian, kendala, dan solusi"
+          >
+            {isAnalyzing ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-200" />
+                <span>Menganalisis Kinerja...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+                <span>Analisis Cerdas Otomatis</span>
+              </>
+            )}
+          </button>
+
           {/* Template Button */}
           <button
             type="button"
@@ -279,8 +352,8 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-200 cursor-pointer"
             title="Muat templat uraian resmi standar kedinasan"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Muat Template Resmi</span>
+            <Wand2 className="w-3.5 h-3.5 text-amber-600" />
+            <span>Template Standar</span>
           </button>
 
           {/* Sync Button */}
@@ -422,6 +495,47 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
           className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-semibold w-full sm:w-72 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
           placeholder="Contoh: Kota Bogor, 30 September 2026"
         />
+      </div>
+
+      {/* BANNER ANALISIS CERDAS OTOMATIS */}
+      <div className="bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-md border border-indigo-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center shrink-0 text-purple-300">
+            <Brain className="w-5 h-5 text-yellow-300 animate-pulse" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black tracking-wide text-yellow-300 uppercase">
+                Fitur Analisis Cerdas Otomatis
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/40 font-semibold">
+                AI & Logika Kinerja Satdik
+              </span>
+            </div>
+            <p className="text-xs text-slate-200 leading-relaxed max-w-2xl">
+              Sistem akan membedah seluruh catatan tugas harian bulan ini ({monthTasks.length} tugas), menghitung capaian SPM, merumuskan <strong>ringkasan eksekutif</strong>, memetakan <strong>daftar capaian prestasi</strong>, mendeteksi <strong>kendala lapangan</strong>, serta merumuskan <strong>solusi dan mitigasi masalah</strong> secara otomatis.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSmartAnalysis}
+          disabled={isAnalyzing}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 active:scale-95 text-slate-950 text-xs font-black rounded-xl transition-all shadow-lg cursor-pointer shrink-0 disabled:opacity-50"
+        >
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+              <span>Memproses Analisis Otomatis...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4 text-slate-950" />
+              <span>Jalankan Analisis Cerdas Otomatis</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Uraian Ringkasan & Capaian Kinerja */}
