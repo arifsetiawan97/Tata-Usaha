@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RoleType, AnnualReport } from '../../types';
 import { InventoryTable } from '../common/InventoryTable';
@@ -21,7 +21,9 @@ import {
   Archive,
   Loader2,
   Brain,
-  Wand2
+  Wand2,
+  Shield,
+  Building2
 } from 'lucide-react';
 
 interface AnnualReportViewProps {
@@ -92,7 +94,15 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
     schoolConfig
   } = useApp();
 
-  const effectiveRole = currentRole || 'TU';
+  const [selectedRole, setSelectedRole] = useState<RoleType>(currentRole || 'TU');
+
+  useEffect(() => {
+    if (currentRole) {
+      setSelectedRole(currentRole);
+    }
+  }, [currentRole]);
+
+  const effectiveRole = selectedRole;
   const roleTitle = effectiveRole === 'TU' ? 'Tata Usaha' : effectiveRole === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
 
   const [selectedYear, setSelectedYear] = useState<number>(2026);
@@ -106,6 +116,14 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
   const [newRec, setNewRec] = useState('');
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Synchronize report state if role or year changes
+  useEffect(() => {
+    const rep = annualReports.find(
+      r => r.role === effectiveRole && r.year === selectedYear
+    ) || generateAnnualReportFromMonthly(effectiveRole, selectedYear);
+    setReportState(rep);
+  }, [effectiveRole, selectedYear, annualReports]);
 
   const showNotification = (msg: string) => {
     setNoticeMessage(msg);
@@ -133,16 +151,18 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
         const json = await res.json();
         if (json.success && json.data) {
           const { summary, annualMilestones, strategicRecommendations } = json.data;
-          setReportState(prev => {
-            const updated: AnnualReport = {
-              ...prev,
-              summary: summary || prev.summary,
-              annualMilestones: Array.isArray(annualMilestones) && annualMilestones.length > 0 ? annualMilestones : prev.annualMilestones,
-              strategicRecommendations: Array.isArray(strategicRecommendations) && strategicRecommendations.length > 0 ? strategicRecommendations : prev.strategicRecommendations
-            };
-            saveAnnualReport(updated);
-            return updated;
-          });
+          const currentRep = annualReports.find(
+            r => r.role === effectiveRole && r.year === selectedYear
+          ) || reportState;
+
+          const updated: AnnualReport = {
+            ...currentRep,
+            summary: summary || currentRep.summary,
+            annualMilestones: Array.isArray(annualMilestones) && annualMilestones.length > 0 ? annualMilestones : currentRep.annualMilestones,
+            strategicRecommendations: Array.isArray(strategicRecommendations) && strategicRecommendations.length > 0 ? strategicRecommendations : currentRep.strategicRecommendations
+          };
+          setReportState(updated);
+          saveAnnualReport(updated);
           showNotification(json.isAi 
             ? '✨ Analisis cerdas AI berhasil merumuskan ringkasan eksekutif, capaian tahunan, dan rekomendasi strategis!' 
             : '✨ Analisis cerdas otomatis tahunan berhasil disinkronkan ke seluruh dokumen!');
@@ -384,6 +404,88 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({ onOpenPrint 
             <Archive className="w-3.5 h-3.5 text-amber-700" />
             <span>Arsipkan</span>
           </button>
+        </div>
+      </div>
+
+      {/* SEPARATE MENU TABS FOR EACH OPERATIONAL ROLE IN ANNUAL REPORT */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Pilih Peran Operasional:
+            </span>
+            <span className="text-[11px] text-slate-500 hidden sm:inline">
+              (Beralih laporan tahunan masing-masing operator)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* Penjaga Sekolah */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedRole('PENJAGA');
+                const rep = annualReports.find(r => r.role === 'PENJAGA' && r.year === selectedYear) || generateAnnualReportFromMonthly('PENJAGA', selectedYear);
+                setReportState(rep);
+              }}
+              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                effectiveRole === 'PENJAGA'
+                  ? 'bg-blue-50/90 border-blue-600 text-blue-900 shadow-xs ring-1 ring-blue-500/20 font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`p-1.5 rounded-md ${effectiveRole === 'PENJAGA' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <Shield className="w-3.5 h-3.5" />
+                </span>
+                <span>Penjaga Sekolah</span>
+              </div>
+            </button>
+
+            {/* Tata Usaha */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedRole('TU');
+                const rep = annualReports.find(r => r.role === 'TU' && r.year === selectedYear) || generateAnnualReportFromMonthly('TU', selectedYear);
+                setReportState(rep);
+              }}
+              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                effectiveRole === 'TU'
+                  ? 'bg-sky-50/90 border-sky-600 text-sky-900 shadow-xs ring-1 ring-sky-500/20 font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`p-1.5 rounded-md ${effectiveRole === 'TU' ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <Building2 className="w-3.5 h-3.5" />
+                </span>
+                <span>Tata Usaha (TU)</span>
+              </div>
+            </button>
+
+            {/* Service (Kebersihan) */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedRole('SERVICE');
+                const rep = annualReports.find(r => r.role === 'SERVICE' && r.year === selectedYear) || generateAnnualReportFromMonthly('SERVICE', selectedYear);
+                setReportState(rep);
+              }}
+              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                effectiveRole === 'SERVICE'
+                  ? 'bg-emerald-50/90 border-emerald-600 text-emerald-900 shadow-xs ring-1 ring-emerald-500/20 font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`p-1.5 rounded-md ${effectiveRole === 'SERVICE' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                </span>
+                <span>Service (Kebersihan)</span>
+              </div>
+            </button>
+          </div>
         </div>
       </div>
 

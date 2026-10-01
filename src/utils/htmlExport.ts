@@ -1,4 +1,10 @@
 import { SchoolConfig, MonthlyReport, AnnualReport, RoleType, TaskLog, InventoryItem } from '../types';
+import { 
+  isTaskInMonth, 
+  isTaskInYear, 
+  getTaskClassification, 
+  OFFICIAL_TUPOKSI_DEFINITIONS 
+} from './taskClassification';
 
 interface DocumentExportParams {
   reportType: 'monthly' | 'annual';
@@ -52,18 +58,23 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
   const docDate = manualDate || `${schoolConfig.kabupatenKota}, 30 September 2026`;
   const noSurat = nomorSurat || `800/${isMonthly ? `LAP-BLN/${monthlyData?.month || 9}` : 'LAP-THN'}/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`;
 
-  // Relevant tasks for this report
+  // Relevant tasks for this report using robust string date parsing
   const relevantTasks = tasks.filter(t => {
     if (t.role !== role) return false;
-    const d = new Date(t.date);
     if (isMonthly && monthlyData) {
-      return d.getMonth() + 1 === monthlyData.month && d.getFullYear() === monthlyData.year;
+      return isTaskInMonth(t.date, monthlyData.month, monthlyData.year);
     }
     if (!isMonthly && annualData) {
-      return d.getFullYear() === annualData.year;
+      return isTaskInYear(t.date, annualData.year);
     }
     return true;
   });
+
+  const tupoksiTasks = relevantTasks.filter(t => getTaskClassification(role, t.category) === 'pokok');
+  const tambahanTasks = relevantTasks.filter(t => getTaskClassification(role, t.category) === 'tambahan');
+  const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai');
+  const tambahanCompleted = tambahanTasks.filter(t => t.status === 'selesai');
+  const completedCount = relevantTasks.filter(t => t.status === 'selesai').length;
 
   const roleInventories = inventories.filter(inv => inv.role === role);
   const tasksWithPhotos = relevantTasks.filter(t => !!t.photoUrl);
@@ -710,6 +721,29 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
           ${annualData.strategicRecommendations?.map(rec => `<li>${rec}</li>`).join('') || '<li>Pemeliharaan berkesinambungan.</li>'}
         </ul>
       </div>` : ''}
+
+      <!-- II. STANDAR TUGAS POKOK (TUPOKSI) DAN TUGAS TAMBAHAN -->
+      <div class="section-title">II. STANDAR TUGAS POKOK (TUPOKSI) DAN TUGAS TAMBAHAN LAYANAN OPERASIONAL</div>
+      <div style="display: flex; gap: 14px; margin-top: 6px; margin-bottom: 10px;">
+        <div style="flex: 1; background: #f8fafc; border: 1px solid #000; padding: 8px 10px; border-radius: 3px;">
+          <div style="font-weight: bold; font-size: 9pt; color: #1e3a8a; margin-bottom: 4px; display: flex; justify-content: space-between;">
+            <span>A. Tugas Pokok (Tupoksi Standar):</span>
+            <span style="font-family: monospace;">(${tupoksiCompleted.length}/${tupoksiTasks.length} Tuntas)</span>
+          </div>
+          <ul style="padding-left: 18px; margin: 0; font-size: 8.5pt;">
+            ${OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tupoksiList.map(item => `<li style="margin-bottom: 2px;">${item}</li>`).join('') || ''}
+          </ul>
+        </div>
+        <div style="flex: 1; background: #f8fafc; border: 1px solid #000; padding: 8px 10px; border-radius: 3px;">
+          <div style="font-weight: bold; font-size: 9pt; color: #92400e; margin-bottom: 4px; display: flex; justify-content: space-between;">
+            <span>B. Tugas Tambahan & Insidental:</span>
+            <span style="font-family: monospace;">(${tambahanCompleted.length}/${tambahanTasks.length} Tuntas)</span>
+          </div>
+          <ul style="padding-left: 18px; margin: 0; font-size: 8.5pt;">
+            ${OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tugasTambahanList.map(item => `<li style="margin-bottom: 2px;">${item}</li>`).join('') || ''}
+          </ul>
+        </div>
+      </div>
     </div>
 
     <!-- Lembar 1 Page Footer -->
@@ -728,12 +762,13 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         <span>No: ${noSurat}</span>
       </div>
 
-      <div class="section-title">II. REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN</div>
+      <div class="section-title">III. REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN</div>
       <table class="data-table">
         <thead>
           <tr>
             <th class="col-no">No</th>
             <th class="col-date">Tanggal</th>
+            <th style="width: 80px; font-size: 8.5pt;">Klasifikasi</th>
             <th class="col-time">Waktu</th>
             <th>Uraian Tugas & Pekerjaan Kedinasan</th>
             <th class="col-vol">Volume</th>
@@ -744,14 +779,19 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         <tbody>
           ${tasksPage1.length === 0 ? `
             <tr>
-              <td colspan="7" style="text-align: center; padding: 14px; color: #64748b;">
+              <td colspan="8" style="text-align: center; padding: 14px; color: #64748b;">
                 Tidak ada catatan tugas operasional pada periode ini.
               </td>
             </tr>
-          ` : tasksPage1.map((t, idx) => `
+          ` : tasksPage1.map((t, idx) => {
+            const isPokok = getTaskClassification(role, t.category) === 'pokok';
+            return `
             <tr>
               <td class="col-no">${idx + 1}</td>
               <td class="col-date">${t.date}</td>
+              <td style="font-size: 8pt; font-weight: bold; white-space: nowrap; color: ${isPokok ? '#1e40af' : '#b45309'};">
+                ${isPokok ? 'Tugas Pokok' : 'Tambahan'}
+              </td>
               <td class="col-time">${t.timeStart} - ${t.timeEnd}</td>
               <td>
                 <div style="font-weight: bold; color: #0f172a;">${t.title}</div>
@@ -763,7 +803,19 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
                 ${t.status === 'selesai' ? 'Selesai 100%' : 'Proses'}
               </td>
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
+          ${!hasTaskPage2 && relevantTasks.length > 0 ? `
+            <tr style="background: #e2e8f0; font-weight: bold; font-size: 8.5pt;">
+              <td colspan="3" style="text-align: center;">TOTAL REKAPITULASI</td>
+              <td colspan="4">
+                ${relevantTasks.length} Tugas Operasional (${tupoksiTasks.length} Tugas Pokok / ${tambahanTasks.length} Tugas Tambahan)
+              </td>
+              <td style="text-align: center; color: #15803d;">
+                ${completedCount}/${relevantTasks.length} Tuntas
+              </td>
+            </tr>
+          ` : ''}
         </tbody>
       </table>
     </div>
@@ -784,12 +836,13 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         <span>No: ${noSurat}</span>
       </div>
 
-      <div class="section-title">II. REKAPITULASI RINCIAN TUGAS HARIAN (LANJUTAN)</div>
+      <div class="section-title">III. REKAPITULASI RINCIAN TUGAS HARIAN (LANJUTAN)</div>
       <table class="data-table">
         <thead>
           <tr>
             <th class="col-no">No</th>
             <th class="col-date">Tanggal</th>
+            <th style="width: 80px; font-size: 8.5pt;">Klasifikasi</th>
             <th class="col-time">Waktu</th>
             <th>Uraian Tugas & Pekerjaan Kedinasan</th>
             <th class="col-vol">Volume</th>
@@ -798,10 +851,15 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
           </tr>
         </thead>
         <tbody>
-          ${tasksPage2.map((t, idx) => `
+          ${tasksPage2.map((t, idx) => {
+            const isPokok = getTaskClassification(role, t.category) === 'pokok';
+            return `
             <tr>
               <td class="col-no">${tasksPerPage + idx + 1}</td>
               <td class="col-date">${t.date}</td>
+              <td style="font-size: 8pt; font-weight: bold; white-space: nowrap; color: ${isPokok ? '#1e40af' : '#b45309'};">
+                ${isPokok ? 'Tugas Pokok' : 'Tambahan'}
+              </td>
               <td class="col-time">${t.timeStart} - ${t.timeEnd}</td>
               <td>
                 <div style="font-weight: bold; color: #0f172a;">${t.title}</div>
@@ -813,7 +871,17 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
                 ${t.status === 'selesai' ? 'Selesai 100%' : 'Proses'}
               </td>
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
+          <tr style="background: #e2e8f0; font-weight: bold; font-size: 8.5pt;">
+            <td colspan="3" style="text-align: center;">TOTAL REKAPITULASI</td>
+            <td colspan="4">
+              ${relevantTasks.length} Tugas Operasional (${tupoksiTasks.length} Tugas Pokok / ${tambahanTasks.length} Tugas Tambahan)
+            </td>
+            <td style="text-align: center; color: #15803d;">
+              ${completedCount}/${relevantTasks.length} Tuntas
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -834,8 +902,8 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         <span>No: ${noSurat}</span>
       </div>
 
-      <!-- III. INVENTARIS SARANA PRASARANA KERJA -->
-      <div class="section-title">III. DAFTAR INVENTARIS SARANA PRASARANA OPERASIONAL KERJA</div>
+      <!-- IV. INVENTARIS SARANA PRASARANA KERJA -->
+      <div class="section-title">IV. DAFTAR INVENTARIS SARANA PRASARANA OPERASIONAL KERJA</div>
       <table class="data-table">
         <thead>
           <tr>

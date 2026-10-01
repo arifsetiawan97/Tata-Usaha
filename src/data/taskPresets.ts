@@ -15,6 +15,46 @@ export const TASK_PRESETS: Record<RoleType, TaskPresetItem[]> = {
   PENJAGA: [
     {
       category: 'keamanan',
+      title: 'Buka dan Tutup Pintu Gerbang Utama serta Akses Gedung Sekolah',
+      description: 'Melaksanakan SOP harian membuka pintu gerbang utama dan pintu ruangan sekolah pada pagi hari, pengaturan buka-tutup gerbang saat jam KBM berlangsung, serta menutup dan menggembok seluruh pintu ruangan dan gerbang utama setelah jam operasional sekolah berakhir.',
+      location: 'Pintu Gerbang Utama, Pos Penjagaan & Seluruh Akses Gedung Sekolah',
+      volumeUnit: '2 gerbang utama & 24 ruang kelas/gedung',
+      timeStart: '05:45',
+      timeEnd: '17:00',
+      notes: 'Gembok rantai dan anak kunci tersimpan aman pada kotak kunci pos keamanan.'
+    },
+    {
+      category: 'keamanan',
+      title: 'Membuka Pintu Gerbang Utama & Akses Seluruh Ruangan Pagi Hari',
+      description: 'Membuka gembok rantai gerbang utama dan pagar samping, membuka pintu lobi utama, ruang guru, ruang TU, dan seluruh ruang kelas sebelum kedatangan guru serta siswa, dan menyalakan lampu selasar yang diperlukan.',
+      location: 'Pintu Gerbang Utama, Pagar Samping & Akses Gedung Kelas A-C',
+      volumeUnit: '2 unit gerbang & 24 pintu gedung/kelas',
+      timeStart: '05:45',
+      timeEnd: '06:30',
+      notes: 'Seluruh akses pintu telah terbuka rapi, area koridor steril dan siap untuk aktivitas belajar.'
+    },
+    {
+      category: 'keamanan',
+      title: 'Menutup dan Mengunci Pintu Gerbang serta Seluruh Ruangan Gedung Sore Hari',
+      description: 'Memeriksa sterilisasi seluruh ruang kelas dan kantor pasca KBM dan ekstrakurikuler, mematikan saklar listrik/AC/kipas angin yang tertinggal, mengunci seluruh pintu berteralis, serta menutup dan menggembok rantai gerbang utama.',
+      location: 'Gedung Kelas A, B, C, Ruang Kantor & Pintu Gerbang Utama',
+      volumeUnit: '2 unit gerbang & 24 pintu gedung/kelas',
+      timeStart: '16:00',
+      timeEnd: '17:15',
+      notes: 'Seluruh ruangan telah dikunci rapat dan gerbang utama digembok rantai pengaman ganda.'
+    },
+    {
+      category: 'keamanan',
+      title: 'Buka dan Tutup Pintu Gerbang Pengendalian Akses Keluar-Masuk Jam KBM',
+      description: 'Menutup gerbang utama tepat saat bel masuk jam 07:00, membuka secara selektif untuk penanganan tamu kedinasan atau siswa berkepentingan khusus dengan surat izin guru piket, serta mencegah pihak luar tanpa identitas memasuki lingkungan sekolah.',
+      location: 'Pos Penjagaan & Pintu Gerbang Utama',
+      volumeUnit: '1 shift KBM (pengendalian pintu gerbang)',
+      timeStart: '07:00',
+      timeEnd: '14:30',
+      notes: 'Tamu kedinasan dicatat di buku tamu dan diberikan ID Card Tamu resmi.'
+    },
+    {
+      category: 'keamanan',
       title: 'Patroli Keamanan Malam & Pengecekan Kunci Seluruh Gedung',
       description: 'Melaksanakan patroli mengelilingi seluruh blok gedung kelas, ruang guru, lab komputer, dan perpustakaan. Memastikan semua pintu berteralis dan jendela terkunci rapat serta lampu penerangan menyala.',
       location: 'Blok Gedung A, B, C & Laboratorium',

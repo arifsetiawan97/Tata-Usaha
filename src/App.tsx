@@ -52,6 +52,15 @@ function MainLayout() {
         if (currentRole === 'TU') return <TUView />;
         return <ServiceView />;
 
+      case 'penjaga':
+        return <PenjagaView />;
+
+      case 'tu':
+        return <TUView />;
+
+      case 'service':
+        return <ServiceView />;
+
       case 'monthly':
         return <MonthlyReportView onOpenPrint={handleOpenPrint} />;
 

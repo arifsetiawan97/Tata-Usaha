@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RoleType, MonthlyReport } from '../../types';
 import { InventoryTable } from '../common/InventoryTable';
+import { 
+  getTaskClassification, 
+  getClassificationInfo, 
+  isTaskInMonth, 
+  OFFICIAL_TUPOKSI_DEFINITIONS 
+} from '../../utils/taskClassification';
 import { 
   FileText, 
   Printer, 
@@ -22,7 +28,14 @@ import {
   Archive,
   Loader2,
   Brain,
-  Wand2
+  Wand2,
+  Target,
+  BookmarkCheck,
+  CheckSquare,
+  ShieldCheck,
+  Shield,
+  Building2,
+  Filter
 } from 'lucide-react';
 
 interface MonthlyReportViewProps {
@@ -106,11 +119,24 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
     inventories
   } = useApp();
 
-  const effectiveRole = currentRole || 'TU';
+  const [selectedRole, setSelectedRole] = useState<RoleType>(currentRole || 'TU');
+
+  useEffect(() => {
+    if (currentRole) {
+      setSelectedRole(currentRole);
+    }
+  }, [currentRole]);
+
+  const effectiveRole = selectedRole;
   const roleTitle = effectiveRole === 'TU' ? 'Tata Usaha' : effectiveRole === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
 
   const [selectedMonth, setSelectedMonth] = useState<number>(9); // September default
   const [selectedYear, setSelectedYear] = useState<number>(2026);
+
+  // Task counts for all 3 roles in this month (for quick-switching badges)
+  const penjagaMonthTasksCount = tasks.filter(t => t.role === 'PENJAGA' && isTaskInMonth(t.date, selectedMonth, selectedYear)).length;
+  const tuMonthTasksCount = tasks.filter(t => t.role === 'TU' && isTaskInMonth(t.date, selectedMonth, selectedYear)).length;
+  const serviceMonthTasksCount = tasks.filter(t => t.role === 'SERVICE' && isTaskInMonth(t.date, selectedMonth, selectedYear)).length;
 
   // Fetch or dynamically generate monthly report
   const activeReport = monthlyReports.find(
@@ -124,14 +150,38 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Tasks in this month for this role
+  // Synchronize report state if role, month, or year changes or monthlyReports updates
+  useEffect(() => {
+    const rep = monthlyReports.find(
+      r => r.role === effectiveRole && r.month === selectedMonth && r.year === selectedYear
+    ) || generateMonthlyReportFromTasks(effectiveRole, selectedMonth, selectedYear);
+    setReportState(rep);
+  }, [effectiveRole, selectedMonth, selectedYear, monthlyReports]);
+
+  const [taskFilterTab, setTaskFilterTab] = useState<'all' | 'pokok' | 'tambahan'>('all');
+
+  // Tasks in this month for this role (using safe date parsing)
   const monthTasks = tasks.filter(t => {
     if (t.role !== effectiveRole) return false;
-    const d = new Date(t.date);
-    return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
+    return isTaskInMonth(t.date, selectedMonth, selectedYear);
   });
 
+  // Segregate Tasks into Tugas Pokok (Tupoksi) vs Tugas Tambahan
+  const tupoksiTasks = monthTasks.filter(t => getTaskClassification(effectiveRole, t.category) === 'pokok');
+  const tambahanTasks = monthTasks.filter(t => getTaskClassification(effectiveRole, t.category) === 'tambahan');
+
   const completedCount = monthTasks.filter(t => t.status === 'selesai').length;
+  const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai').length;
+  const tambahanCompleted = tambahanTasks.filter(t => t.status === 'selesai').length;
+
+  const tupoksiRate = tupoksiTasks.length > 0 ? Math.round((tupoksiCompleted / tupoksiTasks.length) * 100) : 100;
+  const tambahanRate = tambahanTasks.length > 0 ? Math.round((tambahanCompleted / tambahanTasks.length) * 100) : 100;
+  const totalRate = monthTasks.length > 0 ? Math.round((completedCount / monthTasks.length) * 100) : 100;
+
+  const filteredDisplayTasks = monthTasks.filter(t => {
+    if (taskFilterTab === 'all') return true;
+    return getTaskClassification(effectiveRole, t.category) === taskFilterTab;
+  });
 
   const showNotification = (msg: string) => {
     setNoticeMessage(msg);
@@ -159,17 +209,19 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
         const json = await res.json();
         if (json.success && json.data) {
           const { summary, achievements, obstacles, solutions } = json.data;
-          setReportState(prev => {
-            const updated: MonthlyReport = {
-              ...prev,
-              summary: summary || prev.summary,
-              achievements: Array.isArray(achievements) && achievements.length > 0 ? achievements : prev.achievements,
-              obstacles: Array.isArray(obstacles) && obstacles.length > 0 ? obstacles : prev.obstacles,
-              solutions: Array.isArray(solutions) && solutions.length > 0 ? solutions : prev.solutions
-            };
-            saveMonthlyReport(updated);
-            return updated;
-          });
+          const currentRep = monthlyReports.find(
+            r => r.role === effectiveRole && r.month === selectedMonth && r.year === selectedYear
+          ) || reportState;
+
+          const updated: MonthlyReport = {
+            ...currentRep,
+            summary: summary || currentRep.summary,
+            achievements: Array.isArray(achievements) && achievements.length > 0 ? achievements : currentRep.achievements,
+            obstacles: Array.isArray(obstacles) && obstacles.length > 0 ? obstacles : currentRep.obstacles,
+            solutions: Array.isArray(solutions) && solutions.length > 0 ? solutions : currentRep.solutions
+          };
+          setReportState(updated);
+          saveMonthlyReport(updated);
           showNotification(json.isAi 
             ? '✨ Analisis cerdas AI berhasil disintesis ke ringkasan, capaian, kendala, dan solusi bulanan!' 
             : '✨ Analisis cerdas otomatis berhasil disinkronkan ke seluruh bagian laporan bulanan!');
@@ -403,6 +455,99 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
         </div>
       </div>
 
+      {/* SEPARATE MENU TABS FOR EACH OPERATIONAL ROLE IN MONTHLY REPORT */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-800">Menu Laporan Bulanan Peran Operasional:</span>
+            <span className="text-[11px] text-slate-500 hidden sm:inline">(Pilih peran operasional yang ingin ditinjau atau dicetak laporannya)</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full lg:w-auto">
+            {/* Penjaga Sekolah */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedRole('PENJAGA');
+                const rep = monthlyReports.find(r => r.role === 'PENJAGA' && r.month === selectedMonth && r.year === selectedYear) || generateMonthlyReportFromTasks('PENJAGA', selectedMonth, selectedYear);
+                setReportState(rep);
+              }}
+              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                effectiveRole === 'PENJAGA'
+                  ? 'bg-blue-50/90 border-blue-600 text-blue-900 shadow-xs ring-1 ring-blue-500/20 font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`p-1.5 rounded-md ${effectiveRole === 'PENJAGA' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <Shield className="w-3.5 h-3.5" />
+                </span>
+                <span>Penjaga Sekolah</span>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                effectiveRole === 'PENJAGA' ? 'bg-blue-200 text-blue-900' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {penjagaMonthTasksCount} tugas
+              </span>
+            </button>
+
+            {/* Tata Usaha (TU) */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedRole('TU');
+                const rep = monthlyReports.find(r => r.role === 'TU' && r.month === selectedMonth && r.year === selectedYear) || generateMonthlyReportFromTasks('TU', selectedMonth, selectedYear);
+                setReportState(rep);
+              }}
+              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                effectiveRole === 'TU'
+                  ? 'bg-sky-50/90 border-sky-600 text-sky-900 shadow-xs ring-1 ring-sky-500/20 font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`p-1.5 rounded-md ${effectiveRole === 'TU' ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <Building2 className="w-3.5 h-3.5" />
+                </span>
+                <span>Tata Usaha (TU)</span>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                effectiveRole === 'TU' ? 'bg-sky-200 text-sky-900' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {tuMonthTasksCount} tugas
+              </span>
+            </button>
+
+            {/* Service (Kebersihan) */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedRole('SERVICE');
+                const rep = monthlyReports.find(r => r.role === 'SERVICE' && r.month === selectedMonth && r.year === selectedYear) || generateMonthlyReportFromTasks('SERVICE', selectedMonth, selectedYear);
+                setReportState(rep);
+              }}
+              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                effectiveRole === 'SERVICE'
+                  ? 'bg-emerald-50/90 border-emerald-600 text-emerald-900 shadow-xs ring-1 ring-emerald-500/20 font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`p-1.5 rounded-md ${effectiveRole === 'SERVICE' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                </span>
+                <span>Service (Kebersihan)</span>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                effectiveRole === 'SERVICE' ? 'bg-emerald-200 text-emerald-900' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {serviceMonthTasksCount} tugas
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {noticeMessage && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -440,40 +585,91 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
         </div>
       </div>
 
-      {/* Overview Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 bg-white border border-slate-200 rounded-xl">
-          <p className="text-xs font-medium text-slate-500">Tugas Terlaksana di Bulan Ini</p>
+      {/* Overview Stat Cards with Tupoksi & Tugas Tambahan Segregation */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Total Akumulasi */}
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Total Tugas Terlaksana</span>
+            <FileText className="w-4 h-4 text-blue-600" />
+          </div>
           <p className="text-2xl font-extrabold text-slate-900 mt-1">
             {completedCount} <span className="text-sm font-normal text-slate-500">/ {monthTasks.length} tugas</span>
           </p>
-          <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden">
+          <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2.5 overflow-hidden">
             <div 
-              className="bg-blue-600 h-1.5 rounded-full" 
-              style={{ width: `${monthTasks.length > 0 ? (completedCount / monthTasks.length) * 100 : 100}%` }}
+              className="bg-blue-600 h-1.5 rounded-full transition-all" 
+              style={{ width: `${totalRate}%` }}
             />
           </div>
-        </div>
-
-        <div className="p-4 bg-white border border-slate-200 rounded-xl">
-          <p className="text-xs font-medium text-slate-500">Tingkat Capaian Standar Operasional</p>
-          <p className="text-2xl font-extrabold text-emerald-700 mt-1">
-            {monthTasks.length > 0 ? Math.round((completedCount / monthTasks.length) * 100) : 100}%
-          </p>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Sesuai Standar Pelayanan Minimal (SPM) Sekolah
+          <p className="text-[10.5px] text-slate-500 mt-1.5">
+            Capaian SPM Bulan Ini: <strong className="text-blue-700">{totalRate}%</strong>
           </p>
         </div>
 
-        <div className="p-4 bg-white border border-slate-200 rounded-xl">
-          <p className="text-xs font-medium text-slate-500">Status Validasi Dokumen</p>
+        {/* Card 2: Tugas Pokok (Tupoksi) */}
+        <div className="p-4 bg-gradient-to-br from-blue-50/70 to-indigo-50/50 border border-blue-200 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-blue-900 flex items-center gap-1">
+              <Target className="w-3.5 h-3.5 text-blue-600" />
+              <span>Tugas Pokok (Tupoksi)</span>
+            </span>
+            <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded border border-blue-300">
+              Utama
+            </span>
+          </div>
+          <p className="text-2xl font-extrabold text-blue-950 mt-1">
+            {tupoksiCompleted} <span className="text-sm font-normal text-blue-700">/ {tupoksiTasks.length} tugas</span>
+          </p>
+          <div className="w-full bg-blue-200/60 rounded-full h-1.5 mt-2.5 overflow-hidden">
+            <div 
+              className="bg-blue-700 h-1.5 rounded-full transition-all" 
+              style={{ width: `${tupoksiRate}%` }}
+            />
+          </div>
+          <p className="text-[10.5px] text-blue-800 mt-1.5">
+            Tingkat Penyelesaian: <strong>{tupoksiRate}% Tuntas</strong>
+          </p>
+        </div>
+
+        {/* Card 3: Tugas Tambahan */}
+        <div className="p-4 bg-gradient-to-br from-amber-50/70 to-orange-50/50 border border-amber-200 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-900 flex items-center gap-1">
+              <BookmarkCheck className="w-3.5 h-3.5 text-amber-600" />
+              <span>Tugas Tambahan</span>
+            </span>
+            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded border border-amber-300">
+              Insidental
+            </span>
+          </div>
+          <p className="text-2xl font-extrabold text-amber-950 mt-1">
+            {tambahanCompleted} <span className="text-sm font-normal text-amber-700">/ {tambahanTasks.length} tugas</span>
+          </p>
+          <div className="w-full bg-amber-200/60 rounded-full h-1.5 mt-2.5 overflow-hidden">
+            <div 
+              className="bg-amber-600 h-1.5 rounded-full transition-all" 
+              style={{ width: `${tambahanRate}%` }}
+            />
+          </div>
+          <p className="text-[10.5px] text-amber-800 mt-1.5">
+            Tingkat Penyelesaian: <strong>{tambahanRate}% Tuntas</strong>
+          </p>
+        </div>
+
+        {/* Card 4: Status Validasi Dokumen */}
+        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Status Validasi Dokumen</span>
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+          </div>
           <div className="mt-1 flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded bg-blue-50 text-blue-800 border border-blue-200">
+            <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
               {reportState.approvalStatus.replace('_', ' ')}
             </span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Lembar Pengesahan: NIP & Cap Stempel Resmi Siap
+          <p className="text-[10.5px] text-slate-500 mt-2">
+            Lembar Pengesahan: NIP & Stempel Resmi Siap
           </p>
         </div>
       </div>
@@ -677,58 +873,210 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
         </div>
       </div>
 
-      {/* Rincian Tugas yang Masuk Laporan */}
-      <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-900">
-            Daftar Tugas Harian yang Terkompilasi ({monthTasks.length} tugas)
-          </h3>
-          <span className="text-xs text-slate-500 font-medium">
-            Sumber Data: Upload Harian Operator
+      {/* PANDUAN STANDAR TUPOKSI & TUGAS TAMBAHAN KEDINASAN */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-blue-700" />
+            <h3 className="text-sm sm:text-base font-bold text-slate-900">
+              Pedoman Standar Tugas Pokok (Tupoksi) & Tugas Tambahan {roleTitle}
+            </h3>
+          </div>
+          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md w-fit">
+            Standar Operasional Minimal Satdik
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Kolom 1: Tugas Pokok (Tupoksi) */}
+          <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                <Target className="w-4 h-4 text-blue-600" />
+                <span>Daftar Tugas Pokok (Tupoksi Standar Kedinasan)</span>
+              </span>
+              <span className="text-[10px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                {tupoksiTasks.length} tercatat
+              </span>
+            </div>
+            <ul className="space-y-1.5 text-xs text-slate-700">
+              {OFFICIAL_TUPOKSI_DEFINITIONS[effectiveRole].tupoksiList.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <CheckSquare className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                  <span className="leading-snug">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Kolom 2: Tugas Tambahan */}
+          <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                <BookmarkCheck className="w-4 h-4 text-amber-600" />
+                <span>Daftar Tugas Tambahan & Insidental</span>
+              </span>
+              <span className="text-[10px] font-extrabold bg-amber-600 text-white px-2 py-0.5 rounded-full">
+                {tambahanTasks.length} tercatat
+              </span>
+            </div>
+            <ul className="space-y-1.5 text-xs text-slate-700">
+              {OFFICIAL_TUPOKSI_DEFINITIONS[effectiveRole].tugasTambahanList.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <Plus className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <span className="leading-snug">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN */}
+      <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <FileCheck2 className="w-5 h-5 text-blue-700" />
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                Rekapitulasi Rincian Tugas Harian Operasional yang Dilaksanakan
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Kompilasi lengkap seluruh kegiatan harian bulan {MONTH_NAMES[selectedMonth - 1]} {selectedYear} ({monthTasks.length} tugas total)
+            </p>
+          </div>
+
+          {/* Filter Sub-Tabs */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg text-xs font-semibold shrink-0 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setTaskFilterTab('all')}
+              className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap cursor-pointer ${
+                taskFilterTab === 'all'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Semua ({monthTasks.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTaskFilterTab('pokok')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md transition-all whitespace-nowrap cursor-pointer ${
+                taskFilterTab === 'pokok'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-blue-800 hover:text-blue-950'
+              }`}
+            >
+              <Target className="w-3 h-3" />
+              <span>Tupoksi ({tupoksiTasks.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTaskFilterTab('tambahan')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md transition-all whitespace-nowrap cursor-pointer ${
+                taskFilterTab === 'tambahan'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-amber-800 hover:text-amber-950'
+              }`}
+            >
+              <BookmarkCheck className="w-3 h-3" />
+              <span>Tambahan ({tambahanTasks.length})</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto border border-slate-200 rounded-lg">
+          <table className="w-full text-left text-xs min-w-[700px]">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold">
-                <th className="py-2 px-3">Tanggal</th>
-                <th className="py-2 px-3">Judul Pekerjaan</th>
-                <th className="py-2 px-3">Lokasi</th>
-                <th className="py-2 px-3 text-center">Waktu</th>
-                <th className="py-2 px-3">Volume</th>
-                <th className="py-2 px-3 text-center">Status</th>
+              <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+                <th className="py-2.5 px-3 text-center w-10">No</th>
+                <th className="py-2.5 px-3 w-24">Tanggal</th>
+                <th className="py-2.5 px-3 w-32">Klasifikasi Tugas</th>
+                <th className="py-2.5 px-3">Uraian Pekerjaan / Kegiatan Kedinasan</th>
+                <th className="py-2.5 px-3">Lokasi</th>
+                <th className="py-2.5 px-3 text-center whitespace-nowrap">Waktu</th>
+                <th className="py-2.5 px-3">Volume</th>
+                <th className="py-2.5 px-3 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {monthTasks.length === 0 ? (
+              {filteredDisplayTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-slate-400 italic">
-                    Belum ada tugas tercatat pada bulan ini. Gunakan tombol 'Catat Tugas' di dashboard untuk menambah.
+                  <td colSpan={8} className="py-8 text-center text-slate-400 italic">
+                    Belum ada catatan tugas operasional yang terdaftar untuk filter ini pada bulan {MONTH_NAMES[selectedMonth - 1]} {selectedYear}.
                   </td>
                 </tr>
               ) : (
-                monthTasks.map(t => (
-                  <tr key={t.id} className="hover:bg-slate-50/80">
-                    <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">{t.date}</td>
-                    <td className="py-2 px-3">
-                      <span className="font-semibold text-slate-800 block">{t.title}</span>
-                      <span className="text-[11px] text-slate-500 block">{t.description}</span>
-                    </td>
-                    <td className="py-2 px-3 text-slate-700">{t.location}</td>
-                    <td className="py-2 px-3 text-center text-slate-600 whitespace-nowrap">{t.timeStart} - {t.timeEnd}</td>
-                    <td className="py-2 px-3 text-slate-700 font-medium">{t.volumeUnit}</td>
-                    <td className="py-2 px-3 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                        t.status === 'selesai' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                      }`}>
-                        {t.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                filteredDisplayTasks.map((t, idx) => {
+                  const classification = getTaskClassification(effectiveRole, t.category);
+                  const isPokok = classification === 'pokok';
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-2.5 px-3 text-center font-mono text-slate-500 text-[11px]">
+                        {idx + 1}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-700 font-medium whitespace-nowrap">
+                        {t.date}
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-bold border ${
+                          isPokok 
+                            ? 'bg-blue-50 text-blue-800 border-blue-200' 
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}>
+                          {isPokok ? <Target className="w-3 h-3 text-blue-600" /> : <BookmarkCheck className="w-3 h-3 text-amber-600" />}
+                          <span>{isPokok ? 'Tugas Pokok' : 'Tugas Tambahan'}</span>
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="font-bold text-slate-900 block leading-snug">{t.title}</span>
+                        <span className="text-[11px] text-slate-600 block mt-0.5 leading-relaxed">{t.description}</span>
+                        {t.notes && (
+                          <span className="text-[10.5px] text-slate-500 italic block mt-0.5">Catatan: {t.notes}</span>
+                        )}
+                        {t.photoUrl && (
+                          <span className="text-[10px] text-blue-600 font-semibold inline-block mt-0.5">📷 Lampiran foto bukti tersedia</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-700 font-medium">{t.location}</td>
+                      <td className="py-2.5 px-3 text-center text-slate-600 whitespace-nowrap font-mono text-[11px]">
+                        {t.timeStart} - {t.timeEnd} WIB
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-800 font-semibold">{t.volumeUnit}</td>
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <span className={`inline-block px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          t.status === 'selesai' 
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                        }`}>
+                          {t.status === 'selesai' ? 'Selesai 100%' : 'Dalam Proses'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
+            {filteredDisplayTasks.length > 0 && (
+              <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
+                <tr>
+                  <td colSpan={2} className="py-2.5 px-3 text-center text-xs">
+                    TOTAL
+                  </td>
+                  <td className="py-2.5 px-3 text-xs">
+                    <span className="text-blue-900">{tupoksiTasks.length} Pokok</span> · <span className="text-amber-900">{tambahanTasks.length} Tambahan</span>
+                  </td>
+                  <td colSpan={4} className="py-2.5 px-3 text-xs">
+                    Rekapitulasi {monthTasks.length} Catatan Tugas Harian Terlaksana ({completedCount} tuntas)
+                  </td>
+                  <td className="py-2.5 px-3 text-center text-xs text-emerald-700">
+                    {totalRate}% Selesai
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

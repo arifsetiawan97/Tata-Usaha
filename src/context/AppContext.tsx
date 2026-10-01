@@ -16,6 +16,7 @@ import {
   initialAnnualReports,
   initialArchives 
 } from '../data/initialData';
+import { isTaskInMonth, isTaskInYear, getTaskClassification } from '../utils/taskClassification';
 
 interface AppContextType {
   currentRole: RoleType | null;
@@ -41,7 +42,7 @@ interface AppContextType {
   archiveReport: (type: 'monthly' | 'annual', data: any, customTitle?: string) => ArchiveDocument;
   schoolConfig: SchoolConfig;
   updateSchoolConfig: (config: Partial<SchoolConfig>) => void;
-  generateMonthlyReportFromTasks: (role: RoleType, month: number, year: number) => MonthlyReport;
+  generateMonthlyReportFromTasks: (role: RoleType, month: number, year: number, forceFresh?: boolean) => MonthlyReport;
   generateAnnualReportFromMonthly: (role: RoleType, year: number) => AnnualReport;
   activeNavTab: string;
   setActiveNavTab: (tab: string) => void;
@@ -218,13 +219,163 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setCurrentRole = (role: RoleType | null) => {
     setCurrentRoleState(role);
     if (role) {
-      setActiveNavTab('dashboard');
+      if (['dashboard', 'penjaga', 'tu', 'service'].includes(activeNavTab)) {
+        if (role === 'PENJAGA') setActiveNavTab('penjaga');
+        else if (role === 'TU') setActiveNavTab('tu');
+        else if (role === 'SERVICE') setActiveNavTab('service');
+      }
+    }
+  };
+
+  const buildMonthlyReportObject = (
+    allTasks: TaskLog[],
+    role: RoleType,
+    month: number,
+    year: number,
+    config: SchoolConfig,
+    existingList: MonthlyReport[],
+    forceFresh: boolean = false
+  ): MonthlyReport => {
+    const roleTasks = allTasks.filter(t => {
+      if (t.role !== role) return false;
+      return isTaskInMonth(t.date, month, year);
+    });
+
+    const completed = roleTasks.filter(t => t.status === 'selesai');
+    const tupoksiTasks = roleTasks.filter(t => getTaskClassification(role, t.category) === 'pokok');
+    const tambahanTasks = roleTasks.filter(t => getTaskClassification(role, t.category) === 'tambahan');
+    const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai');
+    const tambahanCompleted = tambahanTasks.filter(t => t.status === 'selesai');
+
+    const roleTitle = role === 'TU' ? 'Tata Usaha' : role === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
+    const monthNames = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const monthName = monthNames[month - 1] || `Bulan ${month}`;
+    const formattedManualDate = `${config.kabupatenKota}, 30 ${monthName} ${year}`;
+
+    const achievementsList: string[] = [];
+    if (role === 'PENJAGA') {
+      const gateCount = roleTasks.filter(t => t.title.toLowerCase().includes('pintu') || t.title.toLowerCase().includes('gerbang')).length;
+      const patrolCount = roleTasks.filter(t => t.category === 'keamanan' || t.category === 'inspeksi_malam').length;
+      const repairCount = roleTasks.filter(t => t.category === 'perbaikan_sapras').length;
+      const watchCount = roleTasks.filter(t => t.category === 'pengawasan_anak').length;
+      const mailCount = roleTasks.filter(t => t.category === 'antar_surat').length;
+
+      if (gateCount > 0) {
+        achievementsList.push(`Pelaksanaan SOP harian buka-tutup pintu gerbang utama & gedung sekolah (${gateCount} kegiatan tercatat)`);
+      }
+      achievementsList.push(`Pelaksanaan tugas pokok keamanan gedung & pos penjagaan (${patrolCount > 0 ? patrolCount : 24} kali kegiatan terverifikasi)`);
+      achievementsList.push(`Realisasi tugas pokok (Tupoksi) tuntas: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok terlaksana`);
+      achievementsList.push(`Realisasi tugas tambahan insidental: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
+      if (repairCount > 0) {
+        achievementsList.push(`Penyelesaian perbaikan sarana & prasarana ringan swakelola (${repairCount} unit sapras tertangani)`);
+      }
+      if (watchCount > 0) {
+        achievementsList.push(`Pengawasan ketertiban dan keselamatan siswa di jam masuk & pulang sekolah (${watchCount} hari efektif)`);
+      }
+      if (mailCount > 0) {
+        achievementsList.push(`Ekspedisi pengantaran surat dinas ke dinas dan instansi mitra (${mailCount} berkas dinas)`);
+      }
+    } else if (role === 'TU') {
+      const pnsCount = roleTasks.filter(t => t.category === 'kepegawaian').length;
+      const siswaCount = roleTasks.filter(t => t.category === 'siswa').length;
+      const saprasCount = roleTasks.filter(t => t.category === 'sapras').length;
+      const suratIn = roleTasks.filter(t => t.category === 'surat_masuk').length;
+      const suratOut = roleTasks.filter(t => t.category === 'surat_keluar').length;
+      achievementsList.push(`Pengelolaan administrasi kepegawaian GTK dan verifikasi berkas ASN (${pnsCount > 0 ? pnsCount : 6} agenda kegiatan)`);
+      achievementsList.push(`Pencatatan Buku Induk, mutasi siswa dan penerbitan surat keterangan (${siswaCount > 0 ? siswaCount : 15} permohonan tuntas)`);
+      achievementsList.push(`Registrasi agenda surat dinas masuk (${suratIn > 0 ? suratIn : 28} surat) dan surat dinas keluar (${suratOut > 0 ? suratOut : 18} surat)`);
+      achievementsList.push(`Realisasi tugas pokok (Tupoksi) administrasi: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
+      achievementsList.push(`Realisasi tugas tambahan/layanan umum: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
+      if (saprasCount > 0) {
+        achievementsList.push(`Rekonsiliasi dan verifikasi fisik inventaris barang KIB A s.d. E (${saprasCount} sesi audit)`);
+      }
+    } else {
+      const wcCount = roleTasks.filter(t => t.category === 'kebersihan_wc').length;
+      const officeCount = roleTasks.filter(t => t.category === 'kebersihan_kantor').length;
+      const wasteCount = roleTasks.filter(t => t.category === 'kebersihan_sampah').length;
+      achievementsList.push(`Sanitasi dan sterilisasi seluruh toilet guru & toilet siswa (${wcCount > 0 ? wcCount : 30} hari terlaksana)`);
+      achievementsList.push(`Pembersihan menyeluruh ruang kantor pimpinan, ruang guru, ruang TU & perpustakaan (${officeCount > 0 ? officeCount : 24} hari kerja)`);
+      achievementsList.push(`Pengangkutan harian dan pemilahan sampah organik serta anorganik ke TPS (${wasteCount > 0 ? wasteCount : 24} kali pengangkutan)`);
+      achievementsList.push(`Realisasi tugas pokok (Tupoksi) kebersihan: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
+      achievementsList.push(`Realisasi tugas tambahan lingkungan: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
+    }
+
+    const summaryText = `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional ${roleTitle} telah melaksanakan ${roleTasks.length} tugas operasional kedinasan (${tupoksiTasks.length} Tugas Pokok/Tupoksi dan ${tambahanTasks.length} Tugas Tambahan). Sebanyak ${completed.length} tugas telah tuntas diselesaikan dengan tingkat ketercapaian kinerja (SPM) sebesar ${roleTasks.length > 0 ? Math.round((completed.length / roleTasks.length) * 100) : 100}%. Seluruh inventaris dinas yang dioperasikan dalam kondisi terawat.`;
+
+    const existing = existingList.find(r => r.role === role && r.month === month && r.year === year);
+
+    return {
+      id: existing?.id || `m-rep-${role.toLowerCase()}-${month}-${year}`,
+      role,
+      month,
+      year,
+      manualDocDate: existing?.manualDocDate || formattedManualDate,
+      summary: summaryText,
+      achievements: achievementsList,
+      obstacles: existing?.obstacles && existing.obstacles.length > 0 ? existing.obstacles : [
+        'Kebutuhan penggantian beberapa suku cadang dan bahan pakai habis operasional',
+        'Faktor cuaca hujan lebat yang memerlukan penanganan ekstra di lapangan'
+      ],
+      solutions: existing?.solutions && existing.solutions.length > 0 ? existing.solutions : [
+        'Pengajuan restock bahan habis pakai ke bagian bendahara / sapras sekolah',
+        'Penyesuaian jadwal pelaksanaan pekerjaan lapangan pada saat cuaca kondusif'
+      ],
+      approvalStatus: existing?.approvalStatus || 'diajukan'
+    };
+  };
+
+  const autoSyncMonthlyReport = (task: TaskLog, allTasks: TaskLog[]) => {
+    if (!task.date) return;
+    const clean = task.date.split('T')[0].trim();
+    const parts = clean.split(/[-/.]/);
+    let year = 2026;
+    let month = 9;
+
+    if (parts.length >= 3) {
+      if (parts[0].length === 4) {
+        year = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10);
+      } else if (parts[2].length === 4) {
+        year = parseInt(parts[2], 10);
+        month = parseInt(parts[1], 10);
+      }
+    } else if (parts.length === 2) {
+      if (parts[0].length === 4) {
+        year = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10);
+      } else {
+        month = parseInt(parts[0], 10);
+        year = parseInt(parts[1], 10);
+      }
+    }
+
+    if (!isNaN(year) && !isNaN(month)) {
+      setMonthlyReports(prev => {
+        const updatedReport = buildMonthlyReportObject(allTasks, task.role, month, year, schoolConfig, prev, true);
+        const idx = prev.findIndex(r => r.role === task.role && r.month === month && r.year === year);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = updatedReport;
+          return copy;
+        }
+        return [...prev, updatedReport];
+      });
     }
   };
 
   const addTask = (newTask: Omit<TaskLog, 'id'>) => {
     const id = `tsk-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    setTasks(prev => [ { ...newTask, id }, ...prev ]);
+    const created: TaskLog = { ...newTask, id };
+    setTasks(prev => {
+      const next = [ created, ...prev ];
+      setTimeout(() => {
+        autoSyncMonthlyReport(created, next);
+      }, 0);
+      return next;
+    });
   };
 
   const importTasks = (newTasks: Omit<TaskLog, 'id'>[]) => {
@@ -232,15 +383,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...t,
       id: `tsk-imp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`
     }));
-    setTasks(prev => [ ...withIds, ...prev ]);
+    setTasks(prev => {
+      const next = [ ...withIds, ...prev ];
+      if (withIds.length > 0) {
+        setTimeout(() => {
+          autoSyncMonthlyReport(withIds[0], next);
+        }, 0);
+      }
+      return next;
+    });
   };
 
   const updateTask = (id: string, updated: Partial<TaskLog>) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updated } : t));
+    setTasks(prev => {
+      const next = prev.map(t => t.id === id ? { ...t, ...updated } : t);
+      const target = next.find(t => t.id === id);
+      if (target) {
+        setTimeout(() => {
+          autoSyncMonthlyReport(target, next);
+        }, 0);
+      }
+      return next;
+    });
   };
 
   const deleteTask = (id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
+    setTasks(prev => {
+      const target = prev.find(t => t.id === id);
+      const next = prev.filter(t => t.id !== id);
+      if (target) {
+        setTimeout(() => {
+          autoSyncMonthlyReport(target, next);
+        }, 0);
+      }
+      return next;
+    });
   };
 
   const addInventory = (newItem: Omit<InventoryItem, 'id'>) => {
@@ -292,81 +469,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSchoolConfig(prev => ({ ...prev, ...config }));
   };
 
-  const generateMonthlyReportFromTasks = (role: RoleType, month: number, year: number): MonthlyReport => {
-    const roleTasks = tasks.filter(t => {
-      if (t.role !== role) return false;
-      const d = new Date(t.date);
-      return d.getMonth() + 1 === month && d.getFullYear() === year;
-    });
-
-    const completed = roleTasks.filter(t => t.status === 'selesai');
-    const roleTitle = role === 'TU' ? 'Tata Usaha' : role === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
-    const monthNames = [
-      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-    ];
-    const monthName = monthNames[month - 1] || `Bulan ${month}`;
-    const formattedManualDate = `${schoolConfig.kabupatenKota}, 30 ${monthName} ${year}`;
-
-    const achievementsList: string[] = [];
-    if (role === 'PENJAGA') {
-      const patrolCount = roleTasks.filter(t => t.category === 'keamanan').length;
-      const repairCount = roleTasks.filter(t => t.category === 'perbaikan_sapras').length;
-      const mailCount = roleTasks.filter(t => t.category === 'antar_surat').length;
-      const watchCount = roleTasks.filter(t => t.category === 'pengawasan_anak').length;
-      achievementsList.push(`Pelaksanaan patroli keamanan gedung dan lingkungan sekolah (${patrolCount > 0 ? patrolCount : 24} kali kegiatan)`);
-      achievementsList.push(`Penyelesaian perbaikan sarana & prasarana ringan secara swakelola (${repairCount > 0 ? repairCount : 8} unit sapras tertangani)`);
-      achievementsList.push(`Pengawasan ketertiban dan keselamatan siswa di jam masuk & pulang sekolah (${watchCount > 0 ? watchCount : 20} hari efektif)`);
-      achievementsList.push(`Ekspedisi pengantaran surat dinas ke dinas dan instansi mitra (${mailCount > 0 ? mailCount : 5} berkas dinas)`);
-    } else if (role === 'TU') {
-      const pnsCount = roleTasks.filter(t => t.category === 'kepegawaian').length;
-      const siswaCount = roleTasks.filter(t => t.category === 'siswa').length;
-      const saprasCount = roleTasks.filter(t => t.category === 'sapras').length;
-      const suratIn = roleTasks.filter(t => t.category === 'surat_masuk').length;
-      const suratOut = roleTasks.filter(t => t.category === 'surat_keluar').length;
-      achievementsList.push(`Pengelolaan administrasi kepegawaian GTK dan verifikasi berkas ASN (${pnsCount > 0 ? pnsCount : 6} agenda kegiatan)`);
-      achievementsList.push(`Pencatatan Buku Induk, mutasi siswa dan penerbitan surat keterangan (${siswaCount > 0 ? siswaCount : 15} permohonan tuntas)`);
-      achievementsList.push(`Registrasi agenda surat dinas masuk (${suratIn > 0 ? suratIn : 28} surat) dan surat dinas keluar (${suratOut > 0 ? suratOut : 18} surat)`);
-      achievementsList.push(`Rekonsiliasi dan verifikasi fisik inventaris barang KIB A s.d. E (${saprasCount > 0 ? saprasCount : 3} sesi audit)`);
-    } else {
-      const wcCount = roleTasks.filter(t => t.category === 'kebersihan_wc').length;
-      const officeCount = roleTasks.filter(t => t.category === 'kebersihan_kantor').length;
-      const wasteCount = roleTasks.filter(t => t.category === 'kebersihan_sampah').length;
-      achievementsList.push(`Sanitasi dan sterilisasi seluruh toilet guru & toilet siswa (${wcCount > 0 ? wcCount : 30} hari terlaksana)`);
-      achievementsList.push(`Pembersihan menyeluruh ruang kantor pimpinan, ruang guru, ruang TU & perpustakaan (${officeCount > 0 ? officeCount : 24} hari kerja)`);
-      achievementsList.push(`Pengangkutan harian dan pemilahan sampah organik serta anorganik ke TPS (${wasteCount > 0 ? wasteCount : 24} kali pengangkutan)`);
-      achievementsList.push(`Pencapaian indeks kebersihan lingkungan sekolah rata-rata 95/100 tanpa komplain sanitasi`);
-    }
-
-    const summaryText = `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional ${roleTitle} telah menyelesaikan ${completed.length} dari ${roleTasks.length} tugas yang direncanakan dengan capaian indikator kerja sebesar ${roleTasks.length > 0 ? Math.round((completed.length / roleTasks.length) * 100) : 100}%. Seluruh inventaris dinas yang dioperasikan dalam kondisi terawat.`;
-
-    const existing = monthlyReports.find(r => r.role === role && r.month === month && r.year === year);
-    if (existing) {
-      return {
-        ...existing,
-        summary: existing.summary || summaryText,
-        achievements: existing.achievements.length > 0 ? existing.achievements : achievementsList
-      };
-    }
-
-    return {
-      id: `m-rep-${role.toLowerCase()}-${month}-${year}`,
-      role,
-      month,
-      year,
-      manualDocDate: formattedManualDate,
-      summary: summaryText,
-      achievements: achievementsList,
-      obstacles: [
-        'Kebutuhan penggantian beberapa suku cadang dan bahan pakai habis operasional',
-        'Faktor cuaca hujan lebat yang memerlukan penanganan ekstra di lapangan'
-      ],
-      solutions: [
-        'Pengajuan restock bahan habis pakai ke bagian bendahara / sapras sekolah',
-        'Penyesuaian jadwal pelaksanaan pekerjaan lapangan pada saat cuaca kondusif'
-      ],
-      approvalStatus: 'diajukan'
-    };
+  const generateMonthlyReportFromTasks = (role: RoleType, month: number, year: number, forceFresh: boolean = false): MonthlyReport => {
+    return buildMonthlyReportObject(tasks, role, month, year, schoolConfig, monthlyReports, forceFresh);
   };
 
   const generateAnnualReportFromMonthly = (role: RoleType, year: number): AnnualReport => {

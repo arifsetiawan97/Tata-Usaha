@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { DailyTaskModal } from '../reports/DailyTaskModal';
 import { InventoryTable } from '../common/InventoryTable';
 import { TaskLog } from '../../types';
+import { TASK_PRESETS, TaskPresetItem } from '../../data/taskPresets';
 import { 
   Shield, 
   Wrench, 
@@ -25,6 +26,7 @@ import {
   UserCheck,
   Camera,
   PenTool,
+  DoorClosed,
   X
 } from 'lucide-react';
 
@@ -33,6 +35,7 @@ export const PenjagaView: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<string>('semua');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [modalInitialMode, setModalInitialMode] = useState<'template' | 'manual'>('template');
+  const [selectedPreset, setSelectedPreset] = useState<TaskPresetItem | null>(null);
   const [editingTask, setEditingTask] = useState<TaskLog | null>(null);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
 
@@ -42,6 +45,17 @@ export const PenjagaView: React.FC = () => {
     if (activeCategory === 'semua') return true;
     return t.category === activeCategory;
   });
+
+  const handleApplyPresetDirectly = (presetKeyword: string) => {
+    const penjagaPresets = TASK_PRESETS['PENJAGA'] || [];
+    const found = penjagaPresets.find(p => p.title.toLowerCase().includes(presetKeyword.toLowerCase()));
+    if (found) {
+      setEditingTask(null);
+      setSelectedPreset(found);
+      setModalInitialMode('template');
+      setIsTaskModalOpen(true);
+    }
+  };
 
   // Calculate Automated Analytics
   const totalTasks = penjagaTasks.length;
@@ -110,6 +124,59 @@ export const PenjagaView: React.FC = () => {
           >
             <PenTool className="w-4 h-4 text-amber-300" />
             <span>Input Manual Bebas</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Quick 1-Click Standard Job Templates Toolbar for Penjaga */}
+      <div className="bg-gradient-to-r from-blue-50 via-indigo-50/70 to-slate-50 border border-blue-200/90 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 bg-blue-700 text-white rounded-lg shrink-0 shadow-xs">
+            <DoorClosed className="w-4 h-4" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+              <span>Template Pekerjaan Standar Penjaga Sekolah</span>
+              <span className="text-[10px] bg-blue-100 text-blue-800 font-semibold px-2 py-0.2 rounded-full border border-blue-200">Siap Pakai</span>
+            </p>
+            <p className="text-[11px] text-slate-600">
+              Pilih template tugas rutin harian untuk mengisi form kegiatan dinas otomatis dengan 1 klik:
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleApplyPresetDirectly('buka dan tutup')}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-blue-100 active:scale-95 text-blue-900 border border-blue-300 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+            title="SOP Buka dan Tutup Pintu Gerbang Utama serta Gedung Sekolah"
+          >
+            <span>🚪 Buka & Tutup Pintu (SOP Harian)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleApplyPresetDirectly('membuka pintu gerbang')}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-blue-100 active:scale-95 text-slate-700 hover:text-blue-950 border border-slate-200 rounded-lg text-xs font-semibold transition-all shadow-2xs cursor-pointer"
+            title="Membuka Pintu Gerbang dan Gedung Pagi Hari"
+          >
+            <span>🌅 Buka Pintu Pagi</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleApplyPresetDirectly('menutup dan mengunci')}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-blue-100 active:scale-95 text-slate-700 hover:text-blue-950 border border-slate-200 rounded-lg text-xs font-semibold transition-all shadow-2xs cursor-pointer"
+            title="Menutup dan Mengunci Pintu Gedung dan Gerbang Sore Hari"
+          >
+            <span>🔒 Tutup Pintu Sore</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleApplyPresetDirectly('patroli keamanan')}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-blue-100 active:scale-95 text-slate-700 hover:text-blue-950 border border-slate-200 rounded-lg text-xs font-semibold transition-all shadow-2xs cursor-pointer"
+            title="Patroli Keamanan Malam & Pengecekan Kunci"
+          >
+            <span>🛡️ Patroli Malam</span>
           </button>
         </div>
       </div>
@@ -187,10 +254,10 @@ export const PenjagaView: React.FC = () => {
           <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="font-semibold text-slate-900">
-              Rekomendasi Otomatis Tindakan Preventif:
+              Rekomendasi Otomatis & SOP Standar Penjaga Sekolah:
             </p>
             <p className="text-slate-600 leading-relaxed">
-              Berdasarkan catatan patroli dan pengawasan, akses gerbang utama dan titik penyeberangan jalan raya depan sekolah telah ditangani dengan baik. Gunakan fitur foto kamera HP untuk melampirkan bukti patroli malam dan perbaikan sarpras.
+              Tersedia template pekerjaan standar <strong>Buka dan Tutup Pintu Gerbang serta Seluruh Akses Gedung Sekolah</strong>. Pastikan pembukaan gerbang pagi, pengendalian akses masuk jam KBM, penutupan gerbang sore hari, serta patroli pengecekan gembok malam hari dicatat secara rutin dengan bukti foto ber-watermark resmi.
             </p>
           </div>
         </div>
@@ -452,10 +519,15 @@ export const PenjagaView: React.FC = () => {
       {isTaskModalOpen && (
         <DailyTaskModal
           isOpen={isTaskModalOpen}
-          onClose={() => { setIsTaskModalOpen(false); setEditingTask(null); }}
+          onClose={() => { 
+            setIsTaskModalOpen(false); 
+            setEditingTask(null); 
+            setSelectedPreset(null);
+          }}
           role="PENJAGA"
           editingTask={editingTask}
           initialMode={modalInitialMode}
+          initialPreset={selectedPreset}
         />
       )}
 

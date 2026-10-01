@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TaskLog, RoleType, TaskCategory } from '../../types';
 import { TASK_PRESETS, parseTasksCsv, exportTasksToCsv, TaskPresetItem } from '../../data/taskPresets';
+import { getLocalTodayStr } from '../../utils/taskClassification';
 import { 
   X, 
   Upload, 
@@ -28,6 +29,7 @@ interface DailyTaskModalProps {
   role: RoleType;
   editingTask?: TaskLog | null;
   initialMode?: 'template' | 'manual' | 'import';
+  initialPreset?: TaskPresetItem | null;
 }
 
 export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
@@ -35,13 +37,14 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
   onClose,
   role,
   editingTask,
-  initialMode = 'template'
+  initialMode = 'template',
+  initialPreset
 }) => {
   const { addTask, updateTask, importTasks, schoolConfig } = useApp();
   const operator = schoolConfig.operatorProfiles[role];
   const rolePresets = TASK_PRESETS[role] || [];
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalTodayStr();
 
   // Primary tab: form vs import
   const [activeTab, setActiveTab] = useState<'form' | 'import'>(
@@ -59,6 +62,7 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
 
   const getInitialCategory = (): TaskCategory => {
     if (editingTask) return editingTask.category;
+    if (initialPreset) return initialPreset.category;
     if (role === 'PENJAGA') return 'keamanan';
     if (role === 'TU') return 'kepegawaian';
     return 'kebersihan_wc';
@@ -67,17 +71,75 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
   const [formData, setFormData] = useState({
     date: editingTask ? editingTask.date : todayStr,
     category: getInitialCategory(),
-    title: editingTask ? editingTask.title : '',
-    description: editingTask ? editingTask.description : '',
-    location: editingTask ? editingTask.location : '',
-    timeStart: editingTask ? editingTask.timeStart : '07:30',
-    timeEnd: editingTask ? editingTask.timeEnd : '09:00',
+    title: editingTask ? editingTask.title : initialPreset ? initialPreset.title : '',
+    description: editingTask ? editingTask.description : initialPreset ? initialPreset.description : '',
+    location: editingTask ? editingTask.location : initialPreset ? initialPreset.location : '',
+    timeStart: editingTask ? editingTask.timeStart : initialPreset ? initialPreset.timeStart : '07:30',
+    timeEnd: editingTask ? editingTask.timeEnd : initialPreset ? initialPreset.timeEnd : '09:00',
     status: editingTask ? editingTask.status : ('selesai' as 'selesai' | 'dalam_proses' | 'perlu_tindak_lanjut'),
-    volumeUnit: editingTask ? editingTask.volumeUnit : '',
+    volumeUnit: editingTask ? editingTask.volumeUnit : initialPreset ? initialPreset.volumeUnit : '',
     photoUrl: editingTask?.photoUrl || '',
     petugas: editingTask ? editingTask.petugas : operator.nama,
-    notes: editingTask?.notes || ''
+    notes: editingTask?.notes || initialPreset?.notes || ''
   });
+
+  const [appliedPresetNotice, setAppliedPresetNotice] = useState<string | null>(null);
+
+  // Synchronize formData when modal opens or props change
+  useEffect(() => {
+    if (isOpen) {
+      if (editingTask) {
+        setFormData({
+          date: editingTask.date,
+          category: editingTask.category,
+          title: editingTask.title,
+          description: editingTask.description,
+          location: editingTask.location,
+          timeStart: editingTask.timeStart,
+          timeEnd: editingTask.timeEnd,
+          status: editingTask.status,
+          volumeUnit: editingTask.volumeUnit,
+          photoUrl: editingTask.photoUrl || '',
+          petugas: editingTask.petugas,
+          notes: editingTask.notes || ''
+        });
+        setInputMode('manual');
+      } else if (initialPreset) {
+        setFormData({
+          date: todayStr,
+          category: initialPreset.category,
+          title: initialPreset.title,
+          description: initialPreset.description,
+          location: initialPreset.location,
+          timeStart: initialPreset.timeStart,
+          timeEnd: initialPreset.timeEnd,
+          status: 'selesai',
+          volumeUnit: initialPreset.volumeUnit,
+          photoUrl: '',
+          petugas: operator.nama,
+          notes: initialPreset.notes || ''
+        });
+        setInputMode('template');
+        setAppliedPresetNotice(initialPreset.title);
+      } else {
+        setFormData({
+          date: todayStr,
+          category: getInitialCategory(),
+          title: '',
+          description: '',
+          location: '',
+          timeStart: '07:30',
+          timeEnd: '09:00',
+          status: 'selesai',
+          volumeUnit: '',
+          photoUrl: '',
+          petugas: operator.nama,
+          notes: ''
+        });
+        setInputMode(initialMode === 'manual' ? 'manual' : 'template');
+      }
+    }
+  }, [isOpen, editingTask, initialPreset]);
 
   const [applyWatermark, setApplyWatermark] = useState<boolean>(true);
   const [isPhotoZoomed, setIsPhotoZoomed] = useState<boolean>(false);
@@ -256,6 +318,7 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
       timeEnd: p.timeEnd,
       notes: p.notes || prev.notes
     }));
+    setAppliedPresetNotice(p.title);
   };
 
   // Reset form to blank manual state
@@ -573,27 +636,50 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                       <span>Daftar Template Pekerjaan Standar {role === 'TU' ? 'Tata Usaha' : role === 'PENJAGA' ? 'Penjaga' : 'Kebersihan'}:</span>
                     </label>
                     <span className="text-[10px] text-blue-700 font-medium">
-                      Tersedia {rolePresets.length} template pekerjaan
+                      Tersedia {filteredPresets.length} dari {rolePresets.length} template
                     </span>
+                  </div>
+
+                  {/* Search box for templates */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Cari template (contoh: buka pintu, gerbang, patroli, sapras)..."
+                      value={templateSearch}
+                      onChange={(e) => setTemplateSearch(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-blue-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                    />
+                    {templateSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setTemplateSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
 
                   {/* Template Dropdown */}
                   <select
                     onChange={(e) => {
-                      const idx = parseInt(e.target.value);
-                      if (!isNaN(idx) && rolePresets[idx]) {
-                        handleApplyPreset(rolePresets[idx]);
+                      const selected = filteredPresets.find(p => p.title === e.target.value);
+                      if (selected) {
+                        handleApplyPreset(selected);
                       }
                     }}
-                    defaultValue=""
+                    value=""
                     className="w-full px-3 py-2 text-xs bg-white border border-blue-300 rounded-lg text-slate-900 font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
                   >
                     <option value="" disabled>-- Klik di sini untuk memilih pekerjaan dinas siap pakai --</option>
-                    {rolePresets.map((p, idx) => (
-                      <option key={idx} value={idx}>
+                    {filteredPresets.map((p, idx) => (
+                      <option key={idx} value={p.title}>
                         [{p.category.toUpperCase().replace('_', ' ')}] {p.title}
                       </option>
                     ))}
+                    {filteredPresets.length === 0 && (
+                      <option disabled value="">Tidak ada template yang cocok dengan pencarian/filter</option>
+                    )}
                   </select>
 
                   {/* Quick-Pill Category Filters */}
@@ -610,13 +696,82 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                     >
                       Semua ({rolePresets.length})
                     </button>
+
+                    {role === 'PENJAGA' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('keamanan')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'keamanan' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Keamanan & Pintu
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('pengawasan_anak')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'pengawasan_anak' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Pengawasan Siswa
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('inspeksi_malam')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'inspeksi_malam' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Ronda Malam
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('protokoler_tamu')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'protokoler_tamu' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Tamu & Parkir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('perbaikan_sapras')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'perbaikan_sapras' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Sapras Ringan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('lingkungan')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'lingkungan' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Lingkungan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('antar_surat')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'antar_surat' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Antar Surat
+                        </button>
+                      </>
+                    )}
+
                     {role === 'TU' && (
                       <>
                         <button
                           type="button"
                           onClick={() => setTemplateCategoryFilter('kepegawaian')}
-                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap ${
-                            templateCategoryFilter === 'kepegawaian' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'kepegawaian' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           Kepegawaian
@@ -624,8 +779,8 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setTemplateCategoryFilter('siswa')}
-                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap ${
-                            templateCategoryFilter === 'siswa' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'siswa' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           Kesiswaan
@@ -633,8 +788,8 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setTemplateCategoryFilter('keuangan_bos')}
-                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap ${
-                            templateCategoryFilter === 'keuangan_bos' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'keuangan_bos' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           Keuangan BOS
@@ -642,8 +797,8 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setTemplateCategoryFilter('sapras')}
-                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap ${
-                            templateCategoryFilter === 'sapras' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'sapras' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           Sapras
@@ -651,8 +806,8 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setTemplateCategoryFilter('dapodik')}
-                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap ${
-                            templateCategoryFilter === 'dapodik' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'dapodik' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           Dapodik
@@ -660,14 +815,188 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setTemplateCategoryFilter('surat_masuk')}
-                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap ${
-                            templateCategoryFilter === 'surat_masuk' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'surat_masuk' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                           }`}
                         >
                           Persuratan
                         </button>
                       </>
                     )}
+
+                    {role === 'SERVICE' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('kebersihan_wc')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'kebersihan_wc' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Toilet & WC
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('kebersihan_kantor')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'kebersihan_kantor' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Ruang Kantor
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('kebersihan_halaman')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'kebersihan_halaman' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Halaman
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('kebersihan_sampah')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'kebersihan_sampah' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Kelola Sampah
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateCategoryFilter('sanitasi_disinfeksi')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-semibold whitespace-nowrap transition-colors ${
+                            templateCategoryFilter === 'sanitasi_disinfeksi' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Sanitasi & UKS
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* 1-Click Popular Template Quick Picks */}
+                  <div className="pt-1.5 border-t border-blue-200/60">
+                    <p className="text-[10px] font-semibold text-slate-500 mb-1.5 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      <span>Rekomendasi Pekerjaan Cepat (Klik 1x untuk Terapkan):</span>
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {role === 'PENJAGA' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.title.toLowerCase().includes('buka dan tutup'));
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2.5 py-1 bg-white hover:bg-blue-100 active:scale-95 text-blue-900 text-[11px] font-semibold rounded-md border border-blue-300 transition-all flex items-center gap-1 shadow-2xs"
+                          >
+                            <span>🚪 Buka & Tutup Pintu Gerbang (SOP Harian)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.title.toLowerCase().includes('membuka pintu gerbang'));
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2 py-1 bg-white hover:bg-blue-100 active:scale-95 text-slate-800 text-[11px] font-medium rounded-md border border-slate-200 transition-all flex items-center gap-1"
+                          >
+                            <span>🌅 Buka Pintu Pagi Hari</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.title.toLowerCase().includes('menutup dan mengunci'));
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2 py-1 bg-white hover:bg-blue-100 active:scale-95 text-slate-800 text-[11px] font-medium rounded-md border border-slate-200 transition-all flex items-center gap-1"
+                          >
+                            <span>🔒 Tutup Pintu Sore Hari</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.title.toLowerCase().includes('patroli keamanan'));
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2 py-1 bg-white hover:bg-blue-100 active:scale-95 text-slate-800 text-[11px] font-medium rounded-md border border-slate-200 transition-all flex items-center gap-1"
+                          >
+                            <span>🛡️ Patroli Malam</span>
+                          </button>
+                        </>
+                      )}
+
+                      {role === 'TU' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.category === 'kepegawaian');
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2.5 py-1 bg-white hover:bg-blue-100 active:scale-95 text-blue-900 text-[11px] font-semibold rounded-md border border-blue-300 transition-all"
+                          >
+                            📋 Kepegawaian GTK
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.category === 'siswa');
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2 py-1 bg-white hover:bg-blue-100 active:scale-95 text-slate-800 text-[11px] font-medium rounded-md border border-slate-200 transition-all"
+                          >
+                            🎓 Kesiswaan & PIP
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.category === 'surat_masuk');
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2 py-1 bg-white hover:bg-blue-100 active:scale-95 text-slate-800 text-[11px] font-medium rounded-md border border-slate-200 transition-all"
+                          >
+                            ✉️ Agenda Surat Masuk
+                          </button>
+                        </>
+                      )}
+
+                      {role === 'SERVICE' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.category === 'kebersihan_wc');
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2.5 py-1 bg-white hover:bg-blue-100 active:scale-95 text-blue-900 text-[11px] font-semibold rounded-md border border-blue-300 transition-all"
+                          >
+                            🚽 Pembersihan Toilet & WC
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.category === 'kebersihan_kantor');
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2 py-1 bg-white hover:bg-blue-100 active:scale-95 text-slate-800 text-[11px] font-medium rounded-md border border-slate-200 transition-all"
+                          >
+                            🧹 Pel Lantai & Ruang Kantor
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = rolePresets.find(x => x.category === 'kebersihan_sampah');
+                              if (p) handleApplyPreset(p);
+                            }}
+                            className="px-2 py-1 bg-white hover:bg-blue-100 active:scale-95 text-slate-800 text-[11px] font-medium rounded-md border border-slate-200 transition-all"
+                          >
+                            🗑️ Angkut Sampah ke TPS
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -687,6 +1016,24 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                   >
                     <RotateCcw className="w-3 h-3" />
                     <span>Kosongkan Form</span>
+                  </button>
+                </div>
+              )}
+
+              {/* APPLIED PRESET NOTIFICATION BANNER */}
+              {appliedPresetNotice && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between text-xs text-emerald-900 animate-fadeIn">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Template pekerjaan aktif: <strong>{appliedPresetNotice}</strong></span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAppliedPresetNotice(null)}
+                    className="text-emerald-700 hover:text-emerald-950 font-bold px-1.5 py-0.5 rounded text-xs"
+                    title="Tutup pemberitahuan"
+                  >
+                    ×
                   </button>
                 </div>
               )}

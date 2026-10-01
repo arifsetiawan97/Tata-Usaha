@@ -59,6 +59,21 @@ export const initialSchoolConfig: SchoolConfig = {
 export const initialTasks: TaskLog[] = [
   // PENJAGA SEKOLAH TASKS
   {
+    id: 'tsk-pjg-000',
+    role: 'PENJAGA',
+    date: '2026-09-25',
+    category: 'keamanan',
+    title: 'Buka dan Tutup Pintu Gerbang Utama serta Akses Gedung Sekolah',
+    description: 'Melaksanakan SOP harian membuka pintu gerbang utama dan pintu ruangan kelas pukul 05:45 WIB, pengendalian buka-tutup gerbang selama jam KBM, serta menutup dan menggembok seluruh pintu gedung dan gerbang utama pukul 16:30 WIB.',
+    location: 'Pintu Gerbang Utama & Seluruh Akses Gedung Sekolah',
+    timeStart: '05:45',
+    timeEnd: '16:45',
+    status: 'selesai',
+    volumeUnit: '2 gerbang utama & 24 pintu gedung/kelas',
+    petugas: 'Bambang Kurniawan',
+    notes: 'Kunci dan gembok terpasang aman pada kotak kunci pos keamanan, situasi tertib terkendali.'
+  },
+  {
     id: 'tsk-pjg-001',
     role: 'PENJAGA',
     date: '2026-09-25',

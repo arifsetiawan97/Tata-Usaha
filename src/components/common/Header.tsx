@@ -57,12 +57,66 @@ export const Header: React.FC = () => {
 
   const CurrentRoleIcon = roleConfig.icon;
 
-  const navItems = [
-    { id: 'dashboard', label: 'Tugas Operasional', icon: LayoutDashboard },
-    { id: 'monthly', label: 'Laporan Bulanan', icon: FileText },
-    { id: 'annual', label: 'Laporan Tahunan', icon: Award },
-    { id: 'inventory', label: 'Buku Inventaris', icon: Boxes },
-    { id: 'archive', label: 'Arsip Dokumen (Pemeriksaan)', icon: Archive, count: archives.length }
+  const operationalNavItems = [
+    {
+      id: 'penjaga',
+      role: 'PENJAGA' as RoleType,
+      label: 'Penjaga Sekolah',
+      sublabel: 'Keamanan & Sapras',
+      icon: Shield,
+      activeColor: 'border-blue-600 text-blue-700 bg-blue-50/60',
+      iconBg: 'bg-blue-100 text-blue-700'
+    },
+    {
+      id: 'tu',
+      role: 'TU' as RoleType,
+      label: 'Tata Usaha (TU)',
+      sublabel: 'Administrasi',
+      icon: Building2,
+      activeColor: 'border-sky-600 text-sky-700 bg-sky-50/60',
+      iconBg: 'bg-sky-100 text-sky-700'
+    },
+    {
+      id: 'service',
+      role: 'SERVICE' as RoleType,
+      label: 'Service (Kebersihan)',
+      sublabel: 'Sanitasi & Lingkungan',
+      icon: Sparkles,
+      activeColor: 'border-emerald-600 text-emerald-700 bg-emerald-50/60',
+      iconBg: 'bg-emerald-100 text-emerald-700'
+    }
+  ];
+
+  const reportNavItems = [
+    { 
+      id: 'monthly', 
+      label: 'Laporan Bulanan', 
+      icon: FileText,
+      activeColor: 'border-indigo-600 text-indigo-700 bg-indigo-50/60',
+      iconBg: 'bg-indigo-100 text-indigo-700'
+    },
+    { 
+      id: 'annual', 
+      label: 'Laporan Tahunan', 
+      icon: Award,
+      activeColor: 'border-amber-600 text-amber-700 bg-amber-50/60',
+      iconBg: 'bg-amber-100 text-amber-700'
+    },
+    { 
+      id: 'inventory', 
+      label: 'Buku Inventaris', 
+      icon: Boxes,
+      activeColor: 'border-orange-600 text-orange-700 bg-orange-50/60',
+      iconBg: 'bg-orange-100 text-orange-700'
+    },
+    { 
+      id: 'archive', 
+      label: 'Arsip Dokumen', 
+      icon: Archive, 
+      count: archives.length,
+      activeColor: 'border-purple-600 text-purple-700 bg-purple-50/60',
+      iconBg: 'bg-purple-100 text-purple-700'
+    }
   ];
 
   return (
@@ -194,34 +248,79 @@ export const Header: React.FC = () => {
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex gap-4 overflow-x-auto border-t border-slate-100 -mb-px">
-            {navItems.map(item => {
-              const ItemIcon = item.icon;
-              const isActive = activeNavTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActiveNavTab(item.id)}
-                  className={`flex items-center gap-1.5 py-2.5 px-1 border-b-2 text-xs font-semibold whitespace-nowrap transition-colors ${
-                    isActive
-                      ? `${roleConfig.activeTabClass} border-current`
-                      : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <ItemIcon className="w-3.5 h-3.5" />
-                  <span>{item.label}</span>
-                  {item.count !== undefined && item.count > 0 && (
-                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      isActive ? 'bg-current text-white' : 'bg-slate-200 text-slate-700'
-                    }`}>
-                      {item.count}
+          {/* Navigation Tabs - Separate Menus for Operational Roles & Reports */}
+          <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto border-t border-slate-100 py-1.5 -mb-px">
+            {/* Group 1: Peran Operasional (Menu Pisah Sendiri-Sendiri) */}
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="hidden xl:inline text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                Peran:
+              </span>
+              {operationalNavItems.map(item => {
+                const ItemIcon = item.icon;
+                const isActive = activeNavTab === item.id || (activeNavTab === 'dashboard' && currentRole === item.role);
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setCurrentRole(item.role);
+                      setActiveNavTab(item.id);
+                    }}
+                    className={`flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer ${
+                      isActive
+                        ? `${item.activeColor} shadow-2xs font-bold ring-1 ring-current/20`
+                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                    title={`Buka Ruang Kerja Operasional: ${item.label}`}
+                  >
+                    <span className={`p-1 rounded-md transition-colors ${isActive ? item.iconBg : 'bg-slate-100 text-slate-600'}`}>
+                      <ItemIcon className="w-3.5 h-3.5" />
                     </span>
-                  )}
-                </button>
-              );
-            })}
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Subtle Divider */}
+            <div className="h-5 w-px bg-slate-200 shrink-0 mx-1" />
+
+            {/* Group 2: Laporan & Arsip Dokumen */}
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="hidden xl:inline text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                Laporan & Data:
+              </span>
+              {reportNavItems.map(item => {
+                const ItemIcon = item.icon;
+                const isActive = activeNavTab === item.id;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActiveNavTab(item.id)}
+                    className={`flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer ${
+                      isActive
+                        ? `${item.activeColor} shadow-2xs font-bold ring-1 ring-current/20`
+                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className={`p-1 rounded-md transition-colors ${isActive ? item.iconBg : 'bg-slate-100 text-slate-600'}`}>
+                      <ItemIcon className="w-3.5 h-3.5" />
+                    </span>
+                    <span>{item.label}</span>
+                    {item.count !== undefined && item.count > 0 && (
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                        isActive ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}>
+                        {item.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </header>

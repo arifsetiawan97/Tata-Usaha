@@ -7,6 +7,12 @@ import { MonthlyReport, AnnualReport, RoleType } from '../../types';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { generateOfficialDocumentHtml } from '../../utils/htmlExport';
 import { 
+  isTaskInMonth, 
+  isTaskInYear, 
+  getTaskClassification, 
+  OFFICIAL_TUPOKSI_DEFINITIONS 
+} from '../../utils/taskClassification';
+import { 
   Printer, 
   Download, 
   ArrowLeft, 
@@ -19,7 +25,9 @@ import {
   Eye,
   Smartphone,
   Monitor,
-  Archive
+  Archive,
+  Target,
+  BookmarkCheck
 } from 'lucide-react';
 
 interface PrintDocumentViewProps {
@@ -63,18 +71,23 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const [archivedSuccess, setArchivedSuccess] = useState<string | null>(null);
   const [mobileFitScale, setMobileFitScale] = useState(false);
 
-  // Relevant tasks for this report
+  // Relevant tasks for this report using robust string date parsing
   const relevantTasks = tasks.filter(t => {
     if (t.role !== role) return false;
-    const d = new Date(t.date);
     if (isMonthly && monthlyData) {
-      return d.getMonth() + 1 === monthlyData.month && d.getFullYear() === monthlyData.year;
+      return isTaskInMonth(t.date, monthlyData.month, monthlyData.year);
     }
     if (!isMonthly && annualData) {
-      return d.getFullYear() === annualData.year;
+      return isTaskInYear(t.date, annualData.year);
     }
     return true;
   });
+
+  const tupoksiTasks = relevantTasks.filter(t => getTaskClassification(role, t.category) === 'pokok');
+  const tambahanTasks = relevantTasks.filter(t => getTaskClassification(role, t.category) === 'tambahan');
+  const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai');
+  const tambahanCompleted = tambahanTasks.filter(t => t.status === 'selesai');
+  const completedCount = relevantTasks.filter(t => t.status === 'selesai').length;
 
   // 1. Direct PDF Generation & Download (Supporting OKLCH & Tailwind CSS v4)
   const handleSavePdf = async () => {
@@ -428,6 +441,39 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                           </ul>
                         </div>
                       )}
+
+                      {/* ========================================================
+                          II. STANDAR TUGAS POKOK (TUPOKSI) DAN TUGAS TAMBAHAN
+                          ======================================================== */}
+                      <div className="mt-3.5 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                        <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-2 print:border-black">
+                          II. STANDAR TUGAS POKOK (TUPOKSI) DAN TUGAS TAMBAHAN LAYANAN OPERASIONAL
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="p-2 bg-slate-50 border border-slate-300 rounded print:border-black print:bg-transparent">
+                            <p className="font-bold text-slate-900 mb-1 flex items-center justify-between text-[10.5px]">
+                              <span>A. Tugas Pokok (Tupoksi Standar):</span>
+                              <span className="font-mono text-[9.5px] text-blue-800 font-bold">({tupoksiCompleted.length}/{tupoksiTasks.length} Tuntas)</span>
+                            </p>
+                            <ul className="list-disc pl-3.5 space-y-0.5 text-slate-800 text-[9.5px]">
+                              {OFFICIAL_TUPOKSI_DEFINITIONS[role].tupoksiList.map((item, idx) => (
+                                <li key={idx} className="leading-tight">{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="p-2 bg-slate-50 border border-slate-300 rounded print:border-black print:bg-transparent">
+                            <p className="font-bold text-slate-900 mb-1 flex items-center justify-between text-[10.5px]">
+                              <span>B. Tugas Tambahan & Insidental:</span>
+                              <span className="font-mono text-[9.5px] text-amber-800 font-bold">({tambahanCompleted.length}/{tambahanTasks.length} Tuntas)</span>
+                            </p>
+                            <ul className="list-disc pl-3.5 space-y-0.5 text-slate-800 text-[9.5px]">
+                              {OFFICIAL_TUPOKSI_DEFINITIONS[role].tugasTambahanList.map((item, idx) => (
+                                <li key={idx} className="leading-tight">{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -472,7 +518,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
 
                           <div className="my-2 text-xs">
                             <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-2.5 print:border-black break-inside-avoid">
-                              II. REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN {taskChunks.length > 1 ? `(BAGIAN ${chunkIdx + 1})` : ''}
+                              III. REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN {taskChunks.length > 1 ? `(BAGIAN ${chunkIdx + 1})` : ''}
                             </h4>
 
                             <div className="w-full overflow-hidden">
@@ -480,7 +526,8 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                                 <thead>
                                   <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200 print:border-black">
                                     <th className="py-1.5 px-2 text-center w-8 border border-slate-400 print:border-black">No</th>
-                                    <th className="py-1.5 px-2 w-20 sm:w-24 border border-slate-400 print:border-black">Tanggal</th>
+                                    <th className="py-1.5 px-2 w-20 border border-slate-400 print:border-black">Tanggal</th>
+                                    <th className="py-1.5 px-2 w-22 border border-slate-400 print:border-black">Klasifikasi</th>
                                     <th className="py-1.5 px-2.5 border border-slate-400 print:border-black">Uraian Tugas / Pekerjaan Kedinasan</th>
                                     <th className="py-1.5 px-2 border border-slate-400 print:border-black">Lokasi</th>
                                     <th className="py-1.5 px-2 text-center border border-slate-400 print:border-black whitespace-nowrap">Waktu</th>
@@ -491,36 +538,55 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                                 <tbody>
                                   {chunk.length === 0 ? (
                                     <tr>
-                                      <td colSpan={7} className="py-6 text-center text-slate-500 italic border border-slate-400 print:border-black">
+                                      <td colSpan={8} className="py-6 text-center text-slate-500 italic border border-slate-400 print:border-black">
                                         Tidak ada catatan tugas operasional pada periode ini.
                                       </td>
                                     </tr>
                                   ) : (
-                                    chunk.map((t, idx) => (
-                                      <tr key={t.id} className="border-b border-slate-300 print:border-black">
-                                        <td className="py-1.5 px-2 text-center font-mono border border-slate-300 print:border-black">
-                                          {chunkIdx * tasksPerPage + idx + 1}
-                                        </td>
-                                        <td className="py-1.5 px-2 font-mono whitespace-nowrap border border-slate-300 print:border-black">{t.date}</td>
-                                        <td className="py-1.5 px-2.5 border border-slate-300 print:border-black">
-                                          <span className="font-semibold text-slate-900 block">{t.title}</span>
-                                          <span className="text-[10px] text-slate-600 block mt-0.5">{t.description}</span>
-                                          {t.photoUrl && (
-                                            <span className="text-[9px] text-blue-600 font-medium inline-block mt-0.5 no-print">📷 Ada bukti foto</span>
-                                          )}
-                                        </td>
-                                        <td className="py-1.5 px-2 border border-slate-300 print:border-black">{t.location}</td>
-                                        <td className="py-1.5 px-2 text-center border border-slate-300 print:border-black whitespace-nowrap">{t.timeStart} - {t.timeEnd}</td>
-                                        <td className="py-1.5 px-2 border border-slate-300 print:border-black font-medium">{t.volumeUnit}</td>
-                                        <td className="py-1.5 px-2 text-center border border-slate-300 print:border-black font-semibold uppercase text-[9.5px]">
-                                          {t.status === 'selesai' ? (
-                                            <span className="text-emerald-700">Selesai 100%</span>
-                                          ) : (
-                                            <span className="text-amber-700">Dalam Proses</span>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    ))
+                                    chunk.map((t, idx) => {
+                                      const isPokok = getTaskClassification(role, t.category) === 'pokok';
+                                      return (
+                                        <tr key={t.id} className="border-b border-slate-300 print:border-black">
+                                          <td className="py-1.5 px-2 text-center font-mono border border-slate-300 print:border-black">
+                                            {chunkIdx * tasksPerPage + idx + 1}
+                                          </td>
+                                          <td className="py-1.5 px-2 font-mono whitespace-nowrap border border-slate-300 print:border-black">{t.date}</td>
+                                          <td className="py-1.5 px-2 text-[9.5px] border border-slate-300 print:border-black whitespace-nowrap">
+                                            <span className={`font-semibold ${isPokok ? 'text-blue-900' : 'text-amber-900'}`}>
+                                              {isPokok ? 'Tugas Pokok' : 'Tambahan'}
+                                            </span>
+                                          </td>
+                                          <td className="py-1.5 px-2.5 border border-slate-300 print:border-black">
+                                            <span className="font-semibold text-slate-900 block">{t.title}</span>
+                                            <span className="text-[10px] text-slate-600 block mt-0.5">{t.description}</span>
+                                            {t.photoUrl && (
+                                              <span className="text-[9px] text-blue-600 font-medium inline-block mt-0.5 no-print">📷 Ada bukti foto</span>
+                                            )}
+                                          </td>
+                                          <td className="py-1.5 px-2 border border-slate-300 print:border-black">{t.location}</td>
+                                          <td className="py-1.5 px-2 text-center border border-slate-300 print:border-black whitespace-nowrap">{t.timeStart} - {t.timeEnd}</td>
+                                          <td className="py-1.5 px-2 border border-slate-300 print:border-black font-medium">{t.volumeUnit}</td>
+                                          <td className="py-1.5 px-2 text-center border border-slate-300 print:border-black font-semibold uppercase text-[9.5px]">
+                                            {t.status === 'selesai' ? (
+                                              <span className="text-emerald-700">Selesai 100%</span>
+                                            ) : (
+                                              <span className="text-amber-700">Dalam Proses</span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })
+                                  )}
+                                  {chunkIdx === taskChunks.length - 1 && relevantTasks.length > 0 && (
+                                    <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400 print:bg-slate-200 print:border-black text-[10px]">
+                                      <td colSpan={3} className="py-1.5 px-2 text-center font-bold">TOTAL REKAPITULASI</td>
+                                      <td colSpan={4} className="py-1.5 px-2">
+                                        {relevantTasks.length} Tugas Operasional Terlaksana ({tupoksiTasks.length} Tugas Pokok / {tambahanTasks.length} Tugas Tambahan)
+                                      </td>
+                                      <td className="py-1.5 px-2 text-center text-emerald-800 font-bold">
+                                        {completedCount}/{relevantTasks.length} Tuntas
+                                      </td>
+                                    </tr>
                                   )}
                                 </tbody>
                               </table>

@@ -37,6 +37,7 @@ export interface TaskLog {
   role: RoleType;
   date: string; // YYYY-MM-DD
   category: TaskCategory;
+  taskType?: 'pokok' | 'tambahan';
   title: string;
   description: string;
   location: string;
@@ -48,6 +49,13 @@ export interface TaskLog {
   petugas: string;
   notes?: string;
 }
+
+export interface TupoksiDefinitionItem {
+  tupoksiList: string[];
+  tugasTambahanList: string[];
+}
+
+export type TupoksiDefinitionsMap = Record<RoleType, TupoksiDefinitionItem>;
 
 export interface InventoryItem {
   id: string;
