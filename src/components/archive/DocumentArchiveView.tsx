@@ -72,8 +72,10 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
   // Filter archives
   const filteredArchives = useMemo(() => {
     return archives.filter(doc => {
-      // Role filter
-      if (selectedRole !== 'ALL' && doc.role !== selectedRole) return false;
+      // Role isolation: if currentRole is set, strictly show only currentRole's documents
+      if (currentRole && doc.role !== currentRole) return false;
+      // Role filter if not logged in
+      if (!currentRole && selectedRole !== 'ALL' && doc.role !== selectedRole) return false;
       // Type filter
       if (selectedType !== 'ALL' && doc.documentType !== selectedType) return false;
       // Year filter
@@ -94,16 +96,17 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
 
       return true;
     });
-  }, [archives, selectedRole, selectedType, selectedYear, selectedStatus, searchQuery]);
+  }, [archives, currentRole, selectedRole, selectedType, selectedYear, selectedStatus, searchQuery]);
 
-  // Statistics for Audit Readiness
+  // Statistics for Audit Readiness (for current role)
   const stats = useMemo(() => {
-    const total = archives.length;
-    const verified = archives.filter(a => a.approvalStatus === 'disahkan_kepsek').length;
-    const withPhotos = archives.filter(a => a.checklist.hasPhotos).length;
+    const list = currentRole ? archives.filter(a => a.role === currentRole) : archives;
+    const total = list.length;
+    const verified = list.filter(a => a.approvalStatus === 'disahkan_kepsek').length;
+    const withPhotos = list.filter(a => a.checklist.hasPhotos).length;
     const readinessScore = total > 0 ? Math.round((verified / total) * 100) : 100;
     return { total, verified, withPhotos, readinessScore };
-  }, [archives]);
+  }, [archives, currentRole]);
 
   // Handle direct HTML download of archived document
   const handleDownloadArchivedHtml = (doc: ArchiveDocument) => {
@@ -259,60 +262,76 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
 
         {/* Filter Pills */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
-            Bidang:
-          </span>
+          {!currentRole ? (
+            <>
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+                Bidang:
+              </span>
 
-          <button
-            type="button"
-            onClick={() => setSelectedRole('ALL')}
-            className={`px-3 py-1 rounded-lg font-semibold transition-all ${
-              selectedRole === 'ALL'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Semua Bidang
-          </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRole('ALL')}
+                className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                  selectedRole === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Semua Bidang
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setSelectedRole('TU')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold transition-all ${
-              selectedRole === 'TU'
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-200'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            <span>Tata Usaha (TU)</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRole('TU')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold transition-all ${
+                  selectedRole === 'TU'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-200'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>Tata Usaha (TU)</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setSelectedRole('PENJAGA')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold transition-all ${
-              selectedRole === 'PENJAGA'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Penjaga Sekolah</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRole('PENJAGA')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold transition-all ${
+                  selectedRole === 'PENJAGA'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Penjaga Sekolah</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setSelectedRole('SERVICE')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold transition-all ${
-              selectedRole === 'SERVICE'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Layanan Kebersihan (Service)</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRole('SERVICE')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold transition-all ${
+                  selectedRole === 'SERVICE'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Layanan Kebersihan (Service)</span>
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Arsip Khusus:
+              </span>
+              <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-slate-900 text-white flex items-center gap-1.5">
+                {currentRole === 'PENJAGA' && <Shield className="w-3.5 h-3.5 text-blue-400" />}
+                {currentRole === 'TU' && <Building2 className="w-3.5 h-3.5 text-sky-400" />}
+                {currentRole === 'SERVICE' && <Sparkles className="w-3.5 h-3.5 text-emerald-400" />}
+                <span>{currentRole === 'PENJAGA' ? 'Penjaga Sekolah' : currentRole === 'TU' ? 'Tata Usaha' : 'Layanan Kebersihan'}</span>
+              </span>
+            </div>
+          )}
 
           <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block"></div>
 

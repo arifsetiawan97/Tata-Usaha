@@ -175,28 +175,37 @@ export function parseTaskMonthYear(taskDate: string): { month: number; year: num
   }
 
   // 2. Delimited numeric dates
-  const parts = clean.split(/[-/.]/);
+  const parts = clean.split(/[-/.]/).map(p => p.trim());
   if (parts.length >= 3) {
     if (parts[0].length === 4) {
-      // YYYY-MM-DD
+      // YYYY-MM-DD or YYYY/M/D
       const y = parseInt(parts[0], 10);
       const m = parseInt(parts[1], 10);
-      if (!isNaN(y) && !isNaN(m)) return { month: m, year: y };
+      if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) return { month: m, year: y };
     } else if (parts[2].length === 4) {
-      // DD-MM-YYYY
+      // Could be DD-MM-YYYY or MM-DD-YYYY
       const y = parseInt(parts[2], 10);
-      const m = parseInt(parts[1], 10);
-      if (!isNaN(y) && !isNaN(m)) return { month: m, year: y };
+      const p0 = parseInt(parts[0], 10);
+      const p1 = parseInt(parts[1], 10);
+      let m = p1;
+      if (p0 <= 12 && p1 > 12) {
+        // MM-DD-YYYY
+        m = p0;
+      } else {
+        // Standard Indonesian/European DD-MM-YYYY
+        m = p1;
+      }
+      if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) return { month: m, year: y };
     }
   } else if (parts.length === 2) {
     if (parts[0].length === 4) {
       const y = parseInt(parts[0], 10);
       const m = parseInt(parts[1], 10);
-      if (!isNaN(y) && !isNaN(m)) return { month: m, year: y };
-    } else {
+      if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) return { month: m, year: y };
+    } else if (parts[1].length === 4) {
       const m = parseInt(parts[0], 10);
       const y = parseInt(parts[1], 10);
-      if (!isNaN(y) && !isNaN(m)) return { month: m, year: y };
+      if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) return { month: m, year: y };
     }
   }
 

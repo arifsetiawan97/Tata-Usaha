@@ -1,4 +1,4 @@
-import { SchoolConfig, MonthlyReport, AnnualReport, RoleType, TaskLog, InventoryItem } from '../types';
+import { SchoolConfig, MonthlyReport, AnnualReport, RoleType, TaskLog, InventoryItem, TupoksiDefinitionsMap } from '../types';
 import { 
   isTaskInMonth, 
   isTaskInYear, 
@@ -12,6 +12,7 @@ interface DocumentExportParams {
   schoolConfig: SchoolConfig;
   tasks: TaskLog[];
   inventories: InventoryItem[];
+  tupoksiDefinitions?: TupoksiDefinitionsMap;
   manualDate?: string;
   nomorSurat?: string;
 }
@@ -34,6 +35,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     schoolConfig,
     tasks,
     inventories,
+    tupoksiDefinitions,
     manualDate,
     nomorSurat
   } = params;
@@ -60,7 +62,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
 
   // Relevant tasks for this report using robust string date parsing
   const relevantTasks = tasks.filter(t => {
-    if (t.role !== role) return false;
+    if (t.role.toUpperCase() !== role.toUpperCase()) return false;
     if (isMonthly && monthlyData) {
       return isTaskInMonth(t.date, monthlyData.month, monthlyData.year);
     }
@@ -70,11 +72,14 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     return true;
   });
 
-  const tupoksiTasks = relevantTasks.filter(t => getTaskClassification(role, t.category) === 'pokok');
-  const tambahanTasks = relevantTasks.filter(t => getTaskClassification(role, t.category) === 'tambahan');
+  const tupoksiTasks = relevantTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'pokok');
+  const tambahanTasks = relevantTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'tambahan');
   const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai');
   const tambahanCompleted = tambahanTasks.filter(t => t.status === 'selesai');
   const completedCount = relevantTasks.filter(t => t.status === 'selesai').length;
+
+  const roleTupoksiList = tupoksiDefinitions?.[role]?.tupoksiList || OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tupoksiList || [];
+  const roleTambahanList = tupoksiDefinitions?.[role]?.tugasTambahanList || OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tugasTambahanList || [];
 
   const roleInventories = inventories.filter(inv => inv.role === role);
   const tasksWithPhotos = relevantTasks.filter(t => !!t.photoUrl);
@@ -731,7 +736,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
             <span style="font-family: monospace;">(${tupoksiCompleted.length}/${tupoksiTasks.length} Tuntas)</span>
           </div>
           <ul style="padding-left: 18px; margin: 0; font-size: 8.5pt;">
-            ${OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tupoksiList.map(item => `<li style="margin-bottom: 2px;">${item}</li>`).join('') || ''}
+            ${roleTupoksiList.map(item => `<li style="margin-bottom: 2px;">${item}</li>`).join('') || ''}
           </ul>
         </div>
         <div style="flex: 1; background: #f8fafc; border: 1px solid #000; padding: 8px 10px; border-radius: 3px;">
@@ -740,7 +745,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
             <span style="font-family: monospace;">(${tambahanCompleted.length}/${tambahanTasks.length} Tuntas)</span>
           </div>
           <ul style="padding-left: 18px; margin: 0; font-size: 8.5pt;">
-            ${OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tugasTambahanList.map(item => `<li style="margin-bottom: 2px;">${item}</li>`).join('') || ''}
+            ${roleTambahanList.map(item => `<li style="margin-bottom: 2px;">${item}</li>`).join('') || ''}
           </ul>
         </div>
       </div>
@@ -784,7 +789,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
               </td>
             </tr>
           ` : tasksPage1.map((t, idx) => {
-            const isPokok = getTaskClassification(role, t.category) === 'pokok';
+            const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
             return `
             <tr>
               <td class="col-no">${idx + 1}</td>
@@ -852,7 +857,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         </thead>
         <tbody>
           ${tasksPage2.map((t, idx) => {
-            const isPokok = getTaskClassification(role, t.category) === 'pokok';
+            const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
             return `
             <tr>
               <td class="col-no">${tasksPerPage + idx + 1}</td>

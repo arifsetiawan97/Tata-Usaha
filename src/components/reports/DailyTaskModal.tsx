@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TaskLog, RoleType, TaskCategory } from '../../types';
 import { TASK_PRESETS, parseTasksCsv, exportTasksToCsv, TaskPresetItem } from '../../data/taskPresets';
-import { getLocalTodayStr } from '../../utils/taskClassification';
+import { getLocalTodayStr, getTaskClassification } from '../../utils/taskClassification';
 import { 
   X, 
   Upload, 
@@ -20,7 +20,9 @@ import {
   Clock,
   MapPin,
   Tag,
-  Info
+  Info,
+  Target,
+  BookmarkCheck
 } from 'lucide-react';
 
 interface DailyTaskModalProps {
@@ -40,9 +42,10 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
   initialMode = 'template',
   initialPreset
 }) => {
-  const { addTask, updateTask, importTasks, schoolConfig } = useApp();
+  const { addTask, updateTask, importTasks, schoolConfig, tupoksiDefinitions } = useApp();
   const operator = schoolConfig.operatorProfiles[role];
   const rolePresets = TASK_PRESETS[role] || [];
+  const currentRoleTupoksi = tupoksiDefinitions[role] || { tupoksiList: [], tugasTambahanList: [] };
 
   const todayStr = getLocalTodayStr();
 
@@ -68,9 +71,15 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     return 'kebersihan_wc';
   };
 
+  const getInitialClassification = (): 'pokok' | 'tambahan' => {
+    if (editingTask?.taskType) return editingTask.taskType;
+    return getTaskClassification(role, getInitialCategory());
+  };
+
   const [formData, setFormData] = useState({
     date: editingTask ? editingTask.date : todayStr,
     category: getInitialCategory(),
+    taskType: getInitialClassification(),
     title: editingTask ? editingTask.title : initialPreset ? initialPreset.title : '',
     description: editingTask ? editingTask.description : initialPreset ? initialPreset.description : '',
     location: editingTask ? editingTask.location : initialPreset ? initialPreset.location : '',
@@ -92,6 +101,7 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
         setFormData({
           date: editingTask.date,
           category: editingTask.category,
+          taskType: editingTask.taskType || getTaskClassification(role, editingTask.category),
           title: editingTask.title,
           description: editingTask.description,
           location: editingTask.location,
@@ -108,6 +118,7 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
         setFormData({
           date: todayStr,
           category: initialPreset.category,
+          taskType: getTaskClassification(role, initialPreset.category),
           title: initialPreset.title,
           description: initialPreset.description,
           location: initialPreset.location,
@@ -122,9 +133,11 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
         setInputMode('template');
         setAppliedPresetNotice(initialPreset.title);
       } else {
+        const cat = getInitialCategory();
         setFormData({
           date: todayStr,
-          category: getInitialCategory(),
+          category: cat,
+          taskType: getTaskClassification(role, cat),
           title: '',
           description: '',
           location: '',
@@ -310,6 +323,7 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     setFormData(prev => ({
       ...prev,
       category: p.category,
+      taskType: getTaskClassification(role, p.category),
       title: p.title,
       description: p.description,
       location: p.location,
@@ -321,11 +335,24 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     setAppliedPresetNotice(p.title);
   };
 
+  // Quick pick from official Tupoksi or Tugas Tambahan list
+  const handlePickFromTupoksi = (text: string, type: 'pokok' | 'tambahan') => {
+    setFormData(prev => ({
+      ...prev,
+      taskType: type,
+      title: text,
+      description: prev.description ? prev.description : `Pelaksanaan tugas ${type === 'pokok' ? 'pokok kedinasan' : 'tambahan'}: ${text}`
+    }));
+    setAppliedPresetNotice(`${type === 'pokok' ? 'Tugas Pokok' : 'Tugas Tambahan'}: ${text.substring(0, 45)}...`);
+  };
+
   // Reset form to blank manual state
   const handleResetToManual = () => {
+    const cat = getInitialCategory();
     setFormData({
       date: todayStr,
-      category: getInitialCategory(),
+      category: cat,
+      taskType: getTaskClassification(role, cat),
       title: '',
       description: '',
       location: '',
@@ -1059,12 +1086,99 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                   </label>
                   <select
                     value={formData.category}
-                    onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value as TaskCategory }))}
+                    onChange={(e) => {
+                      const newCat = e.target.value as TaskCategory;
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        category: newCat,
+                        taskType: getTaskClassification(role, newCat)
+                      }));
+                    }}
                     className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 font-semibold text-slate-900"
                   >
                     {renderCategoryOptions()}
                   </select>
                 </div>
+              </div>
+
+              {/* KLASIFIKASI KEDINASAN: TUGAS POKOK (TUPOKSI) VS TUGAS TAMBAHAN */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>Klasifikasi Tugas Kedinasan:</span>
+                    <span className="text-[10.5px] text-slate-500 font-normal hidden sm:inline">(Sinkron otomatis ke Rekapitulasi Laporan Bulanan Bagian III)</span>
+                  </label>
+                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                    formData.taskType === 'pokok' ? 'bg-blue-600 text-white' : 'bg-amber-600 text-white'
+                  }`}>
+                    {formData.taskType === 'pokok' ? '⭐ Tugas Pokok (Tupoksi)' : '📌 Tugas Tambahan'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, taskType: 'pokok' }))}
+                    className={`flex items-center justify-center gap-2 p-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                      formData.taskType === 'pokok'
+                        ? 'bg-blue-50 border-blue-500 text-blue-900 ring-2 ring-blue-500/20 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Target className="w-4 h-4 text-blue-600" />
+                    <span>Tugas Pokok (Tupoksi)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, taskType: 'tambahan' }))}
+                    className={`flex items-center justify-center gap-2 p-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                      formData.taskType === 'tambahan'
+                        ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-500/20 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <BookmarkCheck className="w-4 h-4 text-amber-600" />
+                    <span>Tugas Tambahan / Insidental</span>
+                  </button>
+                </div>
+
+                {/* Quick picker from registered Tupoksi list */}
+                {(currentRoleTupoksi.tupoksiList.length > 0 || currentRoleTupoksi.tugasTambahanList.length > 0) && (
+                  <div className="pt-2 border-t border-slate-200">
+                    <p className="text-[10.5px] font-semibold text-slate-600 mb-1 flex items-center gap-1">
+                      <span>📋 Atau pilih cepat dari daftar butir resmi:</span>
+                    </p>
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) return;
+                        const [type, ...rest] = val.split(':::');
+                        const text = rest.join(':::');
+                        handlePickFromTupoksi(text, type as 'pokok' | 'tambahan');
+                        e.target.value = '';
+                      }}
+                      defaultValue=""
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="" disabled>-- Klik untuk memilih butir tugas pokok / tambahan --</option>
+                      <optgroup label="⭐ Daftar Tugas Pokok (Tupoksi)">
+                        {currentRoleTupoksi.tupoksiList.map((item, idx) => (
+                          <option key={`tp-${idx}`} value={`pokok:::${item}`}>
+                            {idx + 1}. {item}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="📌 Daftar Tugas Tambahan & Insidental">
+                        {currentRoleTupoksi.tugasTambahanList.map((item, idx) => (
+                          <option key={`tt-${idx}`} value={`tambahan:::${item}`}>
+                            {idx + 1}. {item}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Judul Kegiatan */}

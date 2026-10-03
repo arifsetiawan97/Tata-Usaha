@@ -6,7 +6,8 @@ import {
   MonthlyReport, 
   AnnualReport, 
   SchoolConfig,
-  ArchiveDocument 
+  ArchiveDocument,
+  TupoksiDefinitionsMap
 } from '../types';
 import { 
   initialSchoolConfig, 
@@ -16,7 +17,15 @@ import {
   initialAnnualReports,
   initialArchives 
 } from '../data/initialData';
-import { isTaskInMonth, isTaskInYear, getTaskClassification } from '../utils/taskClassification';
+import { 
+  isTaskInMonth, 
+  isTaskInYear, 
+  getTaskClassification, 
+  OFFICIAL_TUPOKSI_DEFINITIONS, 
+  parseTaskMonthYear 
+} from '../utils/taskClassification';
+
+export type RoleSubTab = 'tasks' | 'tupoksi' | 'monthly' | 'annual' | 'inventory';
 
 interface AppContextType {
   currentRole: RoleType | null;
@@ -42,6 +51,15 @@ interface AppContextType {
   archiveReport: (type: 'monthly' | 'annual', data: any, customTitle?: string) => ArchiveDocument;
   schoolConfig: SchoolConfig;
   updateSchoolConfig: (config: Partial<SchoolConfig>) => void;
+  tupoksiDefinitions: TupoksiDefinitionsMap;
+  addTupoksiItem: (role: RoleType, type: 'pokok' | 'tambahan', text: string) => void;
+  updateTupoksiItem: (role: RoleType, type: 'pokok' | 'tambahan', index: number, newText: string) => void;
+  deleteTupoksiItem: (role: RoleType, type: 'pokok' | 'tambahan', indexOrText: number | string) => void;
+  resetTupoksiToDefault: (role?: RoleType) => void;
+  roleSubTabs: Record<RoleType, RoleSubTab>;
+  setRoleSubTab: (role: RoleType, tab: RoleSubTab) => void;
+  lastAddedTaskMonthYear: { month: number; year: number } | null;
+  setLastAddedTaskMonthYear: (val: { month: number; year: number } | null) => void;
   generateMonthlyReportFromTasks: (role: RoleType, month: number, year: number, forceFresh?: boolean) => MonthlyReport;
   generateAnnualReportFromMonthly: (role: RoleType, year: number) => AnnualReport;
   activeNavTab: string;
@@ -49,6 +67,9 @@ interface AppContextType {
   resetToDefaultData: () => void;
   exportBackupJson: () => void;
   restoreFromBackupJson: (jsonData: any) => boolean;
+  rolePins: Record<RoleType, string>;
+  verifyRolePin: (role: RoleType, pin: string) => boolean;
+  updateRolePin: (role: RoleType, newPin: string) => void;
   syncStatus: 'synced' | 'saving' | 'offline';
 }
 
@@ -61,7 +82,10 @@ const STORAGE_KEYS = {
   MONTHLY: 'siops_monthly_reports',
   ANNUAL: 'siops_annual_reports',
   ARCHIVES: 'siops_archives',
-  CONFIG: 'siops_school_config'
+  CONFIG: 'siops_school_config',
+  TUPOKSI: 'siops_tupoksi_definitions',
+  SUBTABS: 'siops_role_subtabs',
+  PINS: 'siops_role_pins'
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -72,6 +96,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return null;
   });
+
+  const [rolePins, setRolePins] = useState<Record<RoleType, string>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PINS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // If all 3 roles were still set to the old shared 1234, upgrade to distinct PINs
+        if (parsed.TU === '1234' && parsed.PENJAGA === '1234' && parsed.SERVICE === '1234') {
+          return {
+            TU: '2101',
+            PENJAGA: '2102',
+            SERVICE: '2103'
+          };
+        }
+        return parsed;
+      } catch (e) { console.error(e); }
+    }
+    return {
+      TU: '2101',
+      PENJAGA: '2102',
+      SERVICE: '2103'
+    };
+  });
+
+  const verifyRolePin = (role: RoleType, pin: string): boolean => {
+    const fallbackPin = role === 'TU' ? '2101' : role === 'PENJAGA' ? '2102' : '2103';
+    const expected = rolePins[role] || fallbackPin;
+    return pin.trim() === expected.trim();
+  };
+
+  const updateRolePin = (role: RoleType, newPin: string) => {
+    if (!newPin.trim()) return;
+    setRolePins(prev => {
+      const next = { ...prev, [role]: newPin.trim() };
+      localStorage.setItem(STORAGE_KEYS.PINS, JSON.stringify(next));
+      return next;
+    });
+  };
 
   const [activeNavTab, setActiveNavTab] = useState<string>('dashboard');
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'offline'>('synced');
@@ -125,6 +187,146 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return initialSchoolConfig;
   });
 
+  const [tupoksiDefinitions, setTupoksiDefinitions] = useState<TupoksiDefinitionsMap>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.TUPOKSI);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return JSON.parse(JSON.stringify(OFFICIAL_TUPOKSI_DEFINITIONS));
+  });
+
+  const [roleSubTabs, setRoleSubTabs] = useState<Record<RoleType, RoleSubTab>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SUBTABS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return {
+      TU: 'tasks',
+      PENJAGA: 'tasks',
+      SERVICE: 'tasks'
+    };
+  });
+
+  const [lastAddedTaskMonthYear, setLastAddedTaskMonthYear] = useState<{ month: number; year: number } | null>(null);
+
+  const setRoleSubTab = (role: RoleType, tab: RoleSubTab) => {
+    setRoleSubTabs(prev => {
+      const next = { ...prev, [role]: tab };
+      localStorage.setItem(STORAGE_KEYS.SUBTABS, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const addTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', text: string) => {
+    if (!text.trim()) return;
+    setTupoksiDefinitions(prev => {
+      const currentRoleObj = prev[role] || { tupoksiList: [], tugasTambahanList: [] };
+      const next: TupoksiDefinitionsMap = {
+        ...prev,
+        [role]: {
+          ...currentRoleObj,
+          tupoksiList: type === 'pokok' 
+            ? [...currentRoleObj.tupoksiList, text.trim()] 
+            : currentRoleObj.tupoksiList,
+          tugasTambahanList: type === 'tambahan' 
+            ? [...currentRoleObj.tugasTambahanList, text.trim()] 
+            : currentRoleObj.tugasTambahanList
+        }
+      };
+      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const updateTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', index: number, newText: string) => {
+    if (!newText.trim()) return;
+    setTupoksiDefinitions(prev => {
+      const currentRoleObj = prev[role] || { tupoksiList: [], tugasTambahanList: [] };
+      const next: TupoksiDefinitionsMap = {
+        ...prev,
+        [role]: {
+          ...currentRoleObj,
+          tupoksiList: type === 'pokok'
+            ? currentRoleObj.tupoksiList.map((item, i) => i === index ? newText.trim() : item)
+            : currentRoleObj.tupoksiList,
+          tugasTambahanList: type === 'tambahan'
+            ? currentRoleObj.tugasTambahanList.map((item, i) => i === index ? newText.trim() : item)
+            : currentRoleObj.tugasTambahanList
+        }
+      };
+      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const deleteTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', indexOrText: number | string) => {
+    setTupoksiDefinitions(prev => {
+      const currentRoleObj = prev[role] || { 
+        tupoksiList: [...(OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tupoksiList || [])], 
+        tugasTambahanList: [...(OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tugasTambahanList || [])] 
+      };
+
+      let updatedPokok = [...(currentRoleObj.tupoksiList || [])];
+      let updatedTambahan = [...(currentRoleObj.tugasTambahanList || [])];
+
+      if (type === 'pokok') {
+        if (typeof indexOrText === 'number') {
+          updatedPokok = updatedPokok.filter((_, i) => i !== indexOrText);
+        } else {
+          updatedPokok = updatedPokok.filter(item => item !== indexOrText);
+        }
+      } else {
+        if (typeof indexOrText === 'number') {
+          updatedTambahan = updatedTambahan.filter((_, i) => i !== indexOrText);
+        } else {
+          updatedTambahan = updatedTambahan.filter(item => item !== indexOrText);
+        }
+      }
+
+      const next: TupoksiDefinitionsMap = {
+        ...prev,
+        [role]: {
+          tupoksiList: updatedPokok,
+          tugasTambahanList: updatedTambahan
+        }
+      };
+      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const resetTupoksiToDefault = (role?: RoleType) => {
+    setTupoksiDefinitions(prev => {
+      let next: TupoksiDefinitionsMap;
+      if (role) {
+        next = {
+          ...prev,
+          [role]: {
+            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS[role].tupoksiList],
+            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS[role].tugasTambahanList]
+          }
+        };
+      } else {
+        next = {
+          TU: {
+            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.TU.tupoksiList],
+            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.TU.tugasTambahanList]
+          },
+          PENJAGA: {
+            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.PENJAGA.tupoksiList],
+            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.PENJAGA.tugasTambahanList]
+          },
+          SERVICE: {
+            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.SERVICE.tupoksiList],
+            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.SERVICE.tugasTambahanList]
+          }
+        };
+      }
+      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Sync from server database on first load (to ensure shared URL gets stored data!)
   useEffect(() => {
     let isMounted = true;
@@ -158,6 +360,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setSchoolConfig(json.data.schoolConfig);
               localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(json.data.schoolConfig));
             }
+            if (json.data.tupoksiDefinitions) {
+              setTupoksiDefinitions(json.data.tupoksiDefinitions);
+              localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(json.data.tupoksiDefinitions));
+            }
           }
         }
       } catch (err) {
@@ -178,6 +384,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(STORAGE_KEYS.ANNUAL, JSON.stringify(annualReports));
     localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(archives));
     localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(schoolConfig));
+    localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(tupoksiDefinitions));
+    localStorage.setItem(STORAGE_KEYS.SUBTABS, JSON.stringify(roleSubTabs));
 
     if (!isInitialLoad.current) {
       setSyncStatus('saving');
@@ -192,7 +400,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               monthlyReports,
               annualReports,
               archives,
-              schoolConfig
+              schoolConfig,
+              tupoksiDefinitions
             })
           });
           if (res.ok) {
@@ -242,8 +451,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     const completed = roleTasks.filter(t => t.status === 'selesai');
-    const tupoksiTasks = roleTasks.filter(t => getTaskClassification(role, t.category) === 'pokok');
-    const tambahanTasks = roleTasks.filter(t => getTaskClassification(role, t.category) === 'tambahan');
+    const tupoksiTasks = roleTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'pokok');
+    const tambahanTasks = roleTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'tambahan');
     const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai');
     const tambahanCompleted = tambahanTasks.filter(t => t.status === 'selesai');
 
@@ -329,41 +538,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const autoSyncMonthlyReport = (task: TaskLog, allTasks: TaskLog[]) => {
     if (!task.date) return;
-    const clean = task.date.split('T')[0].trim();
-    const parts = clean.split(/[-/.]/);
-    let year = 2026;
-    let month = 9;
+    const parsed = parseTaskMonthYear(task.date);
+    const month = parsed ? parsed.month : 9;
+    const year = parsed ? parsed.year : 2026;
 
-    if (parts.length >= 3) {
-      if (parts[0].length === 4) {
-        year = parseInt(parts[0], 10);
-        month = parseInt(parts[1], 10);
-      } else if (parts[2].length === 4) {
-        year = parseInt(parts[2], 10);
-        month = parseInt(parts[1], 10);
-      }
-    } else if (parts.length === 2) {
-      if (parts[0].length === 4) {
-        year = parseInt(parts[0], 10);
-        month = parseInt(parts[1], 10);
-      } else {
-        month = parseInt(parts[0], 10);
-        year = parseInt(parts[1], 10);
-      }
-    }
+    setLastAddedTaskMonthYear({ month, year });
 
-    if (!isNaN(year) && !isNaN(month)) {
-      setMonthlyReports(prev => {
-        const updatedReport = buildMonthlyReportObject(allTasks, task.role, month, year, schoolConfig, prev, true);
-        const idx = prev.findIndex(r => r.role === task.role && r.month === month && r.year === year);
-        if (idx >= 0) {
-          const copy = [...prev];
-          copy[idx] = updatedReport;
-          return copy;
-        }
-        return [...prev, updatedReport];
-      });
-    }
+    setMonthlyReports(prev => {
+      const updatedReport = buildMonthlyReportObject(allTasks, task.role, month, year, schoolConfig, prev, true);
+      const idx = prev.findIndex(r => r.role === task.role && r.month === month && r.year === year);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updatedReport;
+        return copy;
+      }
+      return [...prev, updatedReport];
+    });
   };
 
   const addTask = (newTask: Omit<TaskLog, 'id'>) => {
@@ -643,6 +833,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         archiveReport,
         schoolConfig,
         updateSchoolConfig,
+        tupoksiDefinitions,
+        addTupoksiItem,
+        updateTupoksiItem,
+        deleteTupoksiItem,
+        resetTupoksiToDefault,
+        roleSubTabs,
+        setRoleSubTab,
+        lastAddedTaskMonthYear,
+        setLastAddedTaskMonthYear,
         generateMonthlyReportFromTasks,
         generateAnnualReportFromMonthly,
         activeNavTab,
@@ -650,6 +849,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetToDefaultData,
         exportBackupJson,
         restoreFromBackupJson,
+        rolePins,
+        verifyRolePin,
+        updateRolePin,
         syncStatus
       }}
     >

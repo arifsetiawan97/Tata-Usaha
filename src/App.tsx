@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { RoleSelectView } from './components/common/RoleSelectView';
-import { PenjagaView } from './components/roles/PenjagaView';
-import { TUView } from './components/roles/TUView';
-import { ServiceView } from './components/roles/ServiceView';
+import { RoleWorkspaceView } from './components/roles/RoleWorkspaceView';
+import { TupoksiManagerView } from './components/roles/TupoksiManagerView';
 import { MonthlyReportView } from './components/reports/MonthlyReportView';
 import { AnnualReportView } from './components/reports/AnnualReportView';
 import { PrintDocumentView } from './components/reports/PrintDocumentView';
@@ -46,40 +45,10 @@ function MainLayout() {
   };
 
   const renderActiveContent = () => {
-    switch (activeNavTab) {
-      case 'dashboard':
-        if (currentRole === 'PENJAGA') return <PenjagaView />;
-        if (currentRole === 'TU') return <TUView />;
-        return <ServiceView />;
-
-      case 'penjaga':
-        return <PenjagaView />;
-
-      case 'tu':
-        return <TUView />;
-
-      case 'service':
-        return <ServiceView />;
-
-      case 'monthly':
-        return <MonthlyReportView onOpenPrint={handleOpenPrint} />;
-
-      case 'annual':
-        return <AnnualReportView onOpenPrint={handleOpenPrint} />;
-
-      case 'inventory':
-        return (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-4">
-            <InventoryTable />
-          </div>
-        );
-
-      case 'archive':
-        return <DocumentArchiveView onOpenDocument={handleOpenPrint} />;
-
-      default:
-        return <PenjagaView />;
+    if (activeNavTab === 'archive') {
+      return <DocumentArchiveView onOpenDocument={handleOpenPrint} />;
     }
+    return <RoleWorkspaceView role={currentRole} onOpenPrint={handleOpenPrint} />;
   };
 
   return (

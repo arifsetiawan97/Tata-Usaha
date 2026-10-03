@@ -40,6 +40,8 @@ import {
 
 interface MonthlyReportViewProps {
   onOpenPrint: (reportType: 'monthly' | 'annual', data: any) => void;
+  initialRole?: RoleType;
+  lockRole?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -107,7 +109,11 @@ const OFFICIAL_MONTHLY_TEMPLATES: Record<RoleType, {
   }
 };
 
-export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrint }) => {
+export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ 
+  onOpenPrint,
+  initialRole,
+  lockRole = false 
+}) => {
   const { 
     currentRole, 
     tasks, 
@@ -116,27 +122,74 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
     generateMonthlyReportFromTasks,
     schoolConfig,
     archiveReport,
-    inventories
+    inventories,
+    tupoksiDefinitions,
+    setRoleSubTab,
+    lastAddedTaskMonthYear,
+    setActiveNavTab
   } = useApp();
 
-  const [selectedRole, setSelectedRole] = useState<RoleType>(currentRole || 'TU');
+  const [selectedRole, setSelectedRole] = useState<RoleType>(initialRole || currentRole || 'TU');
 
   useEffect(() => {
     if (currentRole) {
       setSelectedRole(currentRole);
+    } else if (initialRole) {
+      setSelectedRole(initialRole);
     }
-  }, [currentRole]);
+  }, [initialRole, currentRole]);
 
-  const effectiveRole = selectedRole;
+  const effectiveRole = currentRole || selectedRole;
+  const isLocked = lockRole || !!currentRole;
   const roleTitle = effectiveRole === 'TU' ? 'Tata Usaha' : effectiveRole === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
 
-  const [selectedMonth, setSelectedMonth] = useState<number>(9); // September default
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const allRoleTasks = tasks.filter(t => t.role.toUpperCase() === effectiveRole.toUpperCase());
+
+  // Auto-detect initial month based on:
+  // 1. lastAddedTaskMonthYear
+  // 2. Or the latest month with tasks for this role
+  // 3. Or current month (e.g. 10 for October)
+  const [selectedMonth, setSelectedMonth] = useState<number>(() => {
+    if (lastAddedTaskMonthYear) return lastAddedTaskMonthYear.month;
+    for (let m = 12; m >= 1; m--) {
+      if (allRoleTasks.some(t => isTaskInMonth(t.date, m, 2026))) {
+        return m;
+      }
+    }
+    return new Date().getMonth() + 1;
+  });
+
+  const [selectedYear, setSelectedYear] = useState<number>(() => {
+    if (lastAddedTaskMonthYear) return lastAddedTaskMonthYear.year;
+    return 2026;
+  });
+
+  const [isAllMonthsView, setIsAllMonthsView] = useState<boolean>(false);
+
+  // Listen for lastAddedTaskMonthYear changes to auto-focus the new task's month
+  useEffect(() => {
+    if (lastAddedTaskMonthYear) {
+      setSelectedMonth(lastAddedTaskMonthYear.month);
+      setSelectedYear(lastAddedTaskMonthYear.year);
+      setIsAllMonthsView(false);
+    }
+  }, [lastAddedTaskMonthYear]);
+
+  // Task counts for all 12 months for this role
+  const monthTaskCounts: Record<number, number> = {};
+  for (let m = 1; m <= 12; m++) {
+    monthTaskCounts[m] = allRoleTasks.filter(t => isTaskInMonth(t.date, m, selectedYear)).length;
+  }
+
+  // Other months with tasks if current month is empty
+  const otherMonthsWithTasks = Object.entries(monthTaskCounts)
+    .map(([mStr, count]) => ({ month: parseInt(mStr, 10), count }))
+    .filter(item => item.count > 0 && item.month !== selectedMonth);
 
   // Task counts for all 3 roles in this month (for quick-switching badges)
-  const penjagaMonthTasksCount = tasks.filter(t => t.role === 'PENJAGA' && isTaskInMonth(t.date, selectedMonth, selectedYear)).length;
-  const tuMonthTasksCount = tasks.filter(t => t.role === 'TU' && isTaskInMonth(t.date, selectedMonth, selectedYear)).length;
-  const serviceMonthTasksCount = tasks.filter(t => t.role === 'SERVICE' && isTaskInMonth(t.date, selectedMonth, selectedYear)).length;
+  const penjagaMonthTasksCount = tasks.filter(t => t.role.toUpperCase() === 'PENJAGA' && isTaskInMonth(t.date, selectedMonth, selectedYear)).length;
+  const tuMonthTasksCount = tasks.filter(t => t.role.toUpperCase() === 'TU' && isTaskInMonth(t.date, selectedMonth, selectedYear)).length;
+  const serviceMonthTasksCount = tasks.filter(t => t.role.toUpperCase() === 'SERVICE' && isTaskInMonth(t.date, selectedMonth, selectedYear)).length;
 
   // Fetch or dynamically generate monthly report
   const activeReport = monthlyReports.find(
@@ -160,15 +213,14 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
 
   const [taskFilterTab, setTaskFilterTab] = useState<'all' | 'pokok' | 'tambahan'>('all');
 
-  // Tasks in this month for this role (using safe date parsing)
-  const monthTasks = tasks.filter(t => {
-    if (t.role !== effectiveRole) return false;
-    return isTaskInMonth(t.date, selectedMonth, selectedYear);
-  });
+  // Tasks in this month for this role (using safe date parsing, or all months if isAllMonthsView)
+  const monthTasks = isAllMonthsView
+    ? allRoleTasks
+    : allRoleTasks.filter(t => isTaskInMonth(t.date, selectedMonth, selectedYear));
 
-  // Segregate Tasks into Tugas Pokok (Tupoksi) vs Tugas Tambahan
-  const tupoksiTasks = monthTasks.filter(t => getTaskClassification(effectiveRole, t.category) === 'pokok');
-  const tambahanTasks = monthTasks.filter(t => getTaskClassification(effectiveRole, t.category) === 'tambahan');
+  // Segregate Tasks into Tugas Pokok (Tupoksi) vs Tugas Tambahan (honoring t.taskType)
+  const tupoksiTasks = monthTasks.filter(t => getTaskClassification(effectiveRole, t.category, t.taskType) === 'pokok');
+  const tambahanTasks = monthTasks.filter(t => getTaskClassification(effectiveRole, t.category, t.taskType) === 'tambahan');
 
   const completedCount = monthTasks.filter(t => t.status === 'selesai').length;
   const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai').length;
@@ -180,7 +232,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
 
   const filteredDisplayTasks = monthTasks.filter(t => {
     if (taskFilterTab === 'all') return true;
-    return getTaskClassification(effectiveRole, t.category) === taskFilterTab;
+    return getTaskClassification(effectiveRole, t.category, t.taskType) === taskFilterTab;
   });
 
   const showNotification = (msg: string) => {
@@ -354,15 +406,29 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Month Selector */}
+          {/* Month Selector with task count */}
           <select
-            value={selectedMonth}
-            onChange={(e) => handleMonthYearChange(parseInt(e.target.value), selectedYear)}
+            value={isAllMonthsView ? 'all' : selectedMonth}
+            onChange={(e) => {
+              if (e.target.value === 'all') {
+                setIsAllMonthsView(true);
+              } else {
+                setIsAllMonthsView(false);
+                handleMonthYearChange(parseInt(e.target.value, 10), selectedYear);
+              }
+            }}
             className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-hidden focus:ring-1 focus:ring-blue-500"
           >
-            {MONTH_NAMES.map((name, idx) => (
-              <option key={idx} value={idx + 1}>{name}</option>
-            ))}
+            <option value="all">Semua Bulan ({allRoleTasks.length} tugas)</option>
+            {MONTH_NAMES.map((name, idx) => {
+              const mVal = idx + 1;
+              const count = monthTaskCounts[mVal] || 0;
+              return (
+                <option key={idx} value={mVal}>
+                  Bulan {name} {count > 0 ? `(${count} tugas)` : ''}
+                </option>
+              );
+            })}
           </select>
 
           {/* Year Selector */}
@@ -452,99 +518,6 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
             <Archive className="w-3.5 h-3.5 text-amber-700" />
             <span>Arsipkan</span>
           </button>
-        </div>
-      </div>
-
-      {/* SEPARATE MENU TABS FOR EACH OPERATIONAL ROLE IN MONTHLY REPORT */}
-      <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-800">Menu Laporan Bulanan Peran Operasional:</span>
-            <span className="text-[11px] text-slate-500 hidden sm:inline">(Pilih peran operasional yang ingin ditinjau atau dicetak laporannya)</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full lg:w-auto">
-            {/* Penjaga Sekolah */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedRole('PENJAGA');
-                const rep = monthlyReports.find(r => r.role === 'PENJAGA' && r.month === selectedMonth && r.year === selectedYear) || generateMonthlyReportFromTasks('PENJAGA', selectedMonth, selectedYear);
-                setReportState(rep);
-              }}
-              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                effectiveRole === 'PENJAGA'
-                  ? 'bg-blue-50/90 border-blue-600 text-blue-900 shadow-xs ring-1 ring-blue-500/20 font-bold'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className={`p-1.5 rounded-md ${effectiveRole === 'PENJAGA' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                  <Shield className="w-3.5 h-3.5" />
-                </span>
-                <span>Penjaga Sekolah</span>
-              </div>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                effectiveRole === 'PENJAGA' ? 'bg-blue-200 text-blue-900' : 'bg-slate-200 text-slate-700'
-              }`}>
-                {penjagaMonthTasksCount} tugas
-              </span>
-            </button>
-
-            {/* Tata Usaha (TU) */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedRole('TU');
-                const rep = monthlyReports.find(r => r.role === 'TU' && r.month === selectedMonth && r.year === selectedYear) || generateMonthlyReportFromTasks('TU', selectedMonth, selectedYear);
-                setReportState(rep);
-              }}
-              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                effectiveRole === 'TU'
-                  ? 'bg-sky-50/90 border-sky-600 text-sky-900 shadow-xs ring-1 ring-sky-500/20 font-bold'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className={`p-1.5 rounded-md ${effectiveRole === 'TU' ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                  <Building2 className="w-3.5 h-3.5" />
-                </span>
-                <span>Tata Usaha (TU)</span>
-              </div>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                effectiveRole === 'TU' ? 'bg-sky-200 text-sky-900' : 'bg-slate-200 text-slate-700'
-              }`}>
-                {tuMonthTasksCount} tugas
-              </span>
-            </button>
-
-            {/* Service (Kebersihan) */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedRole('SERVICE');
-                const rep = monthlyReports.find(r => r.role === 'SERVICE' && r.month === selectedMonth && r.year === selectedYear) || generateMonthlyReportFromTasks('SERVICE', selectedMonth, selectedYear);
-                setReportState(rep);
-              }}
-              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                effectiveRole === 'SERVICE'
-                  ? 'bg-emerald-50/90 border-emerald-600 text-emerald-900 shadow-xs ring-1 ring-emerald-500/20 font-bold'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className={`p-1.5 rounded-md ${effectiveRole === 'SERVICE' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                  <Sparkles className="w-3.5 h-3.5" />
-                </span>
-                <span>Service (Kebersihan)</span>
-              </div>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                effectiveRole === 'SERVICE' ? 'bg-emerald-200 text-emerald-900' : 'bg-slate-200 text-slate-700'
-              }`}>
-                {serviceMonthTasksCount} tugas
-              </span>
-            </button>
-          </div>
         </div>
       </div>
 
@@ -882,9 +855,22 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
               Pedoman Standar Tugas Pokok (Tupoksi) & Tugas Tambahan {roleTitle}
             </h3>
           </div>
-          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md w-fit">
-            Standar Operasional Minimal Satdik
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setRoleSubTab(effectiveRole, 'tupoksi');
+                setActiveNavTab('tupoksi');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer"
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
+              <span>Kelola & Edit Butir Tugas</span>
+            </button>
+            <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md hidden sm:inline">
+              Standar Operasional Minimal Satdik
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -896,11 +882,11 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
                 <span>Daftar Tugas Pokok (Tupoksi Standar Kedinasan)</span>
               </span>
               <span className="text-[10px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-full">
-                {tupoksiTasks.length} tercatat
+                {tupoksiTasks.length} tugas terlaksana
               </span>
             </div>
             <ul className="space-y-1.5 text-xs text-slate-700">
-              {OFFICIAL_TUPOKSI_DEFINITIONS[effectiveRole].tupoksiList.map((item, idx) => (
+              {(tupoksiDefinitions[effectiveRole]?.tupoksiList || OFFICIAL_TUPOKSI_DEFINITIONS[effectiveRole].tupoksiList).map((item, idx) => (
                 <li key={idx} className="flex items-start gap-2">
                   <CheckSquare className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
                   <span className="leading-snug">{item}</span>
@@ -917,11 +903,11 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
                 <span>Daftar Tugas Tambahan & Insidental</span>
               </span>
               <span className="text-[10px] font-extrabold bg-amber-600 text-white px-2 py-0.5 rounded-full">
-                {tambahanTasks.length} tercatat
+                {tambahanTasks.length} tugas terlaksana
               </span>
             </div>
             <ul className="space-y-1.5 text-xs text-slate-700">
-              {OFFICIAL_TUPOKSI_DEFINITIONS[effectiveRole].tugasTambahanList.map((item, idx) => (
+              {(tupoksiDefinitions[effectiveRole]?.tugasTambahanList || OFFICIAL_TUPOKSI_DEFINITIONS[effectiveRole].tugasTambahanList).map((item, idx) => (
                 <li key={idx} className="flex items-start gap-2">
                   <Plus className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                   <span className="leading-snug">{item}</span>
@@ -1004,13 +990,46 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ onOpenPrin
             <tbody className="divide-y divide-slate-100">
               {filteredDisplayTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400 italic">
-                    Belum ada catatan tugas operasional yang terdaftar untuk filter ini pada bulan {MONTH_NAMES[selectedMonth - 1]} {selectedYear}.
+                  <td colSpan={8} className="py-8 px-4 text-center">
+                    <div className="max-w-lg mx-auto space-y-3">
+                      <p className="text-slate-600 font-semibold text-xs">
+                        Belum ada catatan tugas harian operasional yang terdaftar untuk periode Bulan {MONTH_NAMES[selectedMonth - 1]} {selectedYear}.
+                      </p>
+                      {otherMonthsWithTasks.length > 0 && (
+                        <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2">
+                          <p className="text-xs text-blue-950 font-bold">
+                            💡 Data tugas operasional {roleTitle} ditemukan pada periode berikut:
+                          </p>
+                          <div className="flex flex-wrap items-center justify-center gap-2">
+                            {otherMonthsWithTasks.map(item => (
+                              <button
+                                key={item.month}
+                                type="button"
+                                onClick={() => {
+                                  setIsAllMonthsView(false);
+                                  setSelectedMonth(item.month);
+                                }}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-transform active:scale-95"
+                              >
+                                Buka Bulan {MONTH_NAMES[item.month - 1]} ({item.count} tugas)
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setIsAllMonthsView(true)}
+                              className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs"
+                            >
+                              Tampilkan Semua Bulan ({allRoleTasks.length} tugas)
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
                 filteredDisplayTasks.map((t, idx) => {
-                  const classification = getTaskClassification(effectiveRole, t.category);
+                  const classification = getTaskClassification(effectiveRole, t.category, t.taskType);
                   const isPokok = classification === 'pokok';
                   return (
                     <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">

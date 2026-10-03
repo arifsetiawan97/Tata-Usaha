@@ -46,7 +46,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   reportData,
   onBack
 }) => {
-  const { schoolConfig, currentRole, tasks, inventories, archiveReport } = useApp();
+  const { schoolConfig, currentRole, tasks, inventories, archiveReport, tupoksiDefinitions } = useApp();
   const printableRef = useRef<HTMLDivElement>(null);
 
   const role: RoleType = reportData.role || currentRole || 'TU';
@@ -73,7 +73,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
 
   // Relevant tasks for this report using robust string date parsing
   const relevantTasks = tasks.filter(t => {
-    if (t.role !== role) return false;
+    if (t.role.toUpperCase() !== role.toUpperCase()) return false;
     if (isMonthly && monthlyData) {
       return isTaskInMonth(t.date, monthlyData.month, monthlyData.year);
     }
@@ -83,11 +83,14 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     return true;
   });
 
-  const tupoksiTasks = relevantTasks.filter(t => getTaskClassification(role, t.category) === 'pokok');
-  const tambahanTasks = relevantTasks.filter(t => getTaskClassification(role, t.category) === 'tambahan');
+  const tupoksiTasks = relevantTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'pokok');
+  const tambahanTasks = relevantTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'tambahan');
   const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai');
   const tambahanCompleted = tambahanTasks.filter(t => t.status === 'selesai');
   const completedCount = relevantTasks.filter(t => t.status === 'selesai').length;
+
+  const roleTupoksiList = tupoksiDefinitions[role]?.tupoksiList || OFFICIAL_TUPOKSI_DEFINITIONS[role].tupoksiList;
+  const roleTambahanList = tupoksiDefinitions[role]?.tugasTambahanList || OFFICIAL_TUPOKSI_DEFINITIONS[role].tugasTambahanList;
 
   // 1. Direct PDF Generation & Download (Supporting OKLCH & Tailwind CSS v4)
   const handleSavePdf = async () => {
@@ -133,6 +136,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         schoolConfig,
         tasks,
         inventories,
+        tupoksiDefinitions,
         manualDate,
         nomorSurat
       });
@@ -456,7 +460,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                               <span className="font-mono text-[9.5px] text-blue-800 font-bold">({tupoksiCompleted.length}/{tupoksiTasks.length} Tuntas)</span>
                             </p>
                             <ul className="list-disc pl-3.5 space-y-0.5 text-slate-800 text-[9.5px]">
-                              {OFFICIAL_TUPOKSI_DEFINITIONS[role].tupoksiList.map((item, idx) => (
+                              {roleTupoksiList.map((item, idx) => (
                                 <li key={idx} className="leading-tight">{item}</li>
                               ))}
                             </ul>
@@ -467,7 +471,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                               <span className="font-mono text-[9.5px] text-amber-800 font-bold">({tambahanCompleted.length}/{tambahanTasks.length} Tuntas)</span>
                             </p>
                             <ul className="list-disc pl-3.5 space-y-0.5 text-slate-800 text-[9.5px]">
-                              {OFFICIAL_TUPOKSI_DEFINITIONS[role].tugasTambahanList.map((item, idx) => (
+                              {roleTambahanList.map((item, idx) => (
                                 <li key={idx} className="leading-tight">{item}</li>
                               ))}
                             </ul>
@@ -544,7 +548,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                                     </tr>
                                   ) : (
                                     chunk.map((t, idx) => {
-                                      const isPokok = getTaskClassification(role, t.category) === 'pokok';
+                                      const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
                                       return (
                                         <tr key={t.id} className="border-b border-slate-300 print:border-black">
                                           <td className="py-1.5 px-2 text-center font-mono border border-slate-300 print:border-black">
