@@ -23,7 +23,8 @@ import {
   Brain,
   Wand2,
   Shield,
-  Building2
+  Building2,
+  Sliders
 } from 'lucide-react';
 
 interface AnnualReportViewProps {
@@ -488,23 +489,34 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         </div>
       </div>
 
-      {/* Manual Date Input */}
-      <div className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Manual Date Input & Signature Options */}
+      <div className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
         <div>
           <label className="block text-xs font-semibold text-slate-800 mb-0.5">
             Format Tanggal Manual Pengesahan Laporan Tahunan:
           </label>
           <p className="text-[11px] text-slate-500">
-            Disesuaikan dengan tanggal penutupan tahun anggaran (biasanya akhir Desember).
+            Disesuaikan dengan tanggal penutupan tahun anggaran. Dilengkapi pilihan tanda tangan digital, basah, gores, & QR e-sign.
           </p>
         </div>
-        <input
-          type="text"
-          value={reportState.manualDocDate}
-          onChange={(e) => setReportState(prev => ({ ...prev, manualDocDate: e.target.value }))}
-          className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-semibold w-full sm:w-72 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-          placeholder="Contoh: Kota Bogor, 31 Desember 2026"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={reportState.manualDocDate}
+            onChange={(e) => setReportState(prev => ({ ...prev, manualDocDate: e.target.value }))}
+            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-semibold w-full sm:w-64 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+            placeholder="Contoh: Kota Bogor, 31 Desember 2026"
+          />
+          <button
+            type="button"
+            onClick={() => onOpenPrint('annual', reportState)}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 shadow-2xs cursor-pointer transition-colors"
+            title="Buka Lembar Pengesahan & Pengaturan Tanda Tangan"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Pilihan Tanda Tangan</span>
+          </button>
+        </div>
       </div>
 
       {/* 12-Month Progression Table */}

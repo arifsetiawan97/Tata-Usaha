@@ -677,11 +677,6 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
             <td class="value">${operator.nip}</td>
           </tr>
           <tr>
-            <td class="label">Pangkat / Golongan Ruang</td>
-            <td class="separator">:</td>
-            <td class="value">${operator.pangkatGolongan || '-'}</td>
-          </tr>
-          <tr>
             <td class="label">Jabatan Kedinasan</td>
             <td class="separator">:</td>
             <td class="value">${operator.jabatan}</td>
@@ -991,7 +986,6 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
 
               <div class="sign-name">${schoolConfig.kepalaSekolah.nama}</div>
               <div class="sign-nip">${schoolConfig.kepalaSekolah.nip}</div>
-              <div class="sign-rank">Pangkat/Gol: ${schoolConfig.kepalaSekolah.pangkatGolongan || 'Pembina, IV/a'}</div>
             </td>
 
             <!-- Kolom Kanan: Petugas Pelaksana -->

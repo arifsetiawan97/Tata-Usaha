@@ -368,11 +368,6 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                             <td className="border-none py-0.5">{operator.nip}</td>
                           </tr>
                           <tr>
-                            <td className="font-semibold border-none py-0.5">Pangkat / Golongan</td>
-                            <td className="border-none py-0.5">:</td>
-                            <td className="border-none py-0.5">{operator.pangkatGolongan || '-'}</td>
-                          </tr>
-                          <tr>
                             <td className="font-semibold border-none py-0.5">Jabatan / Satuan Tugas</td>
                             <td className="border-none py-0.5">:</td>
                             <td className="border-none py-0.5">{operator.jabatan}</td>

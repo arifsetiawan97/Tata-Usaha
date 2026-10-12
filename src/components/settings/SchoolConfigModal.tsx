@@ -343,19 +343,6 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                       className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                     />
                   </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Pangkat / Golongan</label>
-                    <input
-                      type="text"
-                      value={formData.kepalaSekolah.pangkatGolongan || ''}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        kepalaSekolah: { ...prev.kepalaSekolah, pangkatGolongan: e.target.value }
-                      }))}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
-                      placeholder="Pembina Utama Muda, IV/c"
-                    />
-                  </div>
                 </div>
 
                 {/* Upload Foto TTD Kepala Sekolah */}

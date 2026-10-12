@@ -35,7 +35,8 @@ import {
   ShieldCheck,
   Shield,
   Building2,
-  Filter
+  Filter,
+  Sliders
 } from 'lucide-react';
 
 interface MonthlyReportViewProps {
@@ -647,23 +648,34 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
         </div>
       </div>
 
-      {/* Manual Date Setting */}
-      <div className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Manual Date Setting & Lembar Pengesahan Signature Options */}
+      <div className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
         <div>
           <label className="block text-xs font-semibold text-slate-800 mb-0.5">
-            Format Tanggal Manual Dokumen Pengesahan:
+            Format Tanggal Manual & Lembar Pengesahan:
           </label>
           <p className="text-[11px] text-slate-500">
-            Dapat diubah secara bebas sesuai kebutuhan tanggal pelaporan resmi satuan pendidikan.
+            Dapat diubah bebas sesuai tanggal pelaporan resmi. Dilengkapi pilihan tanda tangan digital, basah, gores, & QR e-sign.
           </p>
         </div>
-        <input
-          type="text"
-          value={reportState.manualDocDate}
-          onChange={(e) => setReportState(prev => ({ ...prev, manualDocDate: e.target.value }))}
-          className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-semibold w-full sm:w-72 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-          placeholder="Contoh: Kota Bogor, 30 September 2026"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={reportState.manualDocDate}
+            onChange={(e) => setReportState(prev => ({ ...prev, manualDocDate: e.target.value }))}
+            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-semibold w-full sm:w-64 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+            placeholder="Contoh: Kota Bogor, 30 September 2026"
+          />
+          <button
+            type="button"
+            onClick={() => onOpenPrint('monthly', reportState)}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 shadow-2xs cursor-pointer transition-colors"
+            title="Buka Lembar Pengesahan & Pengaturan Tanda Tangan"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Pilihan Tanda Tangan</span>
+          </button>
+        </div>
       </div>
 
       {/* BANNER ANALISIS CERDAS OTOMATIS */}
