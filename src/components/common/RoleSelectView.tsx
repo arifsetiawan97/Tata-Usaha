@@ -5,6 +5,8 @@ import {
   Building2, 
   Shield, 
   Sparkles, 
+  BookOpen,
+  FlaskConical,
   ArrowRight, 
   CheckCircle2, 
   FileCheck, 
@@ -17,6 +19,7 @@ import {
   X
 } from 'lucide-react';
 import { LogoKabupatenDefault } from './KopSurat';
+import { initialSchoolConfig } from '../../data/initialData';
 
 export const RoleSelectView: React.FC = () => {
   const { setCurrentRole, schoolConfig, verifyRolePin, setRoleSubTab, setActiveNavTab } = useApp();
@@ -24,6 +27,17 @@ export const RoleSelectView: React.FC = () => {
   const [pendingRole, setPendingRole] = useState<RoleType | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
+
+  const getOperator = (role: RoleType) => {
+    return (
+      schoolConfig?.operatorProfiles?.[role] ||
+      initialSchoolConfig.operatorProfiles[role] || {
+        nama: 'Petugas Layanan Operasional',
+        nip: '-',
+        jabatan: 'Operator'
+      }
+    );
+  };
 
   const handleOpenLogin = (role: RoleType) => {
     setPendingRole(role);
@@ -41,7 +55,12 @@ export const RoleSelectView: React.FC = () => {
       setActiveNavTab('dashboard');
       setPendingRole(null);
     } else {
-      setPinError(`PIN keamanan salah! Anda tidak memiliki izin mengakses akun ${pendingRole === 'TU' ? 'Tata Usaha (TU)' : pendingRole === 'PENJAGA' ? 'Penjaga Sekolah' : 'Service Kebersihan'}.`);
+      const roleName = 
+        pendingRole === 'TU' ? 'Tata Usaha (TU)' : 
+        pendingRole === 'PENJAGA' ? 'Penjaga Sekolah' : 
+        pendingRole === 'SERVICE' ? 'Service Kebersihan' :
+        pendingRole === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
+      setPinError(`PIN keamanan salah! Anda tidak memiliki izin mengakses akun ${roleName}.`);
     }
   };
 
@@ -49,23 +68,37 @@ export const RoleSelectView: React.FC = () => {
     TU: {
       label: 'Tata Usaha (TU)',
       icon: Building2,
-      operator: schoolConfig.operatorProfiles.TU,
+      operator: getOperator('TU'),
       color: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
       btnColor: 'bg-sky-600 hover:bg-sky-500'
     },
     PENJAGA: {
       label: 'Penjaga Sekolah',
       icon: Shield,
-      operator: schoolConfig.operatorProfiles.PENJAGA,
+      operator: getOperator('PENJAGA'),
       color: 'text-blue-400 bg-blue-500/10 border-blue-500/30',
       btnColor: 'bg-blue-600 hover:bg-blue-500'
     },
     SERVICE: {
       label: 'Service (Kebersihan)',
       icon: Sparkles,
-      operator: schoolConfig.operatorProfiles.SERVICE,
+      operator: getOperator('SERVICE'),
       color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
       btnColor: 'bg-emerald-600 hover:bg-emerald-500'
+    },
+    PERPUS: {
+      label: 'Layanan Perpustakaan',
+      icon: BookOpen,
+      operator: getOperator('PERPUS'),
+      color: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
+      btnColor: 'bg-purple-600 hover:bg-purple-500'
+    },
+    LAB_IPA: {
+      label: 'Laboratorium IPA',
+      icon: FlaskConical,
+      operator: getOperator('LAB_IPA'),
+      color: 'text-teal-400 bg-teal-500/10 border-teal-500/30',
+      btnColor: 'bg-teal-600 hover:bg-teal-500'
     }
   }[pendingRole] : null;
 
@@ -127,8 +160,8 @@ export const RoleSelectView: React.FC = () => {
           </p>
         </div>
 
-        {/* 3 Role Selection Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+        {/* 5 Role Selection Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
           {/* CARD 1: TATA USAHA (TU) */}
           <div className="group relative bg-slate-850 hover:bg-slate-800 border border-slate-750 hover:border-sky-500/60 rounded-2xl p-6 transition-all duration-300 shadow-xl flex flex-col justify-between">
             <div className="space-y-4">
@@ -149,7 +182,7 @@ export const RoleSelectView: React.FC = () => {
                   Tata Usaha (TU)
                 </h3>
                 <p className="text-xs text-sky-200/90 font-medium mt-1">
-                  Petugas: {schoolConfig.operatorProfiles.TU.nama} ({schoolConfig.operatorProfiles.TU.nip})
+                  Petugas: {getOperator('TU').nama} ({getOperator('TU').nip})
                 </p>
                 <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
                   Pengelolaan administrasi kepegawaian ASN/GTK, kesiswaan, persuratan dinas, dan buku inventaris sapras.
@@ -203,7 +236,7 @@ export const RoleSelectView: React.FC = () => {
                   Penjaga Sekolah
                 </h3>
                 <p className="text-xs text-blue-200/90 font-medium mt-1">
-                  Petugas: {schoolConfig.operatorProfiles.PENJAGA.nama} ({schoolConfig.operatorProfiles.PENJAGA.nip})
+                  Petugas: {getOperator('PENJAGA').nama} ({getOperator('PENJAGA').nip})
                 </p>
                 <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
                   Pengamanan gedung & lingkungan, perbaikan sarpras ringan, ronda malam, dan keselamatan warga sekolah.
@@ -257,7 +290,7 @@ export const RoleSelectView: React.FC = () => {
                   Service (Kebersihan)
                 </h3>
                 <p className="text-xs text-emerald-200/90 font-medium mt-1">
-                  Petugas: {schoolConfig.operatorProfiles.SERVICE.nama} ({schoolConfig.operatorProfiles.SERVICE.nip})
+                  Petugas: {getOperator('SERVICE').nama} ({getOperator('SERVICE').nip})
                 </p>
                 <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
                   Sanitasi toilet siswa & guru, kebersihan ruang pimpinan/kantor, serta pemilahan dan pengangkutan sampah.
@@ -287,6 +320,114 @@ export const RoleSelectView: React.FC = () => {
             >
               <KeyRound className="w-4 h-4" />
               <span>Masuk Akun Service</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+
+          {/* CARD 4: PERPUSTAKAAN */}
+          <div className="group relative bg-slate-850 hover:bg-slate-800 border border-slate-750 hover:border-purple-500/60 rounded-2xl p-6 transition-all duration-300 shadow-xl flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
+                  <BookOpen className="w-6 h-6" />
+                </div>
+                <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+                  PIN Terproteksi
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-purple-400 uppercase tracking-wider">
+                  Literasi & Bahan Pustaka
+                </span>
+                <h3 className="text-xl font-bold text-white mt-1">
+                  Perpustakaan
+                </h3>
+                <p className="text-xs text-purple-200/90 font-medium mt-1">
+                  Petugas: {getOperator('PERPUS').nama} ({getOperator('PERPUS').nip})
+                </p>
+                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  Sirkulasi peminjaman buku, katalogisasi DDC/barcode, inventarisasi koleksi, perawatan buku, dan gerakan literasi.
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-800 text-xs text-slate-300">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span>Katalogisasi DDC & Barcode Sirkulasi</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span>Jurnal Harian, Tupoksi, & Lapor Bulanan/Tahunan Perpus</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span>Inventaris Koleksi, Rak & Sarana Baca</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleOpenLogin('PERPUS')}
+              className="mt-6 w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs rounded-xl transition-all shadow-md group-hover:shadow-purple-500/25 cursor-pointer"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>Masuk Akun Perpustakaan</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+
+          {/* CARD 5: LABORATORIUM IPA */}
+          <div className="group relative bg-slate-850 hover:bg-slate-800 border border-slate-750 hover:border-teal-500/60 rounded-2xl p-6 transition-all duration-300 shadow-xl flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 group-hover:scale-105 transition-transform">
+                  <FlaskConical className="w-6 h-6" />
+                </div>
+                <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+                  PIN Terproteksi
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-teal-400 uppercase tracking-wider">
+                  Praktikum & Laboratorium Sains
+                </span>
+                <h3 className="text-xl font-bold text-white mt-1">
+                  Laboratorium IPA
+                </h3>
+                <p className="text-xs text-teal-200/90 font-medium mt-1">
+                  Petugas: {getOperator('LAB_IPA').nama} ({getOperator('LAB_IPA').nip})
+                </p>
+                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  Penyiapan reagen & alat praktikum, sterilisasi alat gelas, kalibrasi mikroskop/neraca, dan standar keselamatan K3 lab.
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-800 text-xs text-slate-300">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                  <span>Penyiapan Praktikum & Kalibrasi Alat Sains</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                  <span>Jurnal Harian, Tupoksi, & Lapor Bulanan/Tahunan Laboran</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                  <span>Inventaris Mikroskop, Kit Fisika & Reagen K3</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleOpenLogin('LAB_IPA')}
+              className="mt-6 w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-teal-600 hover:bg-teal-500 text-white font-semibold text-xs rounded-xl transition-all shadow-md group-hover:shadow-teal-500/25 cursor-pointer"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>Masuk Akun Laboratorium IPA</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
@@ -330,7 +471,7 @@ export const RoleSelectView: React.FC = () => {
                   {roleMeta.label}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  {roleMeta.operator.nama}
+                  {roleMeta.operator?.nama || 'Petugas Layanan Operasional'}
                 </p>
               </div>
             </div>
@@ -340,7 +481,12 @@ export const RoleSelectView: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
                   <span>Masukkan PIN Keamanan Akun:</span>
                   <span className="text-[10px] text-amber-400 font-mono">
-                    PIN Dinas: {pendingRole === 'TU' ? '2101' : pendingRole === 'PENJAGA' ? '2102' : '2103'}
+                    PIN Dinas: {
+                      pendingRole === 'TU' ? '2101' : 
+                      pendingRole === 'PENJAGA' ? '2102' : 
+                      pendingRole === 'SERVICE' ? '2103' : 
+                      pendingRole === 'PERPUS' ? '2104' : '2105'
+                    }
                   </span>
                 </label>
                 <div className="relative">

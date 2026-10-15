@@ -45,11 +45,14 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
   const annualData = !isMonthly ? (reportData as AnnualReport) : null;
 
   const role: RoleType = reportData.role || 'TU';
-  const roleTitle = role === 'TU' ? 'Tata Usaha (TU)' : role === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
+  const roleTitle = 
+    role === 'TU' ? 'Tata Usaha (TU)' : 
+    role === 'PENJAGA' ? 'Penjaga Sekolah' : 
+    role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
+    role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
   const operator = schoolConfig.operatorProfiles[role] || {
     nama: 'Petugas Layanan Operasional',
     nip: '-',
-    pangkatGolongan: '-',
     jabatan: 'Operator'
   };
 

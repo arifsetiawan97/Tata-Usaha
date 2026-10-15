@@ -81,6 +81,32 @@ const OFFICIAL_ANNUAL_TEMPLATES: Record<RoleType, {
       'Pengadaan mesin polisher lantai otomatis untuk mempercepat perawatan lobi dan selasar utama',
       'Penambahan tempat sampah pilah 3 warna di setiap selasar depan ruang kelas'
     ]
+  },
+  PERPUS: {
+    summary: 'Kinerja layanan perpustakaan sekolah sepanjang tahun anggaran ini berhasil mewujudkan peningkatan literasi peserta didik dan penataan bahan pustaka terakreditasi. Otomasi sistem sirkulasi terintegrasi dan peremajaan koleksi buku terselenggara optimal.',
+    annualMilestones: [
+      'Peningkatan indeks peminjaman buku peserta didik sebesar 42% dibanding tahun sebelumnya',
+      'Penyelesaian 100% stock opname koleksi buku teks dan buku pengayaan perpustakaan',
+      'Otomasi katalog digital OPAC dan pencetakan kartu anggota berbarcode untuk seluruh peserta didik',
+      'Pembentukan dan pengaktifan 12 Pojok Literasi Tematik di seluruh selasar rombel kelas'
+    ],
+    strategicRecommendations: [
+      'Pengembangan koleksi digital e-Perpus sekolah dan integrasi sistem perpustakaan daerah',
+      'Penambahan unit rak buku dua muka dan meja baca mandiri untuk menampung pemustaka jam istirahat'
+    ]
+  },
+  LAB_IPA: {
+    summary: 'Pengelolaan laboratorium IPA sepanjang tahun anggaran ini berhasil memfasilitasi seluruh target praktikum kurikulum sains nasional secara tertib, aman, dan tanpa insiden kecelakaan kerja. Pemeliharaan berkala instrumen presisi dan pengelolaan K3 terlaksana secara prima.',
+    annualMilestones: [
+      'Ketercapaian 100% jam praktikum IPA seluruh rombel kelas 7, 8, dan 9 (144 sesi)',
+      'Kalibrasi berkala seluruh mikroskop optik, neraca presisi, dan instrumen ukur fisika',
+      'Penerapan SOP Keselamatan Kerja (K3) dan penanganan limbah praktikum ramah lingkungan',
+      'Pendampingan tim ekstrakurikuler Karya Ilmiah Remaja (KIR) hingga meraih medali sains kota'
+    ],
+    strategicRecommendations: [
+      'Pengadaan lemari asam mini (fume hood) untuk reaksi kimia uap dan pembakaran',
+      'Peremajaan preparat mikroskop jaringan tubuh manusia dan kit sensor fisika digital'
+    ]
   }
 };
 
@@ -113,7 +139,11 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
 
   const effectiveRole = currentRole || selectedRole;
   const isLocked = lockRole || !!currentRole;
-  const roleTitle = effectiveRole === 'TU' ? 'Tata Usaha' : effectiveRole === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
+  const roleTitle = 
+    effectiveRole === 'TU' ? 'Tata Usaha' : 
+    effectiveRole === 'PENJAGA' ? 'Penjaga Sekolah' : 
+    effectiveRole === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
+    effectiveRole === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
 
   const [selectedYear, setSelectedYear] = useState<number>(2026);
 

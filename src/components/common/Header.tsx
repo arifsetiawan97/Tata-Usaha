@@ -5,6 +5,8 @@ import {
   Building2, 
   Shield, 
   Sparkles, 
+  BookOpen,
+  FlaskConical,
   Settings, 
   LogOut, 
   FileText, 
@@ -71,6 +73,20 @@ export const Header: React.FC = () => {
       badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300',
       activeTabClass: 'border-emerald-600 text-emerald-800 bg-emerald-50/80 ring-1 ring-emerald-500/20 font-bold',
       iconBg: 'bg-emerald-100 text-emerald-800'
+    },
+    PERPUS: {
+      label: 'Perpustakaan',
+      icon: BookOpen,
+      badgeClass: 'bg-purple-50 text-purple-800 border-purple-300',
+      activeTabClass: 'border-purple-600 text-purple-800 bg-purple-50/80 ring-1 ring-purple-500/20 font-bold',
+      iconBg: 'bg-purple-100 text-purple-800'
+    },
+    LAB_IPA: {
+      label: 'Laboratorium IPA',
+      icon: FlaskConical,
+      badgeClass: 'bg-teal-50 text-teal-800 border-teal-300',
+      activeTabClass: 'border-teal-600 text-teal-800 bg-teal-50/80 ring-1 ring-teal-500/20 font-bold',
+      iconBg: 'bg-teal-100 text-teal-800'
     }
   }[currentRole];
 

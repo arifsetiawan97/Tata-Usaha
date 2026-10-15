@@ -63,6 +63,42 @@ export function getTaskClassification(
     return 'tambahan';
   }
 
+  if (role === 'PERPUS') {
+    // Tugas Pokok Tenaga / Pengelola Perpustakaan:
+    // - Pengolahan & klasifikasi buku DDC / barcode (katalogisasi_buku)
+    // - Sirkulasi peminjaman & pengembalian buku (sirkulasi_peminjaman)
+    // - Inventarisasi koleksi & stock opname (stock_opname)
+    // - Perawatan & pelestarian fisik buku (perawatan_buku)
+    if (
+      category === 'katalogisasi_buku' ||
+      category === 'sirkulasi_peminjaman' ||
+      category === 'stock_opname' ||
+      category === 'perawatan_buku'
+    ) {
+      return 'pokok';
+    }
+    // Tugas Tambahan: layanan literasi pojok baca, administrasi bebas pustaka & event
+    return 'tambahan';
+  }
+
+  if (role === 'LAB_IPA') {
+    // Tugas Pokok Laboran IPA:
+    // - Penyiapan alat dan bahan praktikum siswa/guru (persiapan_praktikum)
+    // - Pembersihan & pemeliharaan instrumen / alat gelas lab (pemeliharaan_alat)
+    // - Inventarisasi bahan kimia & kartu stok (inventaris_bahan)
+    // - Keselamatan kerja K3 & sterilisasi lab (k3_laboratorium)
+    if (
+      category === 'persiapan_praktikum' ||
+      category === 'pemeliharaan_alat' ||
+      category === 'inventaris_bahan' ||
+      category === 'k3_laboratorium'
+    ) {
+      return 'pokok';
+    }
+    // Tugas Tambahan: penjadwalan ruang lab, perbaikan swakelola alat peraga
+    return 'tambahan';
+  }
+
   return 'pokok';
 }
 
@@ -135,6 +171,36 @@ export const OFFICIAL_TUPOKSI_DEFINITIONS: Record<RoleType, {
       'Pemeriksaan Pompa Air Jet Pump, Pembersihan Saringan Tandon Puncak & Bak Air',
       'Penyemprotan Disinfektan Ruang UKS & Penyedotan Debu Karpet Musholla Sekolah',
       'Penataan Kursi dan Meja untuk Keperluan Rapat Dinas & Upacara Sekolah'
+    ]
+  },
+  PERPUS: {
+    tupoksiList: [
+      'Pengolahan & Klasifikasi Bahan Pustaka Berdasarkan DDC dan Perekaman Barcode',
+      'Pelayanan Sirkulasi Peminjaman & Pengembalian Buku Pelajaran Serta Koleksi Umum',
+      'Penyusunan Buku Induk Inventarisasi dan Stock Opname Berkala Koleksi Buku',
+      'Pemeliharaan, Perbaikan Jilid Rusak dan Pelestarian Fisik Bahan Pustaka',
+      'Penyusunan Statistik Pengunjung dan Rekapitulasi Pembaca Harian/Bulanan'
+    ],
+    tugasTambahanList: [
+      'Penyelenggaraan Program Literasi Sekolah & Bimbingan Membaca Peserta Didik',
+      'Pengembangan Display Buku Baru dan Pojok Literasi Tematik di Lobi Sekolah',
+      'Penerbitan Surat Keterangan Bebas Pinjam Perpustakaan Siswa Tingkat Akhir/Mutasi',
+      'Penerimaan dan Pengelompokan Sumbangan/Hibah Buku Pengayaan Peserta Didik'
+    ]
+  },
+  LAB_IPA: {
+    tupoksiList: [
+      'Penyiapan Alat Peraga, Preparat, Reagen dan Bahan Habis Pakai Praktikum Siswa',
+      'Pembersihan, Sterilisasi Alat Gelas dan Penyimpanan Kembali Pasca Praktikum',
+      'Pengelolaan Kartu Stok Reagen Kimia & Buku Inventarisasi Alat Laboratorium IPA',
+      'Penerapan SOP Keselamatan Kerja (K3) Laboratorium & Pengelolaan Limbah Praktikum',
+      'Pengecekan Fungsi, Kalibrasi Neraca, Mikroskop dan Alat Ukur Fisika/Biologi'
+    ],
+    tugasTambahanList: [
+      'Penyusunan Jadwal Penggunaan Ruang Laboratorium IPA untuk Kelas 7, 8, dan 9',
+      'Pembuatan Larutan Reagen Uji Biologi (Lugol, Biuret, Benedict) & Preparat Sel',
+      'Pemeriksaan Kesiapsiagaan Kotak P3K Laboratorium dan Alat Pemadam Api (APAR)',
+      'Pendampingan Teknis Praktikum Ekstrakurikuler KIR dan Bimbingan OSN Sains'
     ]
   }
 };

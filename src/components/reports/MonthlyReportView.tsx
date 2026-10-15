@@ -107,6 +107,42 @@ const OFFICIAL_MONTHLY_TEMPLATES: Record<RoleType, {
       'Mengajukan amprah kebutuhan bahan habis pakai ke bagian TU seminggu sebelum stok habis',
       'Membersihkan saringan kran dan koordinasi dengan penjaga sekolah untuk pemeliharaan pipa'
     ]
+  },
+  PERPUS: {
+    summary: 'Pelayanan sirkulasi, pengolahan klasifikasi DDC bahan pustaka, dan gerakan literasi sekolah pada bulan berjalan terlaksana secara terprogram dan tertib. Peningkatan frekuensi kunjungan pemustaka dan pemanfaatan pojok baca kelas terdata secara akuntabel.',
+    achievements: [
+      'Penyelesaian registrasi buku induk dan barcode scanner 100% koleksi buku pengayaan baru',
+      'Pelayanan sirkulasi peminjaman dan pengembalian buku siswa tanpa komplain layanan',
+      'Penyelenggaraan pendampingan 15 menit membaca dalam rangka Gerakan Literasi Sekolah (GLS)',
+      'Restorasi dan perbaikan jilid buku referensi yang mengalami kerusakan fisik',
+      'Penyusunan rekapitulasi statistik pemustaka dan buku terpopuler bulanan'
+    ],
+    obstacles: [
+      'Keterlambatan pengembalian buku pinjaman oleh sebagian peserta didik saat ujian',
+      'Kapasitas rak display buku baru perlu ditambah untuk menampung hibah buku'
+    ],
+    solutions: [
+      'Mengirimkan surat pemberitahuan pengembalian berkala melalui wali kelas',
+      'Mengajukan penambahan rak buku display akrilik pada usulan anggaran sekolah'
+    ]
+  },
+  LAB_IPA: {
+    summary: 'Pelayanan praktikum sains laboratorium IPA sepanjang bulan berjalan berjalan lancar, aman, dan tanpa kecelakaan kerja (Zero Incident K3). Penyiapan alat dan bahan praktikum fisika/biologi, pencucian alat gelas kimia, serta pemeliharaan mikroskop dan neraca presisi tuntas sesuai standar.',
+    achievements: [
+      'Penyiapan alat peraga dan bahan reagen praktikum seluruh rombel tepat waktu sesuai jadwal',
+      'Pencucian, sterilisasi, dan penataan alat gelas laboratorium bebas residu kontaminan',
+      'Pengecekan fungsi dan kalibrasi rutin mikroskop siswa dan neraca Ohaus',
+      'Pemeriksaan kesiapsiagaan kotak P3K dan indikator tekanan tabung APAR di zona hijau',
+      'Pengelolaan limbah cair praktikum dengan metode netralisasi pH ramah lingkungan'
+    ],
+    obstacles: [
+      'Ketersediaan stok larutan reagen indikator menipis pada akhir periode praktikum',
+      'Sumbatan kotoran halus pada salah satu kran wastafel ruang preparasi lab'
+    ],
+    solutions: [
+      'Membuat usulan amprah bahan kimia habis pakai lebih awal ke bagian TU',
+      'Pembersihan saringan kran dan pemeliharaan pipa bersama tim sapras sekolah'
+    ]
   }
 };
 
@@ -142,7 +178,11 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
 
   const effectiveRole = currentRole || selectedRole;
   const isLocked = lockRole || !!currentRole;
-  const roleTitle = effectiveRole === 'TU' ? 'Tata Usaha' : effectiveRole === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
+  const roleTitle = 
+    effectiveRole === 'TU' ? 'Tata Usaha' : 
+    effectiveRole === 'PENJAGA' ? 'Penjaga Sekolah' : 
+    effectiveRole === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
+    effectiveRole === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
 
   const allRoleTasks = tasks.filter(t => t.role.toUpperCase() === effectiveRole.toUpperCase());
 

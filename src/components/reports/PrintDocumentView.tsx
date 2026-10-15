@@ -50,8 +50,17 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const printableRef = useRef<HTMLDivElement>(null);
 
   const role: RoleType = reportData.role || currentRole || 'TU';
-  const operator = schoolConfig.operatorProfiles[role];
-  const roleTitle = role === 'TU' ? 'Tata Usaha' : role === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
+  const roleTitle = 
+    role === 'TU' ? 'Tata Usaha' : 
+    role === 'PENJAGA' ? 'Penjaga Sekolah' : 
+    role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
+    role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
+  const operator = schoolConfig.operatorProfiles[role] || {
+    nama: 'Petugas Layanan Operasional',
+    nip: '-',
+    jabatan: roleTitle,
+    signatureType: 'script' as const
+  };
 
   const isMonthly = reportType === 'monthly';
   const monthlyData = isMonthly ? (reportData as MonthlyReport) : null;

@@ -63,7 +63,7 @@ function MainLayout() {
       <footer className="border-t border-slate-200 bg-white py-4 mt-12 no-print">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
           <p>
-            Sistem Informasi Operator Layanan Operasional (TU, Penjaga Sekolah, Service) · Standar Tata Kelola Satuan Pendidikan
+            Sistem Informasi Operator Layanan Operasional (TU, Penjaga, Service, Perpustakaan, Lab IPA) · Standar Tata Kelola Satuan Pendidikan
           </p>
           <p className="font-mono text-[11px] text-slate-400">
             Kop 3 Kolom · Lembar Pengesahan NIP/NIPPK · E-Sign & Stempel

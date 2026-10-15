@@ -467,6 +467,230 @@ export const TASK_PRESETS: Record<RoleType, TaskPresetItem[]> = {
       timeEnd: '14:45',
       notes: 'Pasokan air bersih untuk wudhu dan toilet terjamin aman lancar.'
     }
+  ],
+  PERPUS: [
+    {
+      category: 'katalogisasi_buku',
+      title: 'Katalogisasi & Perekaman Barcode Buku Pelajaran Kurikulum Merdeka',
+      description: 'Melakukan registrasi buku induk, penentuan klasifikasi DDC, pencetakan barcode, dan penempelan label punggung buku teks pelajaran kelas 7, 8, dan 9.',
+      location: 'Ruang Pengolahan Perpustakaan',
+      volumeUnit: '80 eksemplar buku teks',
+      timeStart: '08:00',
+      timeEnd: '10:30',
+      notes: 'Buku telah terdata pada sistem katalog digital OPAC dan siap diedarkan.'
+    },
+    {
+      category: 'katalogisasi_buku',
+      title: 'Pengolahan dan Klasifikasi DDC Buku Pengayaan & Referensi Umum',
+      description: 'Menetapkan nomor klasifikasi Dewey Decimal Classification (DDC) untuk koleksi buku fiksi remaja, ensiklopedia sains, dan kamus referensi baru.',
+      location: 'Meja Kerja Pengolahan Bahan Pustaka',
+      volumeUnit: '50 judul buku pengayaan',
+      timeStart: '10:30',
+      timeEnd: '12:00',
+      notes: 'Label punggung dan lembar tanggal kembali terpasang rapi.'
+    },
+    {
+      category: 'sirkulasi_peminjaman',
+      title: 'Pelayanan Sirkulasi Peminjaman Mandiri Buku Peserta Didik',
+      description: 'Melayani transaksi peminjaman buku oleh siswa pada jam istirahat sekolah menggunakan barcode scanner, serta validasi masa pinjam 7 hari.',
+      location: 'Meja Layanan Sirkulasi Perpustakaan',
+      volumeUnit: '65 transaksi peminjaman',
+      timeStart: '09:30',
+      timeEnd: '10:30',
+      notes: 'Seluruh transaksi tercatat otomatis di sistem sirkulasi digital.'
+    },
+    {
+      category: 'sirkulasi_peminjaman',
+      title: 'Pelayanan Pengembalian Buku, Pemeriksaan Kerusakan & Shelving ke Rak',
+      description: 'Menerima pengembalian buku pinjaman siswa, memeriksa kelengkapan halaman dan keutuhan cover, serta menyusun kembali (shelving) buku ke rak koleksi sesuai nomor panggil.',
+      location: 'Meja Sirkulasi & Rak Buku Koleksi',
+      volumeUnit: '45 eksemplar buku dikembalikan',
+      timeStart: '12:30',
+      timeEnd: '14:00',
+      notes: 'Buku telah dikembalikan ke rak masing-masing tanpa ada yang salah letak.'
+    },
+    {
+      category: 'layanan_literasi',
+      title: 'Pendampingan Gerakan Literasi Sekolah (GLS) 15 Menit Membaca Siswa',
+      description: 'Memandu dan mendampingi kegiatan literasi pagi siswa di ruang perpustakaan dan pojok baca, memberikan rekomendasi buku fiksi/sains yang edukatif.',
+      location: 'Ruang Baca Utama Perpustakaan',
+      volumeUnit: '2 rombel kelas (64 siswa)',
+      timeStart: '07:15',
+      timeEnd: '08:00',
+      notes: 'Siswa aktif membuat rangkuman jurnal membaca mingguan.'
+    },
+    {
+      category: 'layanan_literasi',
+      title: 'Penataan Pojok Baca Tematik & Display Rekomendasi Buku Minggu Ini',
+      description: 'Menata lemari display akrilik putar di lobi perpustakaan dengan tema buku sains populer dan fiksi sastra inspiratif untuk menarik minat baca peserta didik.',
+      location: 'Lobi Masuk & Sudut Baca Lesehan',
+      volumeUnit: '1 display tema sains & 25 buku pilihan',
+      timeStart: '13:30',
+      timeEnd: '14:30',
+      notes: 'Buku display langsung diminati siswa saat jam istirahat.'
+    },
+    {
+      category: 'perawatan_buku',
+      title: 'Restorasi Fisik, Penjilidan Ulang & Laminasi Cover Buku Rusak',
+      description: 'Melakukan perbaikan fisik buku ensiklopedia dan kamus tebal yang lepas jahitan covernya menggunakan lem jilid khusus, lakban kain, dan plastik mika tebal.',
+      location: 'Ruang Restorasi & Preservasi Koleksi',
+      volumeUnit: '15 eksemplar buku referensi',
+      timeStart: '13:00',
+      timeEnd: '15:15',
+      notes: 'Kondisi buku kembali kokoh dan layak dibaca kembali oleh pemustaka.'
+    },
+    {
+      category: 'perawatan_buku',
+      title: 'Pembersihan Debu Rak Buku dan Penataan Kerapihan Koleksi Sesuai DDC',
+      description: 'Menyedot debu di sela-sela buku dan papan rak koleksi menggunakan lap mikrofiber dan vacuum mini, serta merapikan penjepit buku (bookend).',
+      location: 'Lorong Rak Koleksi 000 - 900',
+      volumeUnit: '8 rak buku dua muka',
+      timeStart: '08:30',
+      timeEnd: '10:00',
+      notes: 'Area rak bersih, bebas debu dan teratur rapi.'
+    },
+    {
+      category: 'stock_opname',
+      title: 'Stock Opname Fisik Koleksi Rak Buku Fiksi & Pencocokan Buku Induk',
+      description: 'Melakukan inventarisasi fisik buku secara berkala mencocokkan nomor barcode buku pada rak dengan database buku induk perpustakaan untuk mendeteksi buku hilang atau rusak.',
+      location: 'Rak Koleksi Sastra & Fiksi (Rak 2-4)',
+      volumeUnit: '320 eksemplar buku fiksi',
+      timeStart: '10:00',
+      timeEnd: '12:30',
+      notes: 'Tercatat 312 eksemplar tersedia di rak, 8 eksemplar dalam peminjaman aktif.'
+    },
+    {
+      category: 'administrasi_perpus',
+      title: 'Pencetakan & Distribusi Kartu Anggota Perpustakaan Berbarcode Siswa Baru',
+      description: 'Mencetak kartu anggota perpustakaan digital dengan nomor barcode NISN, melaminasi kartu, dan mendistribusikan kepada peserta didik kelas 7.',
+      location: 'Ruang Komputer Administrasi Perpustakaan',
+      volumeUnit: '120 kartu perpustakaan terbit',
+      timeStart: '08:30',
+      timeEnd: '11:30',
+      notes: 'Siswa baru kini dapat meminjam buku secara mandiri di loket perpustakaan.'
+    },
+    {
+      category: 'administrasi_perpus',
+      title: 'Penerbitan Surat Keterangan Bebas Pustaka & Rekapitulasi Statistik Bulanan',
+      description: 'Memeriksa tanggungan buku pinjaman siswa yang mutasi/lulus, menerbitkan surat bebas pinjam perpus, serta menyusun rekapitulasi data peminjam bulanan.',
+      location: 'Loket Administrasi Perpustakaan',
+      volumeUnit: '1 dokumen statistik & 14 surat bebas pinjam',
+      timeStart: '14:00',
+      timeEnd: '15:30',
+      notes: 'Laporan statistik telah diserahkan kepada Kepala Sekolah dan Koordinator Kurikulum.'
+    }
+  ],
+  LAB_IPA: [
+    {
+      category: 'persiapan_praktikum',
+      title: 'Penyiapan Mikroskop Siswa & Kaca Preparat Jaringan Tumbuhan Kelas 8',
+      description: 'Menyiapkan 12 unit mikroskop siswa monokuler LED, kaca objek, kaca penutup, silet preparat, pipet tetes, dan larutan pewarna metilen biru untuk praktikum stomata daun.',
+      location: 'Ruang Laboratorium IPA (Meja 1-6)',
+      volumeUnit: '12 set mikroskop & 24 preparat kaca',
+      timeStart: '07:30',
+      timeEnd: '09:00',
+      notes: 'Lensa mikroskop bersih terpasang, preparat siap digunakan oleh 32 siswa.'
+    },
+    {
+      category: 'persiapan_praktikum',
+      title: 'Penyiapan Kit Praktikum Fisika Mekanika, Bidang Miring & Gaya Gesek',
+      description: 'Menyiapkan balok gesek, neraca pegas 5N, papan luncur bidang miring, stopwatch digital dan beban gantung untuk kegiatan eksperimen hukum Newton kelas 7.',
+      location: 'Meja Praktikum Fisika Lab IPA',
+      volumeUnit: '8 set kit mekanika lengkap',
+      timeStart: '09:30',
+      timeEnd: '11:00',
+      notes: 'Semua neraca pegas telah dicek titik nolnya sebelum digunakan.'
+    },
+    {
+      category: 'persiapan_praktikum',
+      title: 'Penyiapan Larutan Reagen Uji Nutrisi Makanan (Benedict, Biuret, Lugol)',
+      description: 'Membuat dan menuangkan larutan reagen uji amilum (Lugol), glukosa (Benedict), dan protein (Biuret) ke botol pipet tetes, serta menyiapkan rak tabung reaksi dan pembakar spiritus.',
+      location: 'Ruang Preparasi Laboratorium IPA',
+      volumeUnit: '18 set tabung reaksi & 3 botol reagen',
+      timeStart: '11:00',
+      timeEnd: '12:30',
+      notes: 'Bahan makanan sampel uji telah disiapkan higienis di wadah porselen.'
+    },
+    {
+      category: 'pemeliharaan_alat',
+      title: 'Pencucian, Sterilisasi & Pengeringan Alat Gelas Kimia Tabung Reaksi',
+      description: 'Mencuci seluruh tabung reaksi, gelas kimia beaker, labu erlenmeyer, dan kaca arloji pasca praktikum menggunakan deterjen khusus lab, dibilas akuades dan dikeringkan pada rak.',
+      location: 'Wastafel Laboratorium & Rak Pengering Kaca',
+      volumeUnit: '48 tabung reaksi & 16 gelas beaker',
+      timeStart: '13:00',
+      timeEnd: '14:30',
+      notes: 'Alat gelas bersih berkilau tanpa sisa noda bahan kimia.'
+    },
+    {
+      category: 'pemeliharaan_alat',
+      title: 'Pembersihan Lensa Mikroskop dengan Alkohol 70% & Kertas Lensa',
+      description: 'Membersihkan minyak imersi dan debu pada lensa objektif serta lensa okuler mikroskop menggunakan kertas lensa khusus dan alkohol 70%, lalu disimpan kembali dalam lemari kaca berkering.',
+      location: 'Lemari Instrumen Optik Lab IPA',
+      volumeUnit: '16 unit mikroskop monokuler',
+      timeStart: '14:30',
+      timeEnd: '15:30',
+      notes: 'Lensa optik jernih, kabel daya digulung rapi dan diberi kantong pelindung debu.'
+    },
+    {
+      category: 'inventaris_bahan',
+      title: 'Pemeriksaan Sisa Volume & Kedaluwarsa Bahan Kimia Lemari Khusus B3',
+      description: 'Mengecek ketersediaan asam klorida (HCl), asam cuka (CH3COOH), larutan iodin, spirtus bakar, dan indikator lakmus merah/biru, serta memperbarui kartu stok lemari B3.',
+      location: 'Lemari Khusus Bahan Kimia B3 Tahan Asam',
+      volumeUnit: '24 botol bahan kimia & reagen',
+      timeStart: '08:30',
+      timeEnd: '10:00',
+      notes: 'Penyimpanan terpisah antara bahan asam pekat dan zat mudah terbakar.'
+    },
+    {
+      category: 'inventaris_bahan',
+      title: 'Pemutakhiran Buku Inventaris Sarana Lab & Kartu Kendali Peminjaman Guru',
+      description: 'Mencatat pengembalian alat peraga kit optik dan torso manusia oleh guru IPA, mengecek kelengkapan bagian, dan menginput ke log inventaris lab.',
+      location: 'Meja Kerja Laboran IPA',
+      volumeUnit: '4 kit peraga & 1 set torso anatomi',
+      timeStart: '12:00',
+      timeEnd: '13:15',
+      notes: 'Semua alat peraga kembali lengkap dalam kondisi baik.'
+    },
+    {
+      category: 'k3_laboratorium',
+      title: 'Pemeriksaan Kesiapan Tabung Pemadam APAR & Kotak P3K Laboratorium',
+      description: 'Memeriksa jarum tekanan gas pada tabung APAR 6 kg dry chemical, ketersediaan cairan pembersih mata (eye wash), obat luka bakar, perban kasa, dan plester di kotak P3K.',
+      location: 'Dinding Lab IPA & Pos Kotak P3K',
+      volumeUnit: '1 unit APAR & 1 kotak P3K lengkap',
+      timeStart: '08:00',
+      timeEnd: '09:00',
+      notes: 'Indikator APAR berada di batas hijau, obat P3K belum ada yang kedaluwarsa.'
+    },
+    {
+      category: 'k3_laboratorium',
+      title: 'Pengelolaan Limbah Praktikum Asam-Basa dan Pengendapan Sedimen Netral',
+      description: 'Mengumpulkan limbah sisa larutan uji praktikum ke dalam jerigen penampung limbah sementara, menetralkan pH dengan kapur tohor sebelum pembuangan ke bak filtrasi.',
+      location: 'Area Pengolahan Limbah Cair Lab IPA',
+      volumeUnit: '5 liter limbah cair praktikum',
+      timeStart: '14:00',
+      timeEnd: '15:15',
+      notes: 'pH limbah akhir netral (pH 7), aman dan sesuai pedoman ramah lingkungan.'
+    },
+    {
+      category: 'jadwal_lab',
+      title: 'Penyusunan Jadwal Penggunaan Ruang Laboratorium IPA Semester Berjalan',
+      description: 'Menyusun matriks jadwal praktikum mingguan bersama 4 orang guru mata pelajaran IPA agar penggunaan ruang dan pembagian kit alat peraga tidak terjadi tumpang tindih.',
+      location: 'Ruang Persiapan Laboran IPA',
+      volumeUnit: '18 jadwal kelas per minggu',
+      timeStart: '10:00',
+      timeEnd: '11:45',
+      notes: 'Jadwal telah dicetak dan ditempel di pintu masuk lab dan ruang guru.'
+    },
+    {
+      category: 'perbaikan_alat',
+      title: 'Kalibrasi Titik Nol Neraca Ohaus 3 Lengan dan Neraca Pegas',
+      description: 'Mengatur sekrup pengatur titik nol neraca 3 lengan Ohaus 311g serta membersihkan piringan timbangan dari karat atau serbuk debu agar hasil penimbangan praktikum presisi.',
+      location: 'Meja Kalibrasi Alat Lab IPA',
+      volumeUnit: '6 unit neraca Ohaus presisi',
+      timeStart: '13:30',
+      timeEnd: '15:00',
+      notes: 'Semua neraca seimbang tepat pada garis nol skala utama.'
+    }
   ]
 };
 

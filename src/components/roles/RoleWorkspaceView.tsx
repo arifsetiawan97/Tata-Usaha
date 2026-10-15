@@ -4,6 +4,8 @@ import { RoleType } from '../../types';
 import { PenjagaView } from './PenjagaView';
 import { TUView } from './TUView';
 import { ServiceView } from './ServiceView';
+import { PerpusView } from './PerpusView';
+import { LabIpaView } from './LabIpaView';
 import { TupoksiManagerView } from './TupoksiManagerView';
 import { MonthlyReportView } from '../reports/MonthlyReportView';
 import { AnnualReportView } from '../reports/AnnualReportView';
@@ -12,6 +14,8 @@ import {
   Shield, 
   Building2, 
   Sparkles, 
+  BookOpen,
+  FlaskConical,
   CalendarDays, 
   CheckSquare, 
   FileText, 
@@ -67,6 +71,22 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
       themeBg: 'from-emerald-900 via-slate-900 to-teal-950',
       activeColor: 'bg-emerald-600 text-white shadow-xs',
       sublabel: 'Sanitasi & Lingkungan'
+    },
+    PERPUS: {
+      title: 'Ruang Kerja Layanan Perpustakaan',
+      subtitle: 'Standar Sirkulasi Koleksi, Pengolahan DDC/Barcode, Literasi & Perawatan Buku',
+      icon: BookOpen,
+      themeBg: 'from-purple-900 via-slate-900 to-indigo-950',
+      activeColor: 'bg-purple-600 text-white shadow-xs',
+      sublabel: 'Literasi & Bahan Pustaka'
+    },
+    LAB_IPA: {
+      title: 'Ruang Kerja Laboratorium IPA',
+      subtitle: 'Standar Penyiapan Praktikum Sains, Keselamatan K3, Kalibrasi & Inventaris Lab',
+      icon: FlaskConical,
+      themeBg: 'from-teal-900 via-slate-900 to-cyan-950',
+      activeColor: 'bg-teal-600 text-white shadow-xs',
+      sublabel: 'Praktikum & Laboran IPA'
     }
   }[role];
 
@@ -187,6 +207,8 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
             {role === 'PENJAGA' && <PenjagaView />}
             {role === 'TU' && <TUView />}
             {role === 'SERVICE' && <ServiceView />}
+            {role === 'PERPUS' && <PerpusView />}
+            {role === 'LAB_IPA' && <LabIpaView />}
           </div>
         )}
 

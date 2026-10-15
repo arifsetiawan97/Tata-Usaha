@@ -1,4 +1,4 @@
-export type RoleType = 'TU' | 'PENJAGA' | 'SERVICE';
+export type RoleType = 'TU' | 'PENJAGA' | 'SERVICE' | 'PERPUS' | 'LAB_IPA';
 
 export type TaskCategoryPenjaga = 
   | 'keamanan' 
@@ -30,7 +30,28 @@ export type TaskCategoryService =
   | 'perawatan_taman'
   | 'penyediaan_air';
 
-export type TaskCategory = TaskCategoryPenjaga | TaskCategoryTU | TaskCategoryService;
+export type TaskCategoryPerpus = 
+  | 'katalogisasi_buku'
+  | 'sirkulasi_peminjaman'
+  | 'layanan_literasi'
+  | 'perawatan_buku'
+  | 'stock_opname'
+  | 'administrasi_perpus';
+
+export type TaskCategoryLabIPA = 
+  | 'persiapan_praktikum'
+  | 'pemeliharaan_alat'
+  | 'inventaris_bahan'
+  | 'k3_laboratorium'
+  | 'jadwal_lab'
+  | 'perbaikan_alat';
+
+export type TaskCategory = 
+  | TaskCategoryPenjaga 
+  | TaskCategoryTU 
+  | TaskCategoryService 
+  | TaskCategoryPerpus 
+  | TaskCategoryLabIPA;
 
 export interface TaskLog {
   id: string;

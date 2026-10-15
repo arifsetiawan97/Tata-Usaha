@@ -68,6 +68,8 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     if (initialPreset) return initialPreset.category;
     if (role === 'PENJAGA') return 'keamanan';
     if (role === 'TU') return 'kepegawaian';
+    if (role === 'PERPUS') return 'katalogisasi_buku';
+    if (role === 'LAB_IPA') return 'persiapan_praktikum';
     return 'kebersihan_wc';
   };
 
@@ -485,6 +487,38 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
         </>
       );
     }
+    if (role === 'PERPUS') {
+      return (
+        <>
+          <optgroup label="Pengolahan & Bahan Pustaka">
+            <option value="katalogisasi_buku">Katalogisasi & DDC (Buku Induk, Barcode, Label Punggung)</option>
+            <option value="perawatan_buku">Perawatan & Restorasi (Penjilidan, Lem, Laminasi Buku)</option>
+            <option value="stock_opname">Stock Opname Koleksi (Inventarisasi & Pencocokan Rak)</option>
+          </optgroup>
+          <optgroup label="Sirkulasi & Layanan Pemustaka">
+            <option value="sirkulasi_peminjaman">Sirkulasi Peminjaman (Pinjam, Kembali & Denda)</option>
+            <option value="layanan_literasi">Layanan Literasi (15 Mnt GLS, Pojok Baca & Bimbingan)</option>
+            <option value="administrasi_perpus">Administrasi Perpustakaan (Kartu Anggota & Suket Bebas Perpus)</option>
+          </optgroup>
+        </>
+      );
+    }
+    if (role === 'LAB_IPA') {
+      return (
+        <>
+          <optgroup label="Praktikum & Eksperimen Siswa">
+            <option value="persiapan_praktikum">Persiapan Praktikum (Mikroskop, Preparat & Kit Fisika)</option>
+            <option value="jadwal_lab">Jadwal & Jurnal (Penjadwalan Ruang & Presensi Praktikum)</option>
+          </optgroup>
+          <optgroup label="Pemeliharaan & Keselamatan Lab">
+            <option value="pemeliharaan_alat">Pemeliharaan Alat Gelas (Pencucian, Sterilisasi & Oven)</option>
+            <option value="perbaikan_alat">Kalibrasi & Perbaikan (Neraca Ohaus, Catu Daya & Optik)</option>
+            <option value="inventaris_bahan">Inventaris Reagen Kimia (Kartu Stok & Lemari B3)</option>
+            <option value="k3_laboratorium">Keselamatan Kerja K3 (APAR, P3K, Netralisasi Limbah)</option>
+          </optgroup>
+        </>
+      );
+    }
     return (
       <>
         <optgroup label="Sanitasi Ruang & Toilet">
@@ -514,8 +548,23 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
   const serviceLocationChips = ['Toilet Siswa Putra', 'Toilet Siswa Putri', 'Toilet Guru', 'Ruang Kepala Sekolah', 'Ruang Guru & TU', 'Lapangan Upacara', 'Ruang UKS & Musholla'];
   const serviceVolumeChips = ['8 bilik toilet', '3 ruangan besar', '6 gerobak sampah', '± 800 m² halaman', '45 pot tanaman', '2 unit tandon air'];
 
-  const currentLocationChips = role === 'TU' ? tuLocationChips : role === 'PENJAGA' ? penjagaLocationChips : serviceLocationChips;
-  const currentVolumeChips = role === 'TU' ? tuVolumeChips : role === 'PENJAGA' ? penjagaVolumeChips : serviceVolumeChips;
+  const perpusLocationChips = ['Meja Sirkulasi', 'Ruang Pengolahan', 'Rak Buku Fiksi', 'Rak Buku Teks Pelajaran', 'Ruang Baca Utama', 'Pojok Baca Lobi', 'Ruang Restorasi'];
+  const perpusVolumeChips = ['80 eksemplar buku', '45 transaksi pinjam', '64 siswa (2 rombel)', '15 buku referensi', '120 kartu perpustakaan', '1 laporan statistik'];
+
+  const labIpaLocationChips = ['Meja Praktikum Siswa 1-6', 'Meja Demonstrasi Guru', 'Ruang Preparasi Laboran', 'Lemari Alat Optik / Mikroskop', 'Lemari Bahan Kimia B3', 'Wastafel & Rak Gelas'];
+  const labIpaVolumeChips = ['12 unit mikroskop', '8 set kit mekanika', '48 tabung reaksi', '24 botol reagen', '6 neraca presisi', '1 unit APAR & P3K'];
+
+  const currentLocationChips = 
+    role === 'TU' ? tuLocationChips : 
+    role === 'PENJAGA' ? penjagaLocationChips : 
+    role === 'SERVICE' ? serviceLocationChips :
+    role === 'PERPUS' ? perpusLocationChips : labIpaLocationChips;
+
+  const currentVolumeChips = 
+    role === 'TU' ? tuVolumeChips : 
+    role === 'PENJAGA' ? penjagaVolumeChips : 
+    role === 'SERVICE' ? serviceVolumeChips :
+    role === 'PERPUS' ? perpusVolumeChips : labIpaVolumeChips;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/65 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">

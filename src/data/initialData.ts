@@ -48,10 +48,23 @@ export const initialSchoolConfig: SchoolConfig = {
     SERVICE: {
       nama: 'AGUS SUPRIYADI',
       nip: 'NIPPK. 19901103 202421 1 045',
-      pangkatGolongan: 'Juru Muda, I/a',
       jabatan: 'Petugas Layanan Kebersihan / Service',
       signatureType: 'script',
       signatureData: 'AgusSupriyadi'
+    },
+    PERPUS: {
+      nama: 'NURUL HIDAYATI, S.I.Pust.',
+      nip: 'NIPPK. 19920815 202321 2 024',
+      jabatan: 'Pengelola / Petugas Perpustakaan',
+      signatureType: 'script',
+      signatureData: 'NurulHidayati'
+    },
+    LAB_IPA: {
+      nama: 'HENDRA PRASETYA, S.Pd.',
+      nip: 'NIPPK. 19910320 202421 1 038',
+      jabatan: 'Laboran / Pengelola Lab IPA',
+      signatureType: 'script',
+      signatureData: 'HendraPrasetya'
     }
   }
 };
@@ -316,6 +329,200 @@ export const initialTasks: TaskLog[] = [
     volumeUnit: '6 bilik toilet',
     petugas: 'Agus Supriyadi',
     notes: 'Lantai kering, exhaust fan berfungsi optimal.'
+  },
+  // PERPUSTAKAAN TASKS
+  {
+    id: 'tsk-prs-001',
+    role: 'PERPUS',
+    date: '2026-09-25',
+    category: 'katalogisasi_buku',
+    taskType: 'pokok',
+    title: 'Katalogisasi & Perekaman Barcode 80 Eksemplar Buku Pelajaran Kurikulum Merdeka',
+    description: 'Melakukan registrasi buku induk, pemberian stempel kepemilikan sekolah, penentuan nomor klasifikasi DDC, pencetakan barcode, dan penempelan label punggung buku teks IPA dan Matematika kelas 7.',
+    location: 'Ruang Pengolahan Perpustakaan',
+    timeStart: '08:00',
+    timeEnd: '10:30',
+    status: 'selesai',
+    volumeUnit: '80 buku teks pelajaran',
+    petugas: 'Nurul Hidayati, S.I.Pust.',
+    notes: 'Data telah tersinkronisasi ke katalog digital perpustakaan (OPAC).'
+  },
+  {
+    id: 'tsk-prs-002',
+    role: 'PERPUS',
+    date: '2026-09-25',
+    category: 'sirkulasi_peminjaman',
+    taskType: 'pokok',
+    title: 'Layanan Sirkulasi Peminjaman & Pengembalian Buku Teks dan Referensi Siswa',
+    description: 'Melayani transaksi peminjaman mandiri dan pengembalian buku siswa saat jam istirahat pertama dan kedua, memeriksa kondisi fisik buku, dan mengembalikan buku ke rak sesuai nomor klasifikasi.',
+    location: 'Meja Sirkulasi Perpustakaan',
+    timeStart: '09:30',
+    timeEnd: '13:00',
+    status: 'selesai',
+    volumeUnit: '65 transaksi peminjaman & 42 pengembalian',
+    petugas: 'Nurul Hidayati, S.I.Pust.',
+    notes: 'Seluruh buku dikembalikan tepat waktu tanpa denda keterlambatan.'
+  },
+  {
+    id: 'tsk-prs-003',
+    role: 'PERPUS',
+    date: '2026-09-24',
+    category: 'layanan_literasi',
+    taskType: 'tambahan',
+    title: 'Pendampingan Jam Literasi Siswa Kelas 7 & Pengenalan Pojok Baca',
+    description: 'Memandu kegiatan 15 menit membaca buku non-pelajaran bagi peserta didik rombel 7A dan 7B, pengenalan cara mencari referensi di rak buku ensiklopedia, dan bimbingan resume bacaan.',
+    location: 'Ruang Baca Utama Perpustakaan',
+    timeStart: '07:15',
+    timeEnd: '08:15',
+    status: 'selesai',
+    volumeUnit: '2 rombel (64 peserta didik)',
+    petugas: 'Nurul Hidayati, S.I.Pust.',
+    notes: 'Antusiasme siswa tinggi, 28 siswa langsung mendaftar pinjam buku fiksi.'
+  },
+  {
+    id: 'tsk-prs-004',
+    role: 'PERPUS',
+    date: '2026-09-23',
+    category: 'perawatan_buku',
+    taskType: 'pokok',
+    title: 'Restorasi, Laminasi & Penjilidan Ulang Cover Buku Ensiklopedia yang Rusak',
+    description: 'Melakukan perbaikan fisik buku ensiklopedia sains yang lepas punggungnya, pengeleman jilid benang, pelapisan cover dengan plastik mika tebal, dan penempelan ulang barcode.',
+    location: 'Meja Kerja Restorasi Bahan Pustaka',
+    timeStart: '13:30',
+    timeEnd: '15:30',
+    status: 'selesai',
+    volumeUnit: '15 eksemplar buku referensi',
+    petugas: 'Nurul Hidayati, S.I.Pust.',
+    notes: 'Kondisi buku kembali rapi, kuat, dan siap dipinjamkan kembali.'
+  },
+  {
+    id: 'tsk-prs-005',
+    role: 'PERPUS',
+    date: '2026-09-22',
+    category: 'stock_opname',
+    taskType: 'pokok',
+    title: 'Stock Opname Fisik Koleksi Buku Fiksi dan Pencocokan Buku Induk Rak 3',
+    description: 'Mencocokkan nomor induk fisik buku di rak fiksi sastra remaja dengan data buku induk perpustakaan untuk memastikan jumlah eksemplar yang ada, hilang, atau sedang dipinjam.',
+    location: 'Rak Koleksi Fiksi & Sastra (Rak 3)',
+    timeStart: '10:00',
+    timeEnd: '12:30',
+    status: 'selesai',
+    volumeUnit: '280 eksemplar buku',
+    petugas: 'Nurul Hidayati, S.I.Pust.',
+    notes: 'Sesuai dengan data sistem, 12 eksemplar terkonfirmasi dalam peminjaman aktif.'
+  },
+  {
+    id: 'tsk-prs-006',
+    role: 'PERPUS',
+    date: '2026-09-21',
+    category: 'administrasi_perpus',
+    taskType: 'tambahan',
+    title: 'Penerbitan 120 Kartu Anggota Perpustakaan Berbarcode untuk Siswa Baru',
+    description: 'Mencetak kartu anggota perpustakaan siswa kelas 7 baru yang dilengkapi barcode NISN dan nomor induk anggota, serta memasukkan foto siswa ke database anggota perpus.',
+    location: 'Ruang Komputer Administrasi Perpustakaan',
+    timeStart: '08:30',
+    timeEnd: '11:45',
+    status: 'selesai',
+    volumeUnit: '120 kartu perpustakaan',
+    petugas: 'Nurul Hidayati, S.I.Pust.',
+    notes: 'Kartu telah dilaminasi rapi dan siap didistribusikan ke wali kelas.'
+  },
+  // LABORATORIUM IPA TASKS
+  {
+    id: 'tsk-ipa-001',
+    role: 'LAB_IPA',
+    date: '2026-09-25',
+    category: 'persiapan_praktikum',
+    taskType: 'pokok',
+    title: 'Penyiapan Alat Mikroskop Cahaya & Preparat Jaringan Tumbuhan Kelas 8',
+    description: 'Menyiapkan 12 unit mikroskop siswa, kaca preparat, cover glass, pipet tetes, dan reagen pewarna metilen biru untuk praktikum biologi struktur jaringan daun kelas 8B.',
+    location: 'Ruang Laboratorium IPA (Meja Praktikum 1-6)',
+    timeStart: '07:30',
+    timeEnd: '09:30',
+    status: 'selesai',
+    volumeUnit: '12 unit mikroskop & 24 set preparat',
+    petugas: 'Hendra Prasetya, S.Pd.',
+    notes: 'Semua mikroskop berfungsi normal, cermin dan lensa okuler telah dibersihkan alkohol 70%.'
+  },
+  {
+    id: 'tsk-ipa-002',
+    role: 'LAB_IPA',
+    date: '2026-09-25',
+    category: 'pemeliharaan_alat',
+    taskType: 'pokok',
+    title: 'Pembersihan Alat Gelas Tabung Reaksi, Beaker Glass & Pengeringan Rak',
+    description: 'Mencuci alat gelas sisa praktikum uji asam basa menggunakan sabun detergen laboratorium, membilas dengan akuades, mengeringkan pada rak pengering dan menyimpan ke lemari kaca.',
+    location: 'Wastafel Laboratorium IPA & Rak Pengering',
+    timeStart: '11:00',
+    timeEnd: '12:30',
+    status: 'selesai',
+    volumeUnit: '48 tabung reaksi & 16 gelas beaker',
+    petugas: 'Hendra Prasetya, S.Pd.',
+    notes: 'Alat gelas bersih bebas residu, tidak ada alat yang pecah.'
+  },
+  {
+    id: 'tsk-ipa-003',
+    role: 'LAB_IPA',
+    date: '2026-09-24',
+    category: 'inventaris_bahan',
+    taskType: 'pokok',
+    title: 'Pengecekan Masa Kedaluwarsa Bahan Reagen Kimia & Pemutakhiran Kartu Stok',
+    description: 'Memeriksa tanggal kedaluwarsa reagen larutan Benedict, Biuret, Lugol, Asam Klorida (HCl encer), dan Natrium Hidroksida (NaOH), serta mencatat sisa volume pada kartu stok lemari bahan.',
+    location: 'Lemari Penyimpanan Bahan Kimia Lab IPA',
+    timeStart: '13:00',
+    timeEnd: '15:00',
+    status: 'selesai',
+    volumeUnit: '24 botol reagen & 12 kartu stok',
+    petugas: 'Hendra Prasetya, S.Pd.',
+    notes: 'Stok reagen Biuret tersisa 1 botol (250 ml), perlu diajukan pengadaan bulan depan.'
+  },
+  {
+    id: 'tsk-ipa-004',
+    role: 'LAB_IPA',
+    date: '2026-09-23',
+    category: 'k3_laboratorium',
+    taskType: 'pokok',
+    title: 'Sterilisasi Meja Praktikum, Pengecekan APAR dan Pembuangan Limbah Netralisasi',
+    description: 'Menyeka meja praktikum tahan asam dengan cairan pembersih, memeriksa manometer tekanan tabung APAR 6 kg, serta menetralisir limbah cair asam-basa sebelum dibuang ke bak filtrasi.',
+    location: 'Area Ruang Laboratorium IPA & Bak Netralisasi',
+    timeStart: '14:00',
+    timeEnd: '15:30',
+    status: 'selesai',
+    volumeUnit: '8 meja praktikum & 1 unit APAR',
+    petugas: 'Hendra Prasetya, S.Pd.',
+    notes: 'Indikator tekanan APAR di zona hijau, kotak P3K lengkap dengan obat luka bakar & pencuci mata.'
+  },
+  {
+    id: 'tsk-ipa-005',
+    role: 'LAB_IPA',
+    date: '2026-09-22',
+    category: 'jadwal_lab',
+    taskType: 'tambahan',
+    title: 'Penyusunan Jadwal Penggunaan Lab IPA dan Rekapitulasi Jurnal Praktikum Mingguan',
+    description: 'Menyinkronkan jadwal praktikum IPA kelas 7, 8, dan 9 bersama guru mata pelajaran IPA agar tidak terjadi bentrok jam pemakaian, serta mencatat daftar peminjaman kit fisika.',
+    location: 'Ruang Persiapan Laboran IPA',
+    timeStart: '08:30',
+    timeEnd: '10:00',
+    status: 'selesai',
+    volumeUnit: '18 sesi praktikum per minggu',
+    petugas: 'Hendra Prasetya, S.Pd.',
+    notes: 'Jadwal mingguan telah dicetak dan ditempel pada papan pengumuman depan lab.'
+  },
+  {
+    id: 'tsk-ipa-006',
+    role: 'LAB_IPA',
+    date: '2026-09-21',
+    category: 'perbaikan_alat',
+    taskType: 'tambahan',
+    title: 'Kalibrasi Neraca Ohaus 3 Lengan dan Perbaikan Konektor Kit Listrik Magnet',
+    description: 'Melakukan kalibrasi titik nol neraca 3 lengan Ohaus untuk praktikum pengukuran massa, serta menyolder kembali soket jumper kabel penghubung kit praktikum listrik dinamis.',
+    location: 'Meja Kalibrasi & Perbaikan Laboratorium IPA',
+    timeStart: '10:15',
+    timeEnd: '12:00',
+    status: 'selesai',
+    volumeUnit: '4 unit neraca & 6 kabel kit listrik',
+    petugas: 'Hendra Prasetya, S.Pd.',
+    notes: 'Pengukuran neraca presisi kembali dengan deviasi 0 gram.'
   }
 ];
 
@@ -548,6 +755,162 @@ export const initialInventories: InventoryItem[] = [
     lokasiPenyimpanan: 'Gudang Service',
     tahunPengadaan: 2023,
     keterangan: 'Pembersihan lumut paving block dan selokan sekolah'
+  },
+  // INVENTARIS PERPUSTAKAAN
+  {
+    id: 'inv-prs-001',
+    role: 'PERPUS',
+    kodeBarang: 'INV-PRS-01/RAK-01',
+    namaBarang: 'Rak Buku Dua Muka (Double Sided) Kayu Mahoni Tebal 5 Tingkat',
+    merkModel: 'Indachi Library Double Rack 120x45x180 cm',
+    kategori: 'Mebeler & Penyimpanan Buku',
+    jumlah: 8,
+    satuan: 'Unit',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Ruang Koleksi Perpustakaan',
+    tahunPengadaan: 2024,
+    keterangan: 'Penyimpanan buku teks kurikulum merdeka dan fiksi'
+  },
+  {
+    id: 'inv-prs-002',
+    role: 'PERPUS',
+    kodeBarang: 'INV-PRS-02/SCN-01',
+    namaBarang: 'Barcode Scanner Optik USB & Standar Dudukan Sirkulasi',
+    merkModel: 'Honeywell Voyager 1250g Handheld Laser',
+    kategori: 'Peralatan TIK & Sirkulasi',
+    jumlah: 2,
+    satuan: 'Unit',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Meja Layanan Sirkulasi',
+    tahunPengadaan: 2024,
+    keterangan: 'Pemindaian barcode peminjaman buku dan kartu anggota'
+  },
+  {
+    id: 'inv-prs-003',
+    role: 'PERPUS',
+    kodeBarang: 'INV-PRS-03/OPAC-01',
+    namaBarang: 'Komputer Anjungan Penelusuran Katalog (OPAC) Siswa',
+    merkModel: 'Lenovo IdeaCentre AIO 3 24ITL6 Core i3',
+    kategori: 'Peralatan TIK & Sirkulasi',
+    jumlah: 2,
+    satuan: 'Unit',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Lobi Masuk Perpustakaan',
+    tahunPengadaan: 2023,
+    keterangan: 'Pencarian katalog judul buku dan cek status ketersediaan'
+  },
+  {
+    id: 'inv-prs-004',
+    role: 'PERPUS',
+    kodeBarang: 'INV-PRS-04/MEJ-01',
+    namaBarang: 'Set Meja Baca Bundar Kayu Jati Belanda & 4 Kursi Spon',
+    merkModel: 'Chitose Round Study Table Set Dia. 120 cm',
+    kategori: 'Mebeler & Sarana Baca',
+    jumlah: 6,
+    satuan: 'Set',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Ruang Baca Utama Siswa',
+    tahunPengadaan: 2024,
+    keterangan: 'Area baca kelompok dan bimbingan literasi siswa'
+  },
+  {
+    id: 'inv-prs-005',
+    role: 'PERPUS',
+    kodeBarang: 'INV-PRS-05/LMR-01',
+    namaBarang: 'Lemari Display Buku Baru Akrilik Transparan Putar 4 Sisi',
+    merkModel: 'Koleksi Akrilik Revolving Display 160 cm',
+    kategori: 'Sarana Promosi & Pameran Buku',
+    jumlah: 2,
+    satuan: 'Unit',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Depan Pintu Masuk Perpustakaan',
+    tahunPengadaan: 2024,
+    keterangan: 'Display promosi buku baru edisi bulan berjalan'
+  },
+  // INVENTARIS LABORATORIUM IPA
+  {
+    id: 'inv-ipa-001',
+    role: 'LAB_IPA',
+    kodeBarang: 'INV-IPA-01/MKS-01',
+    namaBarang: 'Mikroskop Siswa Monokuler LED Pembesaran 40x - 1000x',
+    merkModel: 'Yazumi XSP-12 LED Illuminated Monocular',
+    kategori: 'Alat Optik & Mikroskopi',
+    jumlah: 16,
+    satuan: 'Unit',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Lemari Kaca Optik Lab IPA',
+    tahunPengadaan: 2024,
+    keterangan: 'Praktikum biologi sel dan struktur jaringan tumbuhan/hewan'
+  },
+  {
+    id: 'inv-ipa-002',
+    role: 'LAB_IPA',
+    kodeBarang: 'INV-IPA-02/KIT-01',
+    namaBarang: 'Kit Praktikum Fisika Mekanika, Hidrostatika & Optik SMP',
+    merkModel: 'Pudak Scientific Kit Mekanika SMP Lengkap',
+    kategori: 'Kit Sains & Alat Peraga Fisika',
+    jumlah: 8,
+    satuan: 'Box',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Lemari Instrumen Fisika',
+    tahunPengadaan: 2024,
+    keterangan: 'Praktikum gaya gesek, tuas, hukum archimedes dan lensa'
+  },
+  {
+    id: 'inv-ipa-003',
+    role: 'LAB_IPA',
+    kodeBarang: 'INV-IPA-03/GLS-01',
+    namaBarang: 'Set Alat Gelas Tabung Reaksi, Erlenmeyer, Beaker & Buret Borosilikat',
+    merkModel: 'Pyrex Iwaki Glassware Science Set',
+    kategori: 'Peralatan Gelas Laboratorium',
+    jumlah: 4,
+    satuan: 'Set',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Rak Gelas Tertutup',
+    tahunPengadaan: 2024,
+    keterangan: 'Uji asam-basa, titrasi sederhana, dan larutan uji nutrisi makanan'
+  },
+  {
+    id: 'inv-ipa-004',
+    role: 'LAB_IPA',
+    kodeBarang: 'INV-IPA-04/TRS-01',
+    namaBarang: 'Model Torso Anatomi Tubuh Manusia Unisex 85 cm Lepas Pasang',
+    merkModel: 'Pudak Torso Anatomical Human Model 24 Parts',
+    kategori: 'Model Peraga Anatomi Biologi',
+    jumlah: 2,
+    satuan: 'Unit',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Meja Demonstrasi Guru Lab IPA',
+    tahunPengadaan: 2023,
+    keterangan: 'Pembelajaran sistem pencernaan, peredaran darah dan organ dalam'
+  },
+  {
+    id: 'inv-ipa-005',
+    role: 'LAB_IPA',
+    kodeBarang: 'INV-IPA-05/NRC-01',
+    namaBarang: 'Neraca Ohaus Tiga Lengan (Triple Beam Balance) 311g / 0.01g',
+    merkModel: 'Ohaus 750-S0 Triple Beam 311 Gram',
+    kategori: 'Alat Ukur Presisi Laboratorium',
+    jumlah: 6,
+    satuan: 'Unit',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Lemari Instrumen Pengukuran',
+    tahunPengadaan: 2023,
+    keterangan: 'Praktikum pengukuran massa presisi'
+  },
+  {
+    id: 'inv-ipa-006',
+    role: 'LAB_IPA',
+    kodeBarang: 'INV-IPA-06/K3-01',
+    namaBarang: 'Lemari Khusus Bahan Kimia B3 Tahan Asam & Exhaust Blower',
+    merkModel: 'Krisbow Chemical Safety Cabinet 45 Gallon',
+    kategori: 'Keselamatan & K3 Laboratorium',
+    jumlah: 1,
+    satuan: 'Unit',
+    kondisi: 'Baik',
+    lokasiPenyimpanan: 'Ruang Preparasi Laboran IPA',
+    tahunPengadaan: 2024,
+    keterangan: 'Penyimpanan aman asam klorida, basa pekat, dan indikator kimia'
   }
 ];
 
@@ -620,6 +983,54 @@ export const initialMonthlyReports: MonthlyReport[] = [
       'Melakukan pembersihan berkala saringan got kantin setiap 2 hari sekali'
     ],
     approvalStatus: 'disahkan_kepsek'
+  },
+  {
+    id: 'm-rep-prs-09-2026',
+    role: 'PERPUS',
+    month: 9,
+    year: 2026,
+    manualDocDate: 'Kota Bogor, 30 September 2026',
+    summary: 'Layanan perpustakaan sekolah pada bulan September 2026 mencatatkan lonjakan pemustaka sebesar 25% pasca peluncuran program jam literasi terjadwal. Sebanyak 420 eksemplar buku berhasil disirkulasikan, 120 buku baru selesai dikatalogisasi DDC dan dilabeli barcode, serta 15 buku koleksi referensi rusak telah direstorasi.',
+    achievements: [
+      'Penyelesaian katalogisasi dan input data buku induk 120 judul buku bantuan BOS K-Merdeka',
+      'Peningkatan angka kunjungan perpustakaan hingga rata-rata 85 siswa/hari',
+      'Penyelenggaraan pendampingan literasi 15 menit membaca untuk seluruh rombel kelas 7',
+      'Penerbitan 120 kartu anggota perpustakaan digital berbarcode untuk siswa baru',
+      'Perawatan fisik dan restorasi pengeleman 15 eksemplar buku ensiklopedia & kamus'
+    ],
+    obstacles: [
+      'Beberapa siswa terlambat mengembalikan buku teks pinjaman semester',
+      'Ruang pojok baca lesehan memerlukan tambahan karpet spon anti-debu'
+    ],
+    solutions: [
+      'Memberikan notifikasi pengingat ramah melalui wali kelas dan papan pengumuman perpus',
+      'Mengajukan pengadaan 2 gulung karpet vinil lembut pada RKAS perubahan'
+    ],
+    approvalStatus: 'disahkan_kepsek'
+  },
+  {
+    id: 'm-rep-ipa-09-2026',
+    role: 'LAB_IPA',
+    month: 9,
+    year: 2026,
+    manualDocDate: 'Kota Bogor, 30 September 2026',
+    summary: 'Pelayanan praktikum laboratorium IPA sepanjang bulan September 2026 berjalan tertib, aman, dan tanpa kecelakaan kerja (Zero Laboratory Accident). Terlaksana 36 sesi praktikum fisika dan biologi, seluruh mikroskop dan neraca terkalibrasi baik, serta pengelolaan limbah netralisasi dan K3 terlaksana sesuai standar.',
+    achievements: [
+      'Fasilitasi penyiapan alat & bahan 36 sesi praktikum IPA kelas 7, 8, dan 9 tepat waktu',
+      'Sterilisasi dan pencucian 240+ unit peralatan gelas laboratorium pasca praktikum tanpa kerusakan',
+      'Pengecekan fungsi dan kalibrasi rutin 16 unit mikroskop monokuler dan 6 neraca Ohaus',
+      'Pemeriksaan kesiapan kotak P3K dan indikator tekanan APAR 6 kg dalam kondisi siaga',
+      'Pemutakhiran buku inventaris alat laboratorium dan kartu kendali peminjaman alat guru'
+    ],
+    obstacles: [
+      'Stok reagen Biuret dan larutan Lugol menipis menjelang akhir praktikum sistem pencernaan',
+      'Satu unit kran air wastafel ruang preparasi mengalami kebocoran seal karet'
+    ],
+    solutions: [
+      'Membuat reagen mandiri dari bahan murni stok gudang dan mengajukan amprah reagen baru ke TU',
+      'Mengganti seal karet kran bersama petugas penjaga sekolah sarpras'
+    ],
+    approvalStatus: 'disahkan_kepsek'
   }
 ];
 
@@ -678,6 +1089,44 @@ export const initialAnnualReports: AnnualReport[] = [
       'Penggantian 2 unit gerobak dorong roda karet yang mulai aus',
       'Pengadaan mesin polisher lantai elektrik untuk mempercepat perawatan lantai aula dan koridor',
       'Penambahan wadah cuci tangan dengan pedal kaki di area kantin'
+    ],
+    approvalStatus: 'disahkan_kepsek'
+  },
+  {
+    id: 'ann-rep-prs-2026',
+    role: 'PERPUS',
+    year: 2026,
+    manualDocDate: 'Kota Bogor, 31 Desember 2026',
+    summary: 'Laporan Tahunan Perpustakaan Sekolah Tahun Anggaran 2026 menegaskan tercapainya standar akreditasi perpustakaan sekolah dengan koleksi terkelola 4.800+ judul buku, penerapan otomasi katalog digital (OPAC), serta partisipasi aktif 95% peserta didik dalam gerakan literasi sekolah.',
+    annualMilestones: [
+      'Otomasi sirkulasi dan digitalisasi 100% koleksi buku teks dan non-teks dengan barcode scanner',
+      'Pencatatan 6.400+ transaksi peminjaman buku sepanjang tahun pelajaran',
+      'Penyelesaian stock opname koleksi tahunan dengan tingkat akurasi fisik buku 98.2%',
+      'Pembentukan 12 Pojok Baca Tematik di selasar kelas dan lobi utama sekolah'
+    ],
+    strategicRecommendations: [
+      'Pengembangan koleksi e-Book dan aplikasi perpustakaan digital sekolah berbasis Android',
+      'Penambahan unit rak buku dua muka untuk menampung hibah buku pengayaan baru',
+      'Penyelenggaraan Festival Bulan Bahasa dan Pekan Literasi Tahunan Satuan Pendidikan'
+    ],
+    approvalStatus: 'disahkan_kepsek'
+  },
+  {
+    id: 'ann-rep-ipa-2026',
+    role: 'LAB_IPA',
+    year: 2026,
+    manualDocDate: 'Kota Bogor, 31 Desember 2026',
+    summary: 'Laporan Tahunan Pengelolaan Laboratorium IPA Tahun 2026 melaporkan keterlaksanaan 100% praktikum kurikulum sains untuk jenjang SMP secara aman dan higienis. Pengelolaan sarana laboratorium, keselamatan kerja K3, serta perawatan instrumen presisi terlaksana secara prima.',
+    annualMilestones: [
+      'Fasilitasi 144 jadwal sesi praktikum sains tanpa kecelakaan kerja (Zero Accident K3)',
+      'Kalibrasi berkala seluruh mikroskop optik, neraca pegas, dan alat ukur listrik sekolah',
+      'Pengelolaan limbah bahan kimia praktikum ramah lingkungan dengan sistem sedimentasi & netralisasi',
+      'Pendampingan tim ekstrakurikuler Karya Ilmiah Remaja (KIR) hingga meraih medali tingkat kota'
+    ],
+    strategicRecommendations: [
+      'Pengadaan lemari asam mini (fume hood) untuk eksperimen uap kimia dan reaksi pembakaran',
+      'Penambahan 1 set model torso organ pernapasan dan sistem saraf manusia resolusi tinggi',
+      'Pelatihan penyegaran keselamatan laboratorium kimia bagi guru dan laboran secara berkala'
     ],
     approvalStatus: 'disahkan_kepsek'
   }
@@ -947,6 +1396,104 @@ export const initialArchives: ArchiveDocument[] = [
         'Penggantian 2 unit gerobak dorong roda karet yang mulai aus',
         'Pengadaan mesin polisher lantai elektrik untuk mempercepat perawatan lantai aula dan koridor',
         'Penambahan wadah cuci tangan dengan pedal kaki di area kantin'
+      ],
+      approvalStatus: 'disahkan_kepsek'
+    }
+  },
+  {
+    id: 'arch-perpus-09-2026',
+    regNumber: 'ARS/2026/09/PRS/007',
+    title: 'Laporan Bulanan Layanan Perpustakaan - September 2026',
+    nomorSurat: '800/LAP-BLN/09/PRS/20202819/2026',
+    documentType: 'monthly',
+    role: 'PERPUS',
+    period: 'Bulan September 2026',
+    year: 2026,
+    month: 9,
+    operatorName: 'NURUL HIDAYATI, S.I.Pust.',
+    operatorNip: 'NIPPK. 19920815 202321 2 024',
+    dateArchived: '2026-09-30T14:30:00.000Z',
+    approvalStatus: 'disahkan_kepsek',
+    inspectionNotes: 'Dokumen pelaporan sirkulasi, pengolahan buku DDC, dan jam literasi terverifikasi lengkap.',
+    isAuditVerified: true,
+    checklist: {
+      hasKop: true,
+      hasApprovalSheet: true,
+      hasSignatures: true,
+      hasStamp: true,
+      hasPhotos: true,
+      photoCount: 4
+    },
+    reportData: {
+      id: 'm-rep-prs-09-2026',
+      role: 'PERPUS',
+      month: 9,
+      year: 2026,
+      manualDocDate: 'Kota Bogor, 30 September 2026',
+      summary: 'Layanan perpustakaan sekolah pada bulan September 2026 mencatatkan lonjakan pemustaka sebesar 25% pasca peluncuran program jam literasi terjadwal. Sebanyak 420 eksemplar buku berhasil disirkulasikan, 120 buku baru selesai dikatalogisasi DDC dan dilabeli barcode, serta 15 buku koleksi referensi rusak telah direstorasi.',
+      achievements: [
+        'Penyelesaian katalogisasi dan input data buku induk 120 judul buku bantuan BOS K-Merdeka',
+        'Peningkatan angka kunjungan perpustakaan hingga rata-rata 85 siswa/hari',
+        'Penyelenggaraan pendampingan literasi 15 menit membaca untuk seluruh rombel kelas 7',
+        'Penerbitan 120 kartu anggota perpustakaan digital berbarcode untuk siswa baru',
+        'Perawatan fisik dan restorasi pengeleman 15 eksemplar buku ensiklopedia & kamus'
+      ],
+      obstacles: [
+        'Beberapa siswa terlambat mengembalikan buku teks pinjaman semester',
+        'Ruang pojok baca lesehan memerlukan tambahan karpet spon anti-debu'
+      ],
+      solutions: [
+        'Memberikan notifikasi pengingat ramah melalui wali kelas dan papan pengumuman perpus',
+        'Mengajukan pengadaan 2 gulung karpet vinil lembut pada RKAS perubahan'
+      ],
+      approvalStatus: 'disahkan_kepsek'
+    }
+  },
+  {
+    id: 'arch-labipa-09-2026',
+    regNumber: 'ARS/2026/09/IPA/008',
+    title: 'Laporan Bulanan Laboratorium IPA - September 2026',
+    nomorSurat: '800/LAP-BLN/09/IPA/20202819/2026',
+    documentType: 'monthly',
+    role: 'LAB_IPA',
+    period: 'Bulan September 2026',
+    year: 2026,
+    month: 9,
+    operatorName: 'HENDRA PRASETYA, S.Pd.',
+    operatorNip: 'NIPPK. 19910320 202421 1 038',
+    dateArchived: '2026-09-30T15:10:00.000Z',
+    approvalStatus: 'disahkan_kepsek',
+    inspectionNotes: 'Dokumen kelengkapan SOP K3 laboratorium, jurnal praktikum, dan kartu kalibrasi alat tuntas.',
+    isAuditVerified: true,
+    checklist: {
+      hasKop: true,
+      hasApprovalSheet: true,
+      hasSignatures: true,
+      hasStamp: true,
+      hasPhotos: true,
+      photoCount: 4
+    },
+    reportData: {
+      id: 'm-rep-ipa-09-2026',
+      role: 'LAB_IPA',
+      month: 9,
+      year: 2026,
+      manualDocDate: 'Kota Bogor, 30 September 2026',
+      summary: 'Pelayanan praktikum laboratorium IPA sepanjang bulan September 2026 berjalan tertib, aman, dan tanpa kecelakaan kerja (Zero Laboratory Accident). Terlaksana 36 sesi praktikum fisika dan biologi, seluruh mikroskop dan neraca terkalibrasi baik, serta pengelolaan limbah netralisasi dan K3 terlaksana sesuai standar.',
+      achievements: [
+        'Fasilitasi penyiapan alat & bahan 36 sesi praktikum IPA kelas 7, 8, dan 9 tepat waktu',
+        'Sterilisasi dan pencucian 240+ unit peralatan gelas laboratorium pasca praktikum tanpa kerusakan',
+        'Pengecekan fungsi dan kalibrasi rutin 16 unit mikroskop monokuler dan 6 neraca Ohaus',
+        'Pemeriksaan kesiapan kotak P3K dan indikator tekanan APAR 6 kg dalam kondisi siaga',
+        'Pemutakhiran buku inventaris alat laboratorium dan kartu kendali peminjaman alat guru'
+      ],
+      obstacles: [
+        'Stok reagen Biuret dan larutan Lugol menipis menjelang akhir praktikum sistem pencernaan',
+        'Satu unit kran air wastafel ruang preparasi mengalami kebocoran seal karet'
+      ],
+      solutions: [
+        'Membuat reagen mandiri dari bahan murni stok gudang dan mengajukan amprah reagen baru ke TU',
+        'Mengganti seal karet kran bersama petugas penjaga sekolah sarpras'
       ],
       approvalStatus: 'disahkan_kepsek'
     }

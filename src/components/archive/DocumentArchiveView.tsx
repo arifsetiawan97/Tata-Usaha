@@ -16,6 +16,8 @@ import {
   Building2, 
   Shield, 
   Sparkles, 
+  BookOpen,
+  FlaskConical,
   Eye, 
   Clock, 
   AlertCircle, 
@@ -318,6 +320,32 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Layanan Kebersihan (Service)</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedRole('PERPUS')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold transition-all ${
+                  selectedRole === 'PERPUS'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Perpustakaan</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedRole('LAB_IPA')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-semibold transition-all ${
+                  selectedRole === 'LAB_IPA'
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200'
+                }`}
+              >
+                <FlaskConical className="w-3.5 h-3.5" />
+                <span>Laboratorium IPA</span>
+              </button>
             </>
           ) : (
             <div className="flex items-center gap-2">
@@ -328,7 +356,14 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
                 {currentRole === 'PENJAGA' && <Shield className="w-3.5 h-3.5 text-blue-400" />}
                 {currentRole === 'TU' && <Building2 className="w-3.5 h-3.5 text-sky-400" />}
                 {currentRole === 'SERVICE' && <Sparkles className="w-3.5 h-3.5 text-emerald-400" />}
-                <span>{currentRole === 'PENJAGA' ? 'Penjaga Sekolah' : currentRole === 'TU' ? 'Tata Usaha' : 'Layanan Kebersihan'}</span>
+                {currentRole === 'PERPUS' && <BookOpen className="w-3.5 h-3.5 text-purple-400" />}
+                {currentRole === 'LAB_IPA' && <FlaskConical className="w-3.5 h-3.5 text-teal-400" />}
+                <span>
+                  {currentRole === 'PENJAGA' ? 'Penjaga Sekolah' : 
+                   currentRole === 'TU' ? 'Tata Usaha' : 
+                   currentRole === 'SERVICE' ? 'Layanan Kebersihan' :
+                   currentRole === 'PERPUS' ? 'Perpustakaan' : 'Laboratorium IPA'}
+                </span>
               </span>
             </div>
           )}
@@ -379,7 +414,9 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
             const roleBadge = {
               TU: { bg: 'bg-sky-50 text-sky-800 border-sky-200', label: 'Tata Usaha (TU)' },
               PENJAGA: { bg: 'bg-blue-50 text-blue-800 border-blue-200', label: 'Penjaga Sekolah' },
-              SERVICE: { bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', label: 'Layanan Kebersihan' }
+              SERVICE: { bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', label: 'Layanan Kebersihan' },
+              PERPUS: { bg: 'bg-purple-50 text-purple-800 border-purple-200', label: 'Perpustakaan' },
+              LAB_IPA: { bg: 'bg-teal-50 text-teal-800 border-teal-200', label: 'Laboratorium IPA' }
             }[doc.role];
 
             return (

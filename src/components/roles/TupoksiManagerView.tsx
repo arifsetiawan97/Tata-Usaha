@@ -77,13 +77,21 @@ export const TupoksiManagerView: React.FC<TupoksiManagerViewProps> = ({
     ? 'Tata Usaha (Administrasi Sekolah)' 
     : selectedRole === 'PENJAGA' 
     ? 'Penjaga Sekolah (Keamanan & Sapras)' 
-    : 'Layanan Kebersihan (Service)';
+    : selectedRole === 'SERVICE'
+    ? 'Layanan Kebersihan (Service)'
+    : selectedRole === 'PERPUS'
+    ? 'Layanan Perpustakaan Sekolah'
+    : 'Pengelola Laboratorium IPA';
 
   const roleTheme = selectedRole === 'TU'
     ? { border: 'border-sky-500', bg: 'bg-sky-50', text: 'text-sky-900', badge: 'bg-sky-100 text-sky-800' }
     : selectedRole === 'PENJAGA'
     ? { border: 'border-blue-600', bg: 'bg-blue-50', text: 'text-blue-900', badge: 'bg-blue-100 text-blue-800' }
-    : { border: 'border-emerald-600', bg: 'bg-emerald-50', text: 'text-emerald-900', badge: 'bg-emerald-100 text-emerald-800' };
+    : selectedRole === 'SERVICE'
+    ? { border: 'border-emerald-600', bg: 'bg-emerald-50', text: 'text-emerald-900', badge: 'bg-emerald-100 text-emerald-800' }
+    : selectedRole === 'PERPUS'
+    ? { border: 'border-purple-600', bg: 'bg-purple-50', text: 'text-purple-900', badge: 'bg-purple-100 text-purple-800' }
+    : { border: 'border-teal-600', bg: 'bg-teal-50', text: 'text-teal-900', badge: 'bg-teal-100 text-teal-800' };
 
   // Handle Add Pokok
   const handleAddPokok = (e: React.FormEvent) => {

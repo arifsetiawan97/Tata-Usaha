@@ -32,7 +32,11 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
 }) => {
   const { inventories, addInventory, updateInventory, deleteInventory, importInventories, currentRole } = useApp();
   const effectiveRole = role || currentRole || 'TU';
-  const roleTitle = effectiveRole === 'TU' ? 'Tata Usaha' : effectiveRole === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
+  const roleTitle = 
+    effectiveRole === 'TU' ? 'Tata Usaha' : 
+    effectiveRole === 'PENJAGA' ? 'Penjaga Sekolah' : 
+    effectiveRole === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
+    effectiveRole === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterKondisi, setFilterKondisi] = useState<string>('all');

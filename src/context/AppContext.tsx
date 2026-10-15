@@ -91,7 +91,7 @@ const STORAGE_KEYS = {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentRole, setCurrentRoleState] = useState<RoleType | null>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.ROLE);
-    if (saved === 'TU' || saved === 'PENJAGA' || saved === 'SERVICE') {
+    if (saved === 'TU' || saved === 'PENJAGA' || saved === 'SERVICE' || saved === 'PERPUS' || saved === 'LAB_IPA') {
       return saved as RoleType;
     }
     return null;
@@ -102,26 +102,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // If all 3 roles were still set to the old shared 1234, upgrade to distinct PINs
-        if (parsed.TU === '1234' && parsed.PENJAGA === '1234' && parsed.SERVICE === '1234') {
-          return {
-            TU: '2101',
-            PENJAGA: '2102',
-            SERVICE: '2103'
-          };
-        }
-        return parsed;
+        return {
+          TU: parsed.TU || '2101',
+          PENJAGA: parsed.PENJAGA || '2102',
+          SERVICE: parsed.SERVICE || '2103',
+          PERPUS: parsed.PERPUS || '2104',
+          LAB_IPA: parsed.LAB_IPA || '2105'
+        };
       } catch (e) { console.error(e); }
     }
     return {
       TU: '2101',
       PENJAGA: '2102',
-      SERVICE: '2103'
+      SERVICE: '2103',
+      PERPUS: '2104',
+      LAB_IPA: '2105'
     };
   });
 
   const verifyRolePin = (role: RoleType, pin: string): boolean => {
-    const fallbackPin = role === 'TU' ? '2101' : role === 'PENJAGA' ? '2102' : '2103';
+    const fallbackPin = 
+      role === 'TU' ? '2101' : 
+      role === 'PENJAGA' ? '2102' : 
+      role === 'SERVICE' ? '2103' : 
+      role === 'PERPUS' ? '2104' : '2105';
     const expected = rolePins[role] || fallbackPin;
     return pin.trim() === expected.trim();
   };
@@ -182,7 +186,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [schoolConfig, setSchoolConfig] = useState<SchoolConfig>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          ...initialSchoolConfig,
+          ...parsed,
+          operatorProfiles: {
+            ...initialSchoolConfig.operatorProfiles,
+            ...(parsed.operatorProfiles || {})
+          }
+        };
+      } catch (e) {
+        console.error(e);
+      }
     }
     return initialSchoolConfig;
   });
@@ -190,21 +206,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [tupoksiDefinitions, setTupoksiDefinitions] = useState<TupoksiDefinitionsMap>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.TUPOKSI);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          ...OFFICIAL_TUPOKSI_DEFINITIONS,
+          ...parsed
+        };
+      } catch (e) {
+        console.error(e);
+      }
     }
     return JSON.parse(JSON.stringify(OFFICIAL_TUPOKSI_DEFINITIONS));
   });
 
   const [roleSubTabs, setRoleSubTabs] = useState<Record<RoleType, RoleSubTab>>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.SUBTABS);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return {
+    const defaultTabs: Record<RoleType, RoleSubTab> = {
       TU: 'tasks',
       PENJAGA: 'tasks',
-      SERVICE: 'tasks'
+      SERVICE: 'tasks',
+      PERPUS: 'tasks',
+      LAB_IPA: 'tasks'
     };
+    const saved = localStorage.getItem(STORAGE_KEYS.SUBTABS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...defaultTabs, ...parsed };
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return defaultTabs;
   });
 
   const [lastAddedTaskMonthYear, setLastAddedTaskMonthYear] = useState<{ month: number; year: number } | null>(null);
@@ -319,6 +351,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           SERVICE: {
             tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.SERVICE.tupoksiList],
             tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.SERVICE.tugasTambahanList]
+          },
+          PERPUS: {
+            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.PERPUS.tupoksiList],
+            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.PERPUS.tugasTambahanList]
+          },
+          LAB_IPA: {
+            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.LAB_IPA.tupoksiList],
+            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.LAB_IPA.tugasTambahanList]
           }
         };
       }
@@ -357,12 +397,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(json.data.archives));
             }
             if (json.data.schoolConfig) {
-              setSchoolConfig(json.data.schoolConfig);
-              localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(json.data.schoolConfig));
+              const mergedConfig: SchoolConfig = {
+                ...initialSchoolConfig,
+                ...json.data.schoolConfig,
+                operatorProfiles: {
+                  ...initialSchoolConfig.operatorProfiles,
+                  ...(json.data.schoolConfig.operatorProfiles || {})
+                }
+              };
+              setSchoolConfig(mergedConfig);
+              localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(mergedConfig));
             }
             if (json.data.tupoksiDefinitions) {
-              setTupoksiDefinitions(json.data.tupoksiDefinitions);
-              localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(json.data.tupoksiDefinitions));
+              const mergedTupoksi: TupoksiDefinitionsMap = {
+                ...OFFICIAL_TUPOKSI_DEFINITIONS,
+                ...json.data.tupoksiDefinitions
+              };
+              setTupoksiDefinitions(mergedTupoksi);
+              localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(mergedTupoksi));
             }
           }
         }
@@ -665,7 +717,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const generateAnnualReportFromMonthly = (role: RoleType, year: number): AnnualReport => {
     const existing = annualReports.find(r => r.role === role && r.year === year);
-    const roleTitle = role === 'TU' ? 'Tata Usaha' : role === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
+    const roleTitle = 
+      role === 'TU' ? 'Tata Usaha' : 
+      role === 'PENJAGA' ? 'Penjaga Sekolah' : 
+      role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
+      role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
     const formattedManualDate = `${schoolConfig.kabupatenKota}, 31 Desember ${year}`;
 
     if (existing) return existing;
@@ -709,19 +765,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const archiveReport = (type: 'monthly' | 'annual', data: any, customTitle?: string): ArchiveDocument => {
     const role: RoleType = data.role || currentRole || 'TU';
-    const roleCode = role === 'TU' ? 'TU' : role === 'PENJAGA' ? 'PJG' : 'SRV';
+    const roleCode = 
+      role === 'TU' ? 'TU' : 
+      role === 'PENJAGA' ? 'PJG' : 
+      role === 'SERVICE' ? 'SRV' :
+      role === 'PERPUS' ? 'PRS' : 'IPA';
     const year = data.year || new Date().getFullYear();
     const month = data.month || (type === 'monthly' ? new Date().getMonth() + 1 : undefined);
-    const operator = schoolConfig.operatorProfiles[role];
+    const operator = schoolConfig.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role];
     const monthNames = [
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
     ];
 
+    const roleName = 
+      role === 'TU' ? 'Tata Usaha' : 
+      role === 'PENJAGA' ? 'Penjaga Sekolah' : 
+      role === 'SERVICE' ? 'Layanan Kebersihan' :
+      role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
+
     const regNumber = `ARS/${year}/${month ? String(month).padStart(2, '0') : 'THN'}/${roleCode}/${String(archives.length + 1).padStart(3, '0')}`;
     const docTitle = customTitle || (type === 'monthly'
-      ? `Laporan Bulanan Kinerja ${role === 'TU' ? 'Tata Usaha' : role === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan'} - ${month ? monthNames[month - 1] : ''} ${year}`
-      : `Laporan Tahunan Kinerja ${role === 'TU' ? 'Tata Usaha' : role === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan'} - Tahun Anggaran ${year}`);
+      ? `Laporan Bulanan Kinerja ${roleName} - ${month ? monthNames[month - 1] : ''} ${year}`
+      : `Laporan Tahunan Kinerja ${roleName} - Tahun Anggaran ${year}`);
 
     const roleTasks = tasks.filter(t => t.role === role);
     const roleTasksWithPhotos = roleTasks.filter(t => !!t.photoUrl);
@@ -786,9 +852,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (jsonData.inventories && Array.isArray(jsonData.inventories)) setInventories(jsonData.inventories);
         if (jsonData.monthlyReports && Array.isArray(jsonData.monthlyReports)) setMonthlyReports(jsonData.monthlyReports);
         if (jsonData.annualReports && Array.isArray(jsonData.annualReports)) setAnnualReports(jsonData.annualReports);
-        if (jsonData.archives && Array.isArray(jsonData.archives)) setArchives(jsonData.archives);
-        if (jsonData.schoolConfig) setSchoolConfig(jsonData.schoolConfig);
-        return true;
+        if (jsonData.schoolConfig) {
+          const mergedConfig: SchoolConfig = {
+            ...initialSchoolConfig,
+            ...jsonData.schoolConfig,
+            operatorProfiles: {
+              ...initialSchoolConfig.operatorProfiles,
+              ...(jsonData.schoolConfig.operatorProfiles || {})
+            }
+          };
+          setSchoolConfig(mergedConfig);
+        }
       }
     } catch (e) {
       console.error(e);

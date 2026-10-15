@@ -377,9 +377,19 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
 
           {activeTab === 'operator' && (
             <div className="space-y-4">
-              {(['TU', 'PENJAGA', 'SERVICE'] as RoleType[]).map(roleKey => {
-                const op = formData.operatorProfiles[roleKey];
-                const label = roleKey === 'TU' ? 'Operator Tata Usaha' : roleKey === 'PENJAGA' ? 'Petugas Penjaga Sekolah' : 'Petugas Layanan Kebersihan (Service)';
+              {(['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'] as RoleType[]).map(roleKey => {
+                const op = formData.operatorProfiles[roleKey] || {
+                  nama: '',
+                  nip: '',
+                  jabatan: roleKey === 'PERPUS' ? 'Pengelola Perpustakaan' : 'Laboran Lab IPA',
+                  signatureType: 'script',
+                  signatureData: ''
+                };
+                const label = 
+                  roleKey === 'TU' ? 'Operator Tata Usaha' : 
+                  roleKey === 'PENJAGA' ? 'Petugas Penjaga Sekolah' : 
+                  roleKey === 'SERVICE' ? 'Petugas Layanan Kebersihan (Service)' :
+                  roleKey === 'PERPUS' ? 'Pengelola Perpustakaan Sekolah' : 'Laboran / Pengelola Lab IPA';
                 return (
                   <div key={roleKey} className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
                     <h4 className="font-bold text-slate-900">{label}</h4>
