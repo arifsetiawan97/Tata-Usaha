@@ -1,4 +1,4 @@
-import { SchoolConfig, TaskLog, InventoryItem, MonthlyReport, AnnualReport, ArchiveDocument } from '../types';
+import { SchoolConfig, TaskLog, InventoryItem, MonthlyReport, AnnualReport, ArchiveDocument, CustomCategory } from '../types';
 
 export const initialSchoolConfig: SchoolConfig = {
   pemerintahDaerah: 'PEMERINTAH DAERAH PROVINSI JAWA BARAT',
@@ -1499,4 +1499,53 @@ export const initialArchives: ArchiveDocument[] = [
     }
   }
 ];
+
+export const initialCustomCategories: CustomCategory[] = [
+  {
+    id: 'cat-tu-01',
+    role: 'TU',
+    name: 'Layanan Legalisir Ijazah & Rapor',
+    slug: 'legalisir_ijazah',
+    classification: 'pokok',
+    description: 'Pemeriksaan keaslian, penatausahaan arsip dan pembubuhan cap legalisir ijazah/rapor alumni',
+    createdAt: '2026-09-01'
+  },
+  {
+    id: 'cat-penjaga-01',
+    role: 'PENJAGA',
+    name: 'Pengaturan Lalu Lintas Gerbang Sekolah',
+    slug: 'lalu_lintas_gerbang',
+    classification: 'pokok',
+    description: 'Bantu penyeberangan peserta didik dan penertiban kendaraan antar-jemput depan gerbang utama',
+    createdAt: '2026-09-01'
+  },
+  {
+    id: 'cat-service-01',
+    role: 'SERVICE',
+    name: 'Sterilisasi Khusus Ruang UKS & Ibadah',
+    slug: 'sterilisasi_uks_musholla',
+    classification: 'pokok',
+    description: 'Pembersihan antiseptik karpet musholla sekolah dan sterilisasi ranjang ruang UKS',
+    createdAt: '2026-09-01'
+  },
+  {
+    id: 'cat-perpus-01',
+    role: 'PERPUS',
+    name: 'Pengelolaan Pojok Baca Digital (E-Library)',
+    slug: 'pojok_baca_digital',
+    classification: 'tambahan',
+    description: 'Penyediaan tablet baca digital dan asistensi peminjaman buku elektronik peserta didik',
+    createdAt: '2026-09-01'
+  },
+  {
+    id: 'cat-lab-01',
+    role: 'LAB_IPA',
+    name: 'Pemeliharaan Kebun Botani & Hidroponik Lab',
+    slug: 'kebun_botani_lab',
+    classification: 'tambahan',
+    description: 'Pengecekan nutrisi hidroponik dan tanaman peraga biologi lingkungan laboratorium',
+    createdAt: '2026-09-01'
+  }
+];
+
 

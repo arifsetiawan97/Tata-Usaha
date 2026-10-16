@@ -18,6 +18,7 @@ function MainLayout() {
     isOpen: boolean;
     reportType: 'monthly' | 'annual';
     reportData: any;
+    autoPrint?: boolean;
   } | null>(null);
 
   if (!currentRole) {
@@ -30,17 +31,19 @@ function MainLayout() {
         <PrintDocumentView
           reportType={printState.reportType}
           reportData={printState.reportData}
+          autoPrint={printState.autoPrint}
           onBack={() => setPrintState(null)}
         />
       </div>
     );
   }
 
-  const handleOpenPrint = (reportType: 'monthly' | 'annual', data: any) => {
+  const handleOpenPrint = (reportType: 'monthly' | 'annual', data: any, options?: { autoPrint?: boolean }) => {
     setPrintState({
       isOpen: true,
       reportType,
-      reportData: data
+      reportData: data,
+      autoPrint: options?.autoPrint
     });
   };
 

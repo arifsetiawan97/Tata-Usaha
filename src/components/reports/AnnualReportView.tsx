@@ -24,11 +24,12 @@ import {
   Wand2,
   Shield,
   Building2,
-  Sliders
+  Sliders,
+  Eye
 } from 'lucide-react';
 
 interface AnnualReportViewProps {
-  onOpenPrint: (reportType: 'monthly' | 'annual', data: any) => void;
+  onOpenPrint: (reportType: 'monthly' | 'annual', data: any, options?: { autoPrint?: boolean }) => void;
   initialRole?: RoleType;
   lockRole?: boolean;
 }
@@ -421,14 +422,26 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             <span>Simpan</span>
           </button>
 
-          {/* Open Print Document */}
+          {/* Direct Print Document (1-Click) */}
+          <button
+            type="button"
+            onClick={() => onOpenPrint('annual', reportState, { autoPrint: true })}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors shadow-xs cursor-pointer"
+            title="Langsung cetak dokumen tahunan ke printer (dialog cetak otomatis terbuka)"
+          >
+            <Printer className="w-3.5 h-3.5 text-white" />
+            <span>Cetak Langsung</span>
+          </button>
+
+          {/* Open Print Document Preview */}
           <button
             type="button"
             onClick={() => onOpenPrint('annual', reportState)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors shadow-xs cursor-pointer"
+            title="Buka pratinjau lengkap dengan Kop, Pengesahan & Unduh PDF"
           >
-            <Printer className="w-3.5 h-3.5 text-amber-400" />
-            <span>Cetak / Unduh PDF</span>
+            <Eye className="w-3.5 h-3.5 text-sky-400" />
+            <span>Pratinjau / Pengesahan</span>
           </button>
 
           {/* Archive Annual Report */}

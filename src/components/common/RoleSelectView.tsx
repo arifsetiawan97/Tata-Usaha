@@ -29,14 +29,14 @@ export const RoleSelectView: React.FC = () => {
   const [pinError, setPinError] = useState<string | null>(null);
 
   const getOperator = (role: RoleType) => {
-    return (
-      schoolConfig?.operatorProfiles?.[role] ||
-      initialSchoolConfig.operatorProfiles[role] || {
-        nama: 'Petugas Layanan Operasional',
-        nip: '-',
-        jabatan: 'Operator'
-      }
-    );
+    const prof = schoolConfig?.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles?.[role];
+    const fallback = initialSchoolConfig.operatorProfiles?.[role];
+    return {
+      nama: prof?.nama || fallback?.nama || 'Petugas Layanan Operasional',
+      nip: prof?.nip || fallback?.nip || '-',
+      jabatan: prof?.jabatan || fallback?.jabatan || 'Operator',
+      pangkatGolongan: prof?.pangkatGolongan || fallback?.pangkatGolongan || '-'
+    };
   };
 
   const handleOpenLogin = (role: RoleType) => {

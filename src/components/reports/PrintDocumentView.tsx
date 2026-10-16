@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { KopSurat } from '../common/KopSurat';
 import { OfficialApprovalSheet } from '../common/OfficialApprovalSheet';
@@ -29,11 +29,13 @@ import {
   Target,
   BookmarkCheck
 } from 'lucide-react';
+import { initialSchoolConfig } from '../../data/initialData';
 
 interface PrintDocumentViewProps {
   reportType: 'monthly' | 'annual';
   reportData: MonthlyReport | AnnualReport;
   onBack: () => void;
+  autoPrint?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -44,7 +46,8 @@ const MONTH_NAMES = [
 export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   reportType,
   reportData,
-  onBack
+  onBack,
+  autoPrint = false
 }) => {
   const { schoolConfig, currentRole, tasks, inventories, archiveReport, tupoksiDefinitions } = useApp();
   const printableRef = useRef<HTMLDivElement>(null);
@@ -55,7 +58,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     role === 'PENJAGA' ? 'Penjaga Sekolah' : 
     role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
     role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
-  const operator = schoolConfig.operatorProfiles[role] || {
+  const operator = schoolConfig.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role] || {
     nama: 'Petugas Layanan Operasional',
     nip: '-',
     jabatan: roleTitle,
@@ -174,6 +177,28 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     setTimeout(() => setArchivedSuccess(null), 5000);
   };
 
+  // Auto trigger direct print if requested from caller
+  useEffect(() => {
+    if (autoPrint) {
+      const timer = setTimeout(() => {
+        window.print();
+      }, 450);
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint]);
+
+  // Keyboard shortcut Ctrl+P / Cmd+P
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        window.print();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div className="space-y-4 pb-12">
       {/* Floating Control Toolbar (Hidden in Print & Export) */}
@@ -182,7 +207,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs font-semibold rounded-lg transition-colors border border-slate-700 shrink-0"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs font-semibold rounded-lg transition-colors border border-slate-700 shrink-0 cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Kembali</span>
@@ -214,6 +239,17 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
             />
           </div>
 
+          {/* CETAK LANGSUNG (PRINT) */}
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg transition-all shadow-md cursor-pointer ring-2 ring-emerald-400/40"
+            title="Cetak langsung dokumen resmi sekarang (Ctrl + P)"
+          >
+            <Printer className="w-4 h-4 text-emerald-100 animate-pulse" />
+            <span>Cetak Langsung (Ctrl + P)</span>
+          </button>
+
           {/* SIMPAN PDF (Direct PDF Export) */}
           <button
             type="button"
@@ -230,20 +266,9 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
             ) : (
               <>
                 <FileCheck2 className="w-3.5 h-3.5 text-rose-200" />
-                <span>Simpan PDF (Langsung)</span>
+                <span>Simpan PDF</span>
               </>
             )}
-          </button>
-
-          {/* CETAK / PRINT DIALOG */}
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-lg transition-all shadow-md cursor-pointer"
-            title="Buka dialog cetak browser"
-          >
-            <Printer className="w-3.5 h-3.5 text-blue-200" />
-            <span>Dialog Cetak</span>
           </button>
 
           {/* UNDUH HTML */}

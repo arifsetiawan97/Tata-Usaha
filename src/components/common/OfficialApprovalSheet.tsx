@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SchoolConfig, RoleType } from '../../types';
+import { initialSchoolConfig } from '../../data/initialData';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
 import { 
   Edit3, 
@@ -203,7 +204,7 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
 
   // Signatures store
   const [signatures, setSignatures] = useState<Record<string, string>>({
-    operator: config.operatorProfiles[role]?.signatureImage || '',
+    operator: config.operatorProfiles?.[role]?.signatureImage || '',
     kepsek: config.kepalaSekolah?.signatureImage || '',
     kasubag: ''
   });
@@ -218,11 +219,15 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
 
   const [customStempel, setCustomStempel] = useState<string>(config.customStempelUrl || '');
 
-  const operator = config.operatorProfiles[role];
-  const kepsek = config.kepalaSekolah;
+  const operator = config.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role] || {
+    nama: 'Petugas Layanan Operasional',
+    nip: '-',
+    jabatan: 'Operator'
+  };
+  const kepsek = config.kepalaSekolah || initialSchoolConfig.kepalaSekolah;
   // Kasubag TU / Koordinator Urusan data fallback
-  const kasubagName = config.operatorProfiles['TU']?.nama || 'Koordinator Urusan Tata Usaha';
-  const kasubagNip = config.operatorProfiles['TU']?.nip || '19820512 200801 1 008';
+  const kasubagName = config.operatorProfiles?.['TU']?.nama || initialSchoolConfig.operatorProfiles['TU']?.nama || 'Koordinator Urusan Tata Usaha';
+  const kasubagNip = config.operatorProfiles?.['TU']?.nip || initialSchoolConfig.operatorProfiles['TU']?.nip || '19820512 200801 1 008';
 
   const handleModeChange = (mode: SignatureStyleMode) => {
     setSignatureMode(mode);

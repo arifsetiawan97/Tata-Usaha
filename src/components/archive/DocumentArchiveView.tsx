@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 
 interface DocumentArchiveViewProps {
-  onOpenDocument: (reportType: 'monthly' | 'annual', reportData: any) => void;
+  onOpenDocument: (reportType: 'monthly' | 'annual', reportData: any, options?: { autoPrint?: boolean }) => void;
 }
 
 export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpenDocument }) => {
@@ -462,6 +462,17 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
 
                   {/* Right: Direct Action Buttons */}
                   <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                    {/* CETAK LANGSUNG (1-KLIK) */}
+                    <button
+                      type="button"
+                      onClick={() => onOpenDocument(doc.documentType as any, doc.reportData, { autoPrint: true })}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
+                      title="Cetak langsung dokumen resmi ini (dialog cetak otomatis terbuka)"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Cetak Langsung</span>
+                    </button>
+
                     {/* BUKA & CETAK DOKUMEN */}
                     <button
                       type="button"
@@ -470,7 +481,7 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
                       title="Lihat dokumen lengkap dengan Kop & Pengesahan Resmi"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>Lihat & Cetak Resmi</span>
+                      <span>Pratinjau & Pengesahan</span>
                     </button>
 
                     {/* UNDUH HTML RESMI */}

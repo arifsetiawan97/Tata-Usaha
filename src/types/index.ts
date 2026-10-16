@@ -51,7 +51,18 @@ export type TaskCategory =
   | TaskCategoryTU 
   | TaskCategoryService 
   | TaskCategoryPerpus 
-  | TaskCategoryLabIPA;
+  | TaskCategoryLabIPA
+  | (string & {});
+
+export interface CustomCategory {
+  id: string;
+  role: RoleType;
+  name: string;
+  slug: string;
+  classification: 'pokok' | 'tambahan';
+  description?: string;
+  createdAt: string;
+}
 
 export interface TaskLog {
   id: string;

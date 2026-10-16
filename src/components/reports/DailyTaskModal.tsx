@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { TaskLog, RoleType, TaskCategory } from '../../types';
 import { TASK_PRESETS, parseTasksCsv, exportTasksToCsv, TaskPresetItem } from '../../data/taskPresets';
 import { getLocalTodayStr, getTaskClassification } from '../../utils/taskClassification';
+import { initialSchoolConfig } from '../../data/initialData';
 import { 
   X, 
   Upload, 
@@ -22,7 +23,9 @@ import {
   Tag,
   Info,
   Target,
-  BookmarkCheck
+  BookmarkCheck,
+  Plus,
+  FolderPlus
 } from 'lucide-react';
 
 interface DailyTaskModalProps {
@@ -42,12 +45,32 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
   initialMode = 'template',
   initialPreset
 }) => {
-  const { addTask, updateTask, importTasks, schoolConfig, tupoksiDefinitions } = useApp();
-  const operator = schoolConfig.operatorProfiles[role];
+  const { 
+    addTask, 
+    updateTask, 
+    importTasks, 
+    schoolConfig, 
+    tupoksiDefinitions,
+    customCategories,
+    addCustomCategory,
+    getCategoryLabel
+  } = useApp();
+  const operator = schoolConfig.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role] || {
+    nama: 'Petugas Layanan Operasional',
+    nip: '-',
+    jabatan: 'Operator'
+  };
   const rolePresets = TASK_PRESETS[role] || [];
   const currentRoleTupoksi = tupoksiDefinitions[role] || { tupoksiList: [], tugasTambahanList: [] };
 
   const todayStr = getLocalTodayStr();
+
+  // Custom Category Creation Modal state
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatClassification, setNewCatClassification] = useState<'pokok' | 'tambahan'>('pokok');
+  const [newCatDescription, setNewCatDescription] = useState('');
+  const [categoryNotice, setCategoryNotice] = useState<string | null>(null);
 
   // Primary tab: form vs import
   const [activeTab, setActiveTab] = useState<'form' | 'import'>(
@@ -369,6 +392,32 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     setInputMode('manual');
   };
 
+  // Handler to add custom service category on the fly
+  const handleSaveNewCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+
+    const created = addCustomCategory({
+      role,
+      name: newCatName.trim(),
+      classification: newCatClassification,
+      description: newCatDescription.trim() || undefined
+    });
+
+    setFormData(prev => ({
+      ...prev,
+      category: created.slug as TaskCategory,
+      taskType: created.classification
+    }));
+
+    setCategoryNotice(`Kategori layanan "${created.name}" berhasil ditambahkan & langsung dipilih!`);
+    setTimeout(() => setCategoryNotice(null), 3500);
+
+    setNewCatName('');
+    setNewCatDescription('');
+    setShowAddCategoryModal(false);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim()) return;
@@ -439,101 +488,121 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
   };
 
   // Render Category Select Options (All expanded categories)
+  // Render Category Select Options (All expanded categories + custom categories)
   const renderCategoryOptions = () => {
-    if (role === 'TU') {
+    const roleCustomCats = customCategories.filter(c => c.role === role);
+
+    const standardOptions = (() => {
+      if (role === 'TU') {
+        return (
+          <>
+            <optgroup label="Administrasi Kepegawaian & GTK">
+              <option value="kepegawaian">Kepegawaian (SKP, Pangkat, BKN, Cuti, KGB, Roster)</option>
+            </optgroup>
+            <optgroup label="Administrasi Kesiswaan">
+              <option value="siswa">Kesiswaan (Buku Induk, Mutasi, Suket, Legalisir, NISN)</option>
+            </optgroup>
+            <optgroup label="Tata Kelola Persuratan & Disposisi">
+              <option value="surat_masuk">Surat Masuk (Buku Agenda & Disposisi Kepsek)</option>
+              <option value="surat_keluar">Surat Keluar (Nomor Dinas, SPPD, Edaran & Legalisir)</option>
+            </optgroup>
+            <optgroup label="Keuangan & Anggaran Sekolah">
+              <option value="keuangan_bos">Keuangan BOS/BOP (BKU, SPJ, Pajak & ARKAS)</option>
+            </optgroup>
+            <optgroup label="Aset & Sarana Prasarana">
+              <option value="sapras">Sarpras & Aset (KIR, KIB, BAST & Verifikasi Aset)</option>
+            </optgroup>
+            <optgroup label="Sistem Informasi & Kearsipan">
+              <option value="dapodik">Dapodikdasmen (Validasi Rombel, GTK & Siswa)</option>
+              <option value="kearsipan">Kearsipan (Digitalisasi PDF & Penataan Odner)</option>
+              <option value="layanan_umum">Layanan Umum (Notulen Rapat, Tamu Dinas & Humas)</option>
+            </optgroup>
+          </>
+        );
+      }
+      if (role === 'PENJAGA') {
+        return (
+          <>
+            <optgroup label="Pengamanan & Ronda">
+              <option value="keamanan">Keamanan Umum (Patroli, Pos Jaga, Pengecekan Kunci)</option>
+              <option value="inspeksi_malam">Inspeksi & Ronda Malam (Gardu, MCB, Pagar Belakang)</option>
+              <option value="protokoler_tamu">Protokoler Tamu (Penerimaan Tamu Dinas & Parkir)</option>
+            </optgroup>
+            <optgroup label="Ketertiban & Kesiapsiagaan">
+              <option value="pengawasan_anak">Mengawasi Siswa (Penyeberangan, Pagi, Istirahat)</option>
+              <option value="tanggap_darurat">Kesiapsiagaan Darurat (APAR, Drainase, Listrik)</option>
+            </optgroup>
+            <optgroup label="Pemeliharaan & Ekspedisi">
+              <option value="perbaikan_sapras">Perbaikan Sarana/Prasarana Ringan Sekolah</option>
+              <option value="lingkungan">Tambahan Lingkungan (Pohon, Rumput, Saluran)</option>
+              <option value="antar_surat">Antar Surat Dinas & Ekspedisi Disdik</option>
+            </optgroup>
+          </>
+        );
+      }
+      if (role === 'PERPUS') {
+        return (
+          <>
+            <optgroup label="Pengolahan & Bahan Pustaka">
+              <option value="katalogisasi_buku">Katalogisasi & DDC (Buku Induk, Barcode, Label Punggung)</option>
+              <option value="perawatan_buku">Perawatan & Restorasi (Penjilidan, Lem, Laminasi Buku)</option>
+              <option value="stock_opname">Stock Opname Koleksi (Inventarisasi & Pencocokan Rak)</option>
+            </optgroup>
+            <optgroup label="Sirkulasi & Layanan Pemustaka">
+              <option value="sirkulasi_peminjaman">Sirkulasi Peminjaman (Pinjam, Kembali & Denda)</option>
+              <option value="layanan_literasi">Layanan Literasi (15 Mnt GLS, Pojok Baca & Bimbingan)</option>
+              <option value="administrasi_perpus">Administrasi Perpustakaan (Kartu Anggota & Suket Bebas Perpus)</option>
+            </optgroup>
+          </>
+        );
+      }
+      if (role === 'LAB_IPA') {
+        return (
+          <>
+            <optgroup label="Praktikum & Eksperimen Siswa">
+              <option value="persiapan_praktikum">Persiapan Praktikum (Mikroskop, Preparat & Kit Fisika)</option>
+              <option value="jadwal_lab">Jadwal & Jurnal (Penjadwalan Ruang & Presensi Praktikum)</option>
+            </optgroup>
+            <optgroup label="Pemeliharaan & Keselamatan Lab">
+              <option value="pemeliharaan_alat">Pemeliharaan Alat Gelas (Pencucian, Sterilisasi & Oven)</option>
+              <option value="perbaikan_alat">Kalibrasi & Perbaikan (Neraca Ohaus, Catu Daya & Optik)</option>
+              <option value="inventaris_bahan">Inventaris Reagen Kimia (Kartu Stok & Lemari B3)</option>
+              <option value="k3_laboratorium">Keselamatan Kerja K3 (APAR, P3K, Netralisasi Limbah)</option>
+            </optgroup>
+          </>
+        );
+      }
       return (
         <>
-          <optgroup label="Administrasi Kepegawaian & GTK">
-            <option value="kepegawaian">Kepegawaian (SKP, Pangkat, BKN, Cuti, KGB, Roster)</option>
+          <optgroup label="Sanitasi Ruang & Toilet">
+            <option value="kebersihan_wc">Kebersihan Toilet / WC (Siswa, Guru, Sanitasi)</option>
+            <option value="kebersihan_kantor">Kebersihan Ruang Kerja (Kepsek, Guru, TU, Debu, Pel)</option>
           </optgroup>
-          <optgroup label="Administrasi Kesiswaan">
-            <option value="siswa">Kesiswaan (Buku Induk, Mutasi, Suket, Legalisir, NISN)</option>
+          <optgroup label="Pengelolaan Lingkungan & Sampah">
+            <option value="kebersihan_sampah">Kebersihan Sampah (Pilah Organik/Anorganik & TPS)</option>
+            <option value="kebersihan_halaman">Pembersihan Halaman, Lapangan & Selasar</option>
+            <option value="perawatan_taman">Perawatan & Penyiraman Tanaman / Taman</option>
           </optgroup>
-          <optgroup label="Tata Kelola Persuratan & Disposisi">
-            <option value="surat_masuk">Surat Masuk (Buku Agenda & Disposisi Kepsek)</option>
-            <option value="surat_keluar">Surat Keluar (Nomor Dinas, SPPD, Edaran & Legalisir)</option>
-          </optgroup>
-          <optgroup label="Keuangan & Anggaran Sekolah">
-            <option value="keuangan_bos">Keuangan BOS/BOP (BKU, SPJ, Pajak & ARKAS)</option>
-          </optgroup>
-          <optgroup label="Aset & Sarana Prasarana">
-            <option value="sapras">Sarpras & Aset (KIR, KIB, BAST & Verifikasi Aset)</option>
-          </optgroup>
-          <optgroup label="Sistem Informasi & Kearsipan">
-            <option value="dapodik">Dapodikdasmen (Validasi Rombel, GTK & Siswa)</option>
-            <option value="kearsipan">Kearsipan (Digitalisasi PDF & Penataan Odner)</option>
-            <option value="layanan_umum">Layanan Umum (Notulen Rapat, Tamu Dinas & Humas)</option>
+          <optgroup label="Fasilitas Khusus & Sanitasi">
+            <option value="sanitasi_disinfeksi">Sanitasi & Disinfeksi (UKS, Musholla, Koridor)</option>
+            <option value="penyediaan_air">Penyediaan Air Bersih (Tandon, Radar Pompa, Kran)</option>
           </optgroup>
         </>
       );
-    }
-    if (role === 'PENJAGA') {
-      return (
-        <>
-          <optgroup label="Pengamanan & Ronda">
-            <option value="keamanan">Keamanan Umum (Patroli, Pos Jaga, Pengecekan Kunci)</option>
-            <option value="inspeksi_malam">Inspeksi & Ronda Malam (Gardu, MCB, Pagar Belakang)</option>
-            <option value="protokoler_tamu">Protokoler Tamu (Penerimaan Tamu Dinas & Parkir)</option>
-          </optgroup>
-          <optgroup label="Ketertiban & Kesiapsiagaan">
-            <option value="pengawasan_anak">Mengawasi Siswa (Penyeberangan, Pagi, Istirahat)</option>
-            <option value="tanggap_darurat">Kesiapsiagaan Darurat (APAR, Drainase, Listrik)</option>
-          </optgroup>
-          <optgroup label="Pemeliharaan & Ekspedisi">
-            <option value="perbaikan_sapras">Perbaikan Sarana/Prasarana Ringan Sekolah</option>
-            <option value="lingkungan">Tambahan Lingkungan (Pohon, Rumput, Saluran)</option>
-            <option value="antar_surat">Antar Surat Dinas & Ekspedisi Disdik</option>
-          </optgroup>
-        </>
-      );
-    }
-    if (role === 'PERPUS') {
-      return (
-        <>
-          <optgroup label="Pengolahan & Bahan Pustaka">
-            <option value="katalogisasi_buku">Katalogisasi & DDC (Buku Induk, Barcode, Label Punggung)</option>
-            <option value="perawatan_buku">Perawatan & Restorasi (Penjilidan, Lem, Laminasi Buku)</option>
-            <option value="stock_opname">Stock Opname Koleksi (Inventarisasi & Pencocokan Rak)</option>
-          </optgroup>
-          <optgroup label="Sirkulasi & Layanan Pemustaka">
-            <option value="sirkulasi_peminjaman">Sirkulasi Peminjaman (Pinjam, Kembali & Denda)</option>
-            <option value="layanan_literasi">Layanan Literasi (15 Mnt GLS, Pojok Baca & Bimbingan)</option>
-            <option value="administrasi_perpus">Administrasi Perpustakaan (Kartu Anggota & Suket Bebas Perpus)</option>
-          </optgroup>
-        </>
-      );
-    }
-    if (role === 'LAB_IPA') {
-      return (
-        <>
-          <optgroup label="Praktikum & Eksperimen Siswa">
-            <option value="persiapan_praktikum">Persiapan Praktikum (Mikroskop, Preparat & Kit Fisika)</option>
-            <option value="jadwal_lab">Jadwal & Jurnal (Penjadwalan Ruang & Presensi Praktikum)</option>
-          </optgroup>
-          <optgroup label="Pemeliharaan & Keselamatan Lab">
-            <option value="pemeliharaan_alat">Pemeliharaan Alat Gelas (Pencucian, Sterilisasi & Oven)</option>
-            <option value="perbaikan_alat">Kalibrasi & Perbaikan (Neraca Ohaus, Catu Daya & Optik)</option>
-            <option value="inventaris_bahan">Inventaris Reagen Kimia (Kartu Stok & Lemari B3)</option>
-            <option value="k3_laboratorium">Keselamatan Kerja K3 (APAR, P3K, Netralisasi Limbah)</option>
-          </optgroup>
-        </>
-      );
-    }
+    })();
+
     return (
       <>
-        <optgroup label="Sanitasi Ruang & Toilet">
-          <option value="kebersihan_wc">Kebersihan Toilet / WC (Siswa, Guru, Sanitasi)</option>
-          <option value="kebersihan_kantor">Kebersihan Ruang Kerja (Kepsek, Guru, TU, Debu, Pel)</option>
-        </optgroup>
-        <optgroup label="Pengelolaan Lingkungan & Sampah">
-          <option value="kebersihan_sampah">Kebersihan Sampah (Pilah Organik/Anorganik & TPS)</option>
-          <option value="kebersihan_halaman">Pembersihan Halaman, Lapangan & Selasar</option>
-          <option value="perawatan_taman">Perawatan & Penyiraman Tanaman / Taman</option>
-        </optgroup>
-        <optgroup label="Fasilitas Khusus & Sanitasi">
-          <option value="sanitasi_disinfeksi">Sanitasi & Disinfeksi (UKS, Musholla, Koridor)</option>
-          <option value="penyediaan_air">Penyediaan Air Bersih (Tandon, Radar Pompa, Kran)</option>
-        </optgroup>
+        {standardOptions}
+        {roleCustomCats.length > 0 && (
+          <optgroup label="✨ Kategori Layanan Kustom (Sesuai Keinginan Pengguna)">
+            {roleCustomCats.map(c => (
+              <option key={c.id} value={c.slug}>
+                ✨ {c.name} ({c.classification === 'pokok' ? '⭐ Tugas Pokok' : '📌 Tugas Tambahan'})
+              </option>
+            ))}
+          </optgroup>
+        )}
       </>
     );
   };
@@ -1130,23 +1199,41 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Jenis Kategori Layanan:
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-slate-700">
+                      Jenis Kategori Layanan:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCategoryModal(true)}
+                      className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:underline cursor-pointer"
+                      title="Tambah jenis kategori layanan baru sesuai keinginan penguna"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>+ Tambah Kategori Baru</span>
+                    </button>
+                  </div>
                   <select
                     value={formData.category}
                     onChange={(e) => {
                       const newCat = e.target.value as TaskCategory;
+                      const customCat = customCategories.find(c => c.slug === newCat && c.role === role);
                       setFormData(prev => ({ 
                         ...prev, 
                         category: newCat,
-                        taskType: getTaskClassification(role, newCat)
+                        taskType: customCat ? customCat.classification : getTaskClassification(role, newCat, undefined, customCategories)
                       }));
                     }}
                     className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 font-semibold text-slate-900"
                   >
                     {renderCategoryOptions()}
                   </select>
+                  {categoryNotice && (
+                    <div className="mt-1.5 p-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold rounded-md flex items-center gap-1.5 animate-fadeIn">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>{categoryNotice}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1585,6 +1672,118 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
               <span className="font-semibold">{formData.title}</span>
               <span className="text-slate-400 font-mono text-[11px]">{formData.date}</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH KATEGORI LAYANAN BARU (SESUAI KEINGINAN PENGGUNA) */}
+      {showAddCategoryModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/70 backdrop-blur-2xs p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4 text-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                  <FolderPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Tambah Jenis Kategori Layanan</h3>
+                  <p className="text-[11px] text-slate-500">Sesuai kebutuhan & keinginan penguna ({role})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCategoryModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNewCategory} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Nama Kategori Layanan <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder="Contoh: Pemeliharaan AC & Genset, Pengarsipan Digital, dll."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Klasifikasi Tugas Kedinasan:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewCatClassification('pokok')}
+                    className={`p-2 rounded-lg border text-xs font-bold text-left transition-all cursor-pointer ${
+                      newCatClassification === 'pokok'
+                        ? 'bg-blue-50 border-blue-500 text-blue-900 ring-2 ring-blue-500/20'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5 text-blue-600" />
+                      <span>⭐ Tugas Pokok</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-normal mt-0.5">Tupoksi utama dinas</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewCatClassification('tambahan')}
+                    className={`p-2 rounded-lg border text-xs font-bold text-left transition-all cursor-pointer ${
+                      newCatClassification === 'tambahan'
+                        ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-500/20'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <BookmarkCheck className="w-3.5 h-3.5 text-amber-600" />
+                      <span>📌 Tugas Tambahan</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-normal mt-0.5">Tugas penunjang/khusus</p>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Keterangan / Ruang Lingkup Layanan <span className="text-slate-400 font-normal">(Opsional)</span>:
+                </label>
+                <input
+                  type="text"
+                  value={newCatDescription}
+                  onChange={(e) => setNewCatDescription(e.target.value)}
+                  placeholder="Contoh: Pembersihan filter udara, penggantian oli, pengecekan berkala"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCategoryModal(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm cursor-pointer flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Simpan & Pilih Kategori</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

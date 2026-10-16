@@ -60,7 +60,7 @@ app.get('/api/state', (req, res) => {
 
 // POST update entire application state
 app.post('/api/state', (req, res) => {
-  const { tasks, inventories, monthlyReports, annualReports, schoolConfig, archives, tupoksiDefinitions } = req.body;
+  const { tasks, inventories, monthlyReports, annualReports, schoolConfig, archives, tupoksiDefinitions, customCategories } = req.body;
   const current = readDb() || {};
   const updated = {
     ...current,
@@ -71,6 +71,7 @@ app.post('/api/state', (req, res) => {
     schoolConfig: schoolConfig !== undefined ? schoolConfig : current.schoolConfig,
     archives: archives !== undefined ? archives : current.archives,
     tupoksiDefinitions: tupoksiDefinitions !== undefined ? tupoksiDefinitions : current.tupoksiDefinitions,
+    customCategories: customCategories !== undefined ? customCategories : current.customCategories,
     lastUpdated: new Date().toISOString()
   };
   const success = writeDb(updated);

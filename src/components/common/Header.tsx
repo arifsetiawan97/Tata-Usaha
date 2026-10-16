@@ -22,6 +22,7 @@ import {
   Lock
 } from 'lucide-react';
 import { LogoKabupatenDefault } from './KopSurat';
+import { initialSchoolConfig } from '../../data/initialData';
 
 export const Header: React.FC = () => {
   const { 
@@ -50,7 +51,11 @@ export const Header: React.FC = () => {
 
   if (!currentRole) return null;
 
-  const operator = schoolConfig.operatorProfiles[currentRole];
+  const operator = schoolConfig.operatorProfiles?.[currentRole] || initialSchoolConfig.operatorProfiles[currentRole] || {
+    nama: 'Petugas Layanan Operasional',
+    nip: '-',
+    jabatan: 'Operator'
+  };
 
   const roleMeta = {
     TU: {

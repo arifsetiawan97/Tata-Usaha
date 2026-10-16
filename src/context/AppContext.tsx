@@ -7,7 +7,8 @@ import {
   AnnualReport, 
   SchoolConfig,
   ArchiveDocument,
-  TupoksiDefinitionsMap
+  TupoksiDefinitionsMap,
+  CustomCategory
 } from '../types';
 import { 
   initialSchoolConfig, 
@@ -15,7 +16,8 @@ import {
   initialInventories, 
   initialMonthlyReports, 
   initialAnnualReports,
-  initialArchives 
+  initialArchives,
+  initialCustomCategories
 } from '../data/initialData';
 import { 
   isTaskInMonth, 
@@ -56,6 +58,12 @@ interface AppContextType {
   updateTupoksiItem: (role: RoleType, type: 'pokok' | 'tambahan', index: number, newText: string) => void;
   deleteTupoksiItem: (role: RoleType, type: 'pokok' | 'tambahan', indexOrText: number | string) => void;
   resetTupoksiToDefault: (role?: RoleType) => void;
+  customCategories: CustomCategory[];
+  addCustomCategory: (cat: { role: RoleType; name: string; classification: 'pokok' | 'tambahan'; description?: string }) => CustomCategory;
+  updateCustomCategory: (id: string, updated: Partial<CustomCategory>) => void;
+  deleteCustomCategory: (id: string) => void;
+  getRoleCustomCategories: (role: RoleType) => CustomCategory[];
+  getCategoryLabel: (categoryKey: string, role?: RoleType) => string;
   roleSubTabs: Record<RoleType, RoleSubTab>;
   setRoleSubTab: (role: RoleType, tab: RoleSubTab) => void;
   lastAddedTaskMonthYear: { month: number; year: number } | null;
@@ -85,7 +93,26 @@ const STORAGE_KEYS = {
   CONFIG: 'siops_school_config',
   TUPOKSI: 'siops_tupoksi_definitions',
   SUBTABS: 'siops_role_subtabs',
-  PINS: 'siops_role_pins'
+  PINS: 'siops_role_pins',
+  CUSTOM_CATEGORIES: 'siops_custom_categories'
+};
+export const mergeSchoolConfigWithDefaults = (sourceConfig: any): SchoolConfig => {
+  if (!sourceConfig || typeof sourceConfig !== 'object') return initialSchoolConfig;
+  return {
+    ...initialSchoolConfig,
+    ...sourceConfig,
+    kepalaSekolah: {
+      ...initialSchoolConfig.kepalaSekolah,
+      ...(sourceConfig.kepalaSekolah || {})
+    },
+    operatorProfiles: {
+      TU: { ...initialSchoolConfig.operatorProfiles.TU, ...(sourceConfig.operatorProfiles?.TU || {}) },
+      PENJAGA: { ...initialSchoolConfig.operatorProfiles.PENJAGA, ...(sourceConfig.operatorProfiles?.PENJAGA || {}) },
+      SERVICE: { ...initialSchoolConfig.operatorProfiles.SERVICE, ...(sourceConfig.operatorProfiles?.SERVICE || {}) },
+      PERPUS: { ...initialSchoolConfig.operatorProfiles.PERPUS, ...(sourceConfig.operatorProfiles?.PERPUS || {}) },
+      LAB_IPA: { ...initialSchoolConfig.operatorProfiles.LAB_IPA, ...(sourceConfig.operatorProfiles?.LAB_IPA || {}) },
+    }
+  };
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -188,14 +215,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return {
-          ...initialSchoolConfig,
-          ...parsed,
-          operatorProfiles: {
-            ...initialSchoolConfig.operatorProfiles,
-            ...(parsed.operatorProfiles || {})
-          }
-        };
+        return mergeSchoolConfigWithDefaults(parsed);
       } catch (e) {
         console.error(e);
       }
@@ -238,6 +258,128 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return defaultTabs;
   });
+
+  const STANDARD_CATEGORY_LABELS: Record<string, string> = {
+    // TU
+    kepegawaian: 'Kepegawaian (SKP, Pangkat, BKN, Cuti)',
+    siswa: 'Kesiswaan (Buku Induk, Mutasi, Suket)',
+    sapras: 'Sarpras & Aset (KIR, KIB, BAST)',
+    surat_masuk: 'Surat Masuk (Agenda & Disposisi)',
+    surat_keluar: 'Surat Keluar (No Dinas, SPPD)',
+    keuangan_bos: 'Keuangan BOS/BOP (BKU, SPJ)',
+    kearsipan: 'Kearsipan (Digitalisasi & Odner)',
+    dapodik: 'Dapodikdasmen (Validasi Data)',
+    layanan_umum: 'Layanan Umum (Tamu Dinas & Humas)',
+    // PENJAGA
+    keamanan: 'Keamanan Umum (Patroli, Gerbang)',
+    inspeksi_malam: 'Inspeksi & Ronda Malam',
+    protokoler_tamu: 'Protokoler Tamu & Parkir',
+    pengawasan_anak: 'Mengawasi Siswa (Zebra Cross, Pagi)',
+    tanggap_darurat: 'Kesiapsiagaan Darurat (APAR, Bencana)',
+    perbaikan_sapras: 'Perbaikan Sarpras Ringan',
+    lingkungan: 'Tambahan Lingkungan & Saluran',
+    antar_surat: 'Antar Surat Dinas & Ekspedisi',
+    // SERVICE
+    kebersihan_wc: 'Kebersihan Toilet / WC',
+    kebersihan_kantor: 'Kebersihan Ruang Kerja & Kelas',
+    kebersihan_sampah: 'Kebersihan Sampah & TPS',
+    kebersihan_halaman: 'Pembersihan Halaman & Lapangan',
+    perawatan_taman: 'Perawatan & Penyiraman Taman',
+    sanitasi_disinfeksi: 'Sanitasi & Disinfeksi (UKS)',
+    penyediaan_air: 'Penyediaan Air Bersih & Pompa',
+    // PERPUS
+    katalogisasi_buku: 'Katalogisasi DDC & Barcode Buku',
+    sirkulasi_peminjaman: 'Sirkulasi Peminjaman Buku',
+    layanan_literasi: 'Layanan Literasi (GLS & Pojok Baca)',
+    perawatan_buku: 'Perawatan & Restorasi Buku',
+    stock_opname: 'Stock Opname Koleksi Buku',
+    administrasi_perpus: 'Administrasi Perpustakaan',
+    // LAB IPA
+    persiapan_praktikum: 'Persiapan Praktikum Sains',
+    pemeliharaan_alat: 'Pemeliharaan Alat Gelas Lab',
+    inventaris_bahan: 'Inventaris Reagen Kimia',
+    k3_laboratorium: 'Keselamatan Kerja K3 Lab',
+    jadwal_lab: 'Jadwal & Jurnal Penggunaan Lab',
+    perbaikan_alat: 'Kalibrasi & Perbaikan Alat Lab'
+  };
+
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.CUSTOM_CATEGORIES);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return initialCustomCategories;
+  });
+
+  const addCustomCategory = (cat: {
+    role: RoleType;
+    name: string;
+    classification: 'pokok' | 'tambahan';
+    description?: string;
+  }): CustomCategory => {
+    const trimmed = cat.name.trim();
+    const baseSlug = trimmed
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || `kategori_${Date.now()}`;
+    const exists = customCategories.some(c => c.slug === baseSlug);
+    const finalSlug = exists ? `${baseSlug}_${Math.random().toString(36).substring(2, 6)}` : baseSlug;
+
+    const newCategory: CustomCategory = {
+      id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      role: cat.role,
+      name: trimmed,
+      slug: finalSlug,
+      classification: cat.classification,
+      description: cat.description?.trim(),
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+
+    setCustomCategories(prev => {
+      const next = [...prev, newCategory];
+      localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(next));
+      return next;
+    });
+
+    return newCategory;
+  };
+
+  const updateCustomCategory = (id: string, updated: Partial<CustomCategory>) => {
+    setCustomCategories(prev => {
+      const next = prev.map(c => c.id === id ? { ...c, ...updated } : c);
+      localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const deleteCustomCategory = (id: string) => {
+    setCustomCategories(prev => {
+      const next = prev.filter(c => c.id !== id);
+      localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const getRoleCustomCategories = (role: RoleType): CustomCategory[] => {
+    return customCategories.filter(c => c.role === role);
+  };
+
+  const getCategoryLabel = (categoryKey: string, role?: RoleType): string => {
+    if (STANDARD_CATEGORY_LABELS[categoryKey]) {
+      return STANDARD_CATEGORY_LABELS[categoryKey];
+    }
+    const match = customCategories.find(c => 
+      (c.slug === categoryKey || c.name.toLowerCase() === categoryKey.toLowerCase()) && 
+      (!role || c.role === role)
+    );
+    if (match) return match.name;
+    return categoryKey.replace(/_/g, ' ');
+  };
 
   const [lastAddedTaskMonthYear, setLastAddedTaskMonthYear] = useState<{ month: number; year: number } | null>(null);
 
@@ -397,14 +539,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(json.data.archives));
             }
             if (json.data.schoolConfig) {
-              const mergedConfig: SchoolConfig = {
-                ...initialSchoolConfig,
-                ...json.data.schoolConfig,
-                operatorProfiles: {
-                  ...initialSchoolConfig.operatorProfiles,
-                  ...(json.data.schoolConfig.operatorProfiles || {})
-                }
-              };
+              const mergedConfig = mergeSchoolConfigWithDefaults(json.data.schoolConfig);
               setSchoolConfig(mergedConfig);
               localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(mergedConfig));
             }
@@ -415,6 +550,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               };
               setTupoksiDefinitions(mergedTupoksi);
               localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(mergedTupoksi));
+            }
+            if (json.data.customCategories && Array.isArray(json.data.customCategories)) {
+              setCustomCategories(json.data.customCategories);
+              localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(json.data.customCategories));
             }
           }
         }
@@ -438,6 +577,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(schoolConfig));
     localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(tupoksiDefinitions));
     localStorage.setItem(STORAGE_KEYS.SUBTABS, JSON.stringify(roleSubTabs));
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(customCategories));
 
     if (!isInitialLoad.current) {
       setSyncStatus('saving');
@@ -453,7 +593,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               annualReports,
               archives,
               schoolConfig,
-              tupoksiDefinitions
+              tupoksiDefinitions,
+              customCategories
             })
           });
           if (res.ok) {
@@ -467,7 +608,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [tasks, inventories, monthlyReports, annualReports, archives, schoolConfig]);
+  }, [tasks, inventories, monthlyReports, annualReports, archives, schoolConfig, tupoksiDefinitions, customCategories]);
 
   useEffect(() => {
     if (currentRole) {
@@ -853,14 +994,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (jsonData.monthlyReports && Array.isArray(jsonData.monthlyReports)) setMonthlyReports(jsonData.monthlyReports);
         if (jsonData.annualReports && Array.isArray(jsonData.annualReports)) setAnnualReports(jsonData.annualReports);
         if (jsonData.schoolConfig) {
-          const mergedConfig: SchoolConfig = {
-            ...initialSchoolConfig,
-            ...jsonData.schoolConfig,
-            operatorProfiles: {
-              ...initialSchoolConfig.operatorProfiles,
-              ...(jsonData.schoolConfig.operatorProfiles || {})
-            }
-          };
+          const mergedConfig = mergeSchoolConfigWithDefaults(jsonData.schoolConfig);
           setSchoolConfig(mergedConfig);
         }
       }
@@ -912,6 +1046,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateTupoksiItem,
         deleteTupoksiItem,
         resetTupoksiToDefault,
+        customCategories,
+        addCustomCategory,
+        updateCustomCategory,
+        deleteCustomCategory,
+        getRoleCustomCategories,
+        getCategoryLabel,
         roleSubTabs,
         setRoleSubTab,
         lastAddedTaskMonthYear,

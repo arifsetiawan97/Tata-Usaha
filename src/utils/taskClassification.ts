@@ -12,11 +12,42 @@ export interface TaskClassificationInfo {
 export function getTaskClassification(
   role: RoleType, 
   category: TaskCategory, 
-  explicitType?: 'pokok' | 'tambahan'
+  explicitType?: 'pokok' | 'tambahan',
+  customCategories?: Array<{ slug: string; name: string; classification: 'pokok' | 'tambahan'; role?: string }>
 ): TaskTypeClassification {
   if (explicitType === 'pokok' || explicitType === 'tambahan') {
     return explicitType;
   }
+
+  // 1. Check passed customCategories list
+  if (customCategories && customCategories.length > 0) {
+    const match = customCategories.find(c => 
+      (c.slug === category || c.name.toLowerCase() === String(category).toLowerCase()) && 
+      (!c.role || c.role === role)
+    );
+    if (match) {
+      return match.classification;
+    }
+  }
+
+  // 2. Check localStorage saved custom categories fallback
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem('siops_custom_categories');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const match = parsed.find((c: any) => 
+            (c.slug === category || c.name?.toLowerCase() === String(category).toLowerCase()) && 
+            (!c.role || c.role === role)
+          );
+          if (match && (match.classification === 'pokok' || match.classification === 'tambahan')) {
+            return match.classification;
+          }
+        }
+      }
+    }
+  } catch (_) {}
   if (role === 'PENJAGA') {
     // Tugas Pokok Penjaga Sekolah:
     // - Buka & tutup pintu gerbang utama & gedung sekolah (keamanan)

@@ -10,6 +10,7 @@ import { TupoksiManagerView } from './TupoksiManagerView';
 import { MonthlyReportView } from '../reports/MonthlyReportView';
 import { AnnualReportView } from '../reports/AnnualReportView';
 import { InventoryTable } from '../common/InventoryTable';
+import { initialSchoolConfig } from '../../data/initialData';
 import { 
   Shield, 
   Building2, 
@@ -41,10 +42,14 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
 
   const currentSubTab = roleSubTabs[role] || 'tasks';
 
-  const operator = schoolConfig.operatorProfiles[role];
+  const operator = schoolConfig.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role] || {
+    nama: 'Petugas Layanan Operasional',
+    nip: '-',
+    jabatan: 'Operator'
+  };
   const roleTasks = tasks.filter(t => t.role === role);
   const roleCompletedTasks = roleTasks.filter(t => t.status === 'selesai').length;
-  const roleTupoksiItems = (tupoksiDefinitions[role]?.tupoksiList.length || 0) + (tupoksiDefinitions[role]?.tugasTambahanList.length || 0);
+  const roleTupoksiItems = (tupoksiDefinitions[role]?.tupoksiList?.length || 0) + (tupoksiDefinitions[role]?.tugasTambahanList?.length || 0);
   const roleInventories = inventories.filter(i => i.role === role);
 
   const roleMeta = {
