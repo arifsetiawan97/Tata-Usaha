@@ -1,25 +1,25 @@
 import { SchoolConfig, TaskLog, InventoryItem, MonthlyReport, AnnualReport, ArchiveDocument, CustomCategory } from '../types';
 
 export const initialSchoolConfig: SchoolConfig = {
-  pemerintahDaerah: 'PEMERINTAH DAERAH PROVINSI JAWA BARAT',
+  pemerintahDaerah: 'PEMERINTAH KABUPATEN / KOTA',
   dinasPendidikan: 'DINAS PENDIDIKAN DAN KEBUDAYAAN',
-  namaSekolah: 'UPT SATUAN PENDIDIKAN SMP NEGERI 1 BOGOR RAYA',
+  namaSekolah: 'SMP NEGERI SATU ATAP TELUK',
   npsn: '20202819',
   nss: '201020201004',
-  alamat: 'Jalan Pajajaran No. 45, Babakan',
-  desaKecamatan: 'Kecamatan Bogor Tengah',
-  kabupatenKota: 'Kota Bogor',
-  provinsi: 'Jawa Barat',
+  alamat: 'Jalan Teluk Rt 15',
+  desaKecamatan: '',
+  kabupatenKota: 'Batang Hari',
+  provinsi: '',
   kodePos: '16128',
   telepon: '(0251) 8321456',
-  email: 'smpn1bogorraya@disdik.jabarprov.go.id',
-  website: 'www.smpn1bogorraya.sch.id',
+  email: '',
+  website: '',
   logoKabupatenUrl: '', // Will use inline SVG renderer if empty
   logoSekolahUrl: '',   // Will use inline SVG Tut Wuri Handayani if empty
   logoAplikasiUrl: '',  // Custom application logo (JPEG/PNG)
   stempelEnabled: true,
-  stempelTextLine1: 'DINAS PENDIDIKAN KOTA BOGOR',
-  stempelTextLine2: 'SMP NEGERI 1 BOGOR RAYA',
+  stempelTextLine1: 'DINAS PENDIDIKAN DAN KEBUDAYAAN',
+  stempelTextLine2: 'SMP NEGERI SATU ATAP TELUK',
   kepalaSekolah: {
     nama: 'Dr. H. RAHMAT HIDAYAT, M.Pd.',
     nip: 'NIP. 19740510 199802 1 003',
@@ -153,7 +153,7 @@ export const initialTasks: TaskLog[] = [
     category: 'antar_surat',
     title: 'Pengantaran Surat Dinas Usulan Kebutuhan Sapras ke Disdik Kota',
     description: 'Mengantarkan berkas fisik Surat Dinas Nomor 421/189/Disdik perihal usulan sarana prasarana dan menerima tanda terima tanda tangan dari bagian Umum Disdik.',
-    location: 'Kantor Dinas Pendidikan Kota Bogor',
+    location: 'Kantor Dinas Pendidikan dan Kebudayaan',
     timeStart: '09:00',
     timeEnd: '11:30',
     status: 'selesai',
@@ -920,7 +920,7 @@ export const initialMonthlyReports: MonthlyReport[] = [
     role: 'PENJAGA',
     month: 9,
     year: 2026,
-    manualDocDate: 'Kota Bogor, 30 September 2026',
+    manualDocDate: 'Teluk, 30 September 2026',
     summary: 'Selama bulan September 2026, seluruh pelaksanaan tugas penjagaan keamanan sekolah, pengawasan kedatangan & kepulangan peserta didik, penanganan perbaikan sarana prasarana ringan, serta pengantaran surat dinas terlaksana dengan tingkat kepatuhan 98.5% tanpa adanya insiden pencurian ataupun kecelakaan lingkungan.',
     achievements: [
       'Patroli keamanan malam dan pengecekan kunci 30 hari penuh (100% terjadwal)',
@@ -943,7 +943,7 @@ export const initialMonthlyReports: MonthlyReport[] = [
     role: 'TU',
     month: 9,
     year: 2026,
-    manualDocDate: 'Kota Bogor, 30 September 2026',
+    manualDocDate: 'Teluk, 30 September 2026',
     summary: 'Pelayanan administrasi perkantoran bulan September 2026 mencakup pengelolaan berkas kepegawaian 45 orang GTK, pelayanan surat keterangan aktif belajar dan mutasi siswa 100% tuntas sebelum batas waktu, serta penataan KIB inventaris barang milik daerah semester berjalan.',
     achievements: [
       'Penyelesaian 4 berkas usulan kenaikan pangkat guru periode Oktober 2026 ke BKN',
@@ -966,7 +966,7 @@ export const initialMonthlyReports: MonthlyReport[] = [
     role: 'SERVICE',
     month: 9,
     year: 2026,
-    manualDocDate: 'Kota Bogor, 30 September 2026',
+    manualDocDate: 'Teluk, 30 September 2026',
     summary: 'Pelayanan kebersihan lingkungan satuan pendidikan terlaksana optimal meliputi 24 ruang kelas, 12 ruang kantor pimpinan dan guru, 14 bilik toilet, serta penanganan 1.250 kg timbulan sampah dengan pemilahan daur ulang terarah.',
     achievements: [
       'Indeks kebersihan toilet sekolah mencapai rata-rata 96/100 sesuai standar sanitasi UKS',
@@ -989,7 +989,7 @@ export const initialMonthlyReports: MonthlyReport[] = [
     role: 'PERPUS',
     month: 9,
     year: 2026,
-    manualDocDate: 'Kota Bogor, 30 September 2026',
+    manualDocDate: 'Teluk, 30 September 2026',
     summary: 'Layanan perpustakaan sekolah pada bulan September 2026 mencatatkan lonjakan pemustaka sebesar 25% pasca peluncuran program jam literasi terjadwal. Sebanyak 420 eksemplar buku berhasil disirkulasikan, 120 buku baru selesai dikatalogisasi DDC dan dilabeli barcode, serta 15 buku koleksi referensi rusak telah direstorasi.',
     achievements: [
       'Penyelesaian katalogisasi dan input data buku induk 120 judul buku bantuan BOS K-Merdeka',
@@ -1013,7 +1013,7 @@ export const initialMonthlyReports: MonthlyReport[] = [
     role: 'LAB_IPA',
     month: 9,
     year: 2026,
-    manualDocDate: 'Kota Bogor, 30 September 2026',
+    manualDocDate: 'Teluk, 30 September 2026',
     summary: 'Pelayanan praktikum laboratorium IPA sepanjang bulan September 2026 berjalan tertib, aman, dan tanpa kecelakaan kerja (Zero Laboratory Accident). Terlaksana 36 sesi praktikum fisika dan biologi, seluruh mikroskop dan neraca terkalibrasi baik, serta pengelolaan limbah netralisasi dan K3 terlaksana sesuai standar.',
     achievements: [
       'Fasilitasi penyiapan alat & bahan 36 sesi praktikum IPA kelas 7, 8, dan 9 tepat waktu',
@@ -1039,13 +1039,21 @@ export const initialAnnualReports: AnnualReport[] = [
     id: 'ann-rep-pjg-2026',
     role: 'PENJAGA',
     year: 2026,
-    manualDocDate: 'Kota Bogor, 31 Desember 2026',
+    manualDocDate: 'Teluk, 31 Desember 2026',
     summary: 'Laporan Tahunan Kinerja Petugas Penjaga Sekolah Tahun 2026 mencerminkan komitmen penuh dalam menjaga keamanan lingkungan belajar 24 jam, pemeliharaan sarana prasarana sekolah agar senantiasa laik pakai, serta perlindungan ketertiban siswa selama kegiatan belajar mengajar berlangsung.',
     annualMilestones: [
       'Nihil insiden kehilangan barang sekolah (Zero Loss Accident) selama 12 bulan',
       'Tuntas melakukan 184 tindakan perbaikan sarana prasarana ringan secara mandiri',
       'Telah melaksanakan 360 kali patroli malam terverifikasi buku jurnal pos pengamanan',
       'Distribusi 148 ekspedisi surat dinas dinas pendidikan tanpa keterlambatan'
+    ],
+    obstacles: [
+      'Titik buta (blindspot) pada pagar belakang sebelah barat yang belum tercover lampu sorot',
+      'Peningkatan volume kendaraan penjemput siswa saat cuaca hujan lebat membutuhkan jalur buka-tutup darurat'
+    ],
+    solutions: [
+      'Pemasangan lampu sorot LED 50W tenaga surya dan peningkatan frekuensi ronda jam 01.00-03.00 WIB',
+      'Penerapan rekayasa lalu lintas buka-tutup satu arah bersama pihak kepolisian dan dishub setempat'
     ],
     strategicRecommendations: [
       'Perlu penambahan 4 titik kamera CCTV di area sudut buta (blindspot) gerbang timur',
@@ -1058,13 +1066,21 @@ export const initialAnnualReports: AnnualReport[] = [
     id: 'ann-rep-tu-2026',
     role: 'TU',
     year: 2026,
-    manualDocDate: 'Kota Bogor, 31 Desember 2026',
+    manualDocDate: 'Teluk, 31 Desember 2026',
     summary: 'Laporan Tahunan Tata Usaha Tahun 2026 mendokumentasikan efektivitas tertib administrasi sekolah yang mencakup kepegawaian, kesiswaan, persuratan, dan penatausahaan sarana prasarana sesuai pedoman SPM Pendidikan Nasional.',
     annualMilestones: [
       'Pemberkasan 100% ASN tepat waktu (KGB, Kenaikan Pangkat, SKP Tahunan)',
       'Digitalisasi 1.450 arsip persuratan dan buku induk siswa ke sistem e-Arsip',
       'Kelulusan dan mutasi siswa tertata rapi dalam buku register induk dan sinkron Dapodik',
       'Pembaruan berkala Kartu Inventaris Barang (KIB A s.d. E) bebas temuan BPK/Inspektorat'
+    ],
+    obstacles: [
+      'Fluktuasi aksesibilitas server pusat pada periode cut-off semesteran Dapodik dan e-Kinerja',
+      'Ruang simpan arsip fisik menghadapi kelembaban udara yang berpotensi merusak kertas berkas lama'
+    ],
+    solutions: [
+      'Penyusunan jadwal entri data terjadwal pada jam non-beban puncak (dini hari dan pagi hari)',
+      'Pengadaan alat dehumidifier pengatur kelembaban udara serta alih media arsip digital (cloud scan)'
     ],
     strategicRecommendations: [
       'Pengadaan server lokal cadangan untuk proteksi basis data offline sekolah',
@@ -1077,13 +1093,21 @@ export const initialAnnualReports: AnnualReport[] = [
     id: 'ann-rep-srv-2026',
     role: 'SERVICE',
     year: 2026,
-    manualDocDate: 'Kota Bogor, 31 Desember 2026',
+    manualDocDate: 'Teluk, 31 Desember 2026',
     summary: 'Laporan Tahunan Layanan Kebersihan Tahun 2026 menunjukkan keberhasilan pencapaian predikat Sekolah Adiwiyata Tingkat Mandiri dengan standar higienitas toilet dan pemilahan sampah organik/anorganik yang konsisten.',
     annualMilestones: [
       'Pengurangan volume sampah residu ke TPA sebesar 38% melalui komposting dan bank sampah',
       'Terselenggaranya sanitasi rutin toilet siswa dan guru dengan kepatuhan 99.2%',
       'Pemeliharaan higienitas ruang kelas harian tanpa keluhan dari warga sekolah',
       'Efisiensi pemakaian cairan pembersih melalui takaran terstandar dan aman ramah lingkungan'
+    ],
+    obstacles: [
+      'Musim gugur daun lebat saat pergantian cuaca menyebabkan akumulasi timbulan sampah serasah',
+      'Kebutuhan peremajaan peralatan kebersihan mekanis (alat pel peras otomatis dan gerobak dorong)'
+    ],
+    solutions: [
+      'Pembuatan 8 lubang biopori komposter tambahan untuk mempercepat konversi daun gugur menjadi pupuk',
+      'Pengajuan pengadaan bertahap alat kebersihan berstandar ergonomis pada anggaran operasional sekolah'
     ],
     strategicRecommendations: [
       'Penggantian 2 unit gerobak dorong roda karet yang mulai aus',
@@ -1096,13 +1120,21 @@ export const initialAnnualReports: AnnualReport[] = [
     id: 'ann-rep-prs-2026',
     role: 'PERPUS',
     year: 2026,
-    manualDocDate: 'Kota Bogor, 31 Desember 2026',
+    manualDocDate: 'Teluk, 31 Desember 2026',
     summary: 'Laporan Tahunan Perpustakaan Sekolah Tahun Anggaran 2026 menegaskan tercapainya standar akreditasi perpustakaan sekolah dengan koleksi terkelola 4.800+ judul buku, penerapan otomasi katalog digital (OPAC), serta partisipasi aktif 95% peserta didik dalam gerakan literasi sekolah.',
     annualMilestones: [
       'Otomasi sirkulasi dan digitalisasi 100% koleksi buku teks dan non-teks dengan barcode scanner',
       'Pencatatan 6.400+ transaksi peminjaman buku sepanjang tahun pelajaran',
       'Penyelesaian stock opname koleksi tahunan dengan tingkat akurasi fisik buku 98.2%',
       'Pembentukan 12 Pojok Baca Tematik di selasar kelas dan lobi utama sekolah'
+    ],
+    obstacles: [
+      'Keterlambatan sirkulasi pengembalian buku pinjaman oleh siswa saat masa libur kenaikan kelas',
+      'Kebutuhan rak buku tambahan akibat peningkatan volume hibah bahan pustaka dari mitra literasi'
+    ],
+    solutions: [
+      'Penerapan kartu sirkulasi digital dengan sistem notifikasi pesan WhatsApp ke orang tua/wali kelas',
+      'Pengalokasian rak display dua muka baru dan penataan ulang tata letak ruang baca berkonsep modern'
     ],
     strategicRecommendations: [
       'Pengembangan koleksi e-Book dan aplikasi perpustakaan digital sekolah berbasis Android',
@@ -1115,13 +1147,21 @@ export const initialAnnualReports: AnnualReport[] = [
     id: 'ann-rep-ipa-2026',
     role: 'LAB_IPA',
     year: 2026,
-    manualDocDate: 'Kota Bogor, 31 Desember 2026',
+    manualDocDate: 'Teluk, 31 Desember 2026',
     summary: 'Laporan Tahunan Pengelolaan Laboratorium IPA Tahun 2026 melaporkan keterlaksanaan 100% praktikum kurikulum sains untuk jenjang SMP secara aman dan higienis. Pengelolaan sarana laboratorium, keselamatan kerja K3, serta perawatan instrumen presisi terlaksana secara prima.',
     annualMilestones: [
       'Fasilitasi 144 jadwal sesi praktikum sains tanpa kecelakaan kerja (Zero Accident K3)',
       'Kalibrasi berkala seluruh mikroskop optik, neraca pegas, dan alat ukur listrik sekolah',
       'Pengelolaan limbah bahan kimia praktikum ramah lingkungan dengan sistem sedimentasi & netralisasi',
       'Pendampingan tim ekstrakurikuler Karya Ilmiah Remaja (KIR) hingga meraih medali tingkat kota'
+    ],
+    obstacles: [
+      'Keterbatasan cadangan lensa okuler & lensa objektif mikroskop saat praktikum paralel bersamaan',
+      'Penyimpanan zat kimia asam pekat membutuhkan sirkulasi ventilasi uap yang lebih terisolasi'
+    ],
+    solutions: [
+      'Penjadwalan silang penggunaan mikroskop antar rombel dan pembersihan lensa pasca praktikum',
+      'Penyimpanan asam pekat pada lemari kimia berventilasi khusus dan pengajuan mini fume hood'
     ],
     strategicRecommendations: [
       'Pengadaan lemari asam mini (fume hood) untuk eksperimen uap kimia dan reaksi pembakaran',
@@ -1162,7 +1202,7 @@ export const initialArchives: ArchiveDocument[] = [
       role: 'TU',
       month: 9,
       year: 2026,
-      manualDocDate: 'Kota Bogor, 30 September 2026',
+      manualDocDate: 'Teluk, 30 September 2026',
       summary: 'Pelaksanaan layanan administrasi operasional Tata Usaha pada bulan September 2026 berjalan tertib dan tepat waktu. Seluruh berkas mutasi siswa, pengusulan KGB, administrasi persuratan, serta sinkronisasi Dapodik semester ganjil terselesaikan 100% tanpa tunggakan.',
       achievements: [
         '100% surat masuk (42 surat) dan surat keluar (28 surat) diagendakan serta didistribusikan pada hari yang sama',
@@ -1208,7 +1248,7 @@ export const initialArchives: ArchiveDocument[] = [
       role: 'PENJAGA',
       month: 9,
       year: 2026,
-      manualDocDate: 'Kota Bogor, 30 September 2026',
+      manualDocDate: 'Teluk, 30 September 2026',
       summary: 'Kondisi ketertiban dan keamanan lingkungan satuan pendidikan selama bulan September 2026 terpantau aman, tertib, dan kondusif. Patroli gerbang, ronda malam 3 putaran per shift, dan pemantauan penjemputan siswa berlangsung tertib.',
       achievements: [
         'Zero incident kejahatan, vandalisme, dan kehilangan sarana prasarana sekolah',
@@ -1254,7 +1294,7 @@ export const initialArchives: ArchiveDocument[] = [
       role: 'SERVICE',
       month: 9,
       year: 2026,
-      manualDocDate: 'Kota Bogor, 30 September 2026',
+      manualDocDate: 'Teluk, 30 September 2026',
       summary: 'Kinerja layanan kebersihan dan tata graha sekolah selama bulan September 2026 mencapai tingkat kepatuhan 98.5%. Seluruh 24 ruang kelas, 12 unit toilet, laboratorium, dan lapangan upacara terjaga higienis dan harum.',
       achievements: [
         'Sanitasi harian toilet guru dan siswa tuntas dibersihkan 3x sehari (pagi, istirahat, sore)',
@@ -1298,7 +1338,7 @@ export const initialArchives: ArchiveDocument[] = [
       id: 'ann-rep-tu-2026',
       role: 'TU',
       year: 2026,
-      manualDocDate: 'Kota Bogor, 31 Desember 2026',
+      manualDocDate: 'Teluk, 31 Desember 2026',
       summary: 'Laporan Tahunan Tata Usaha Tahun 2026 mendokumentasikan efektivitas tertib administrasi sekolah yang mencakup kepegawaian, kesiswaan, persuratan, dan penatausahaan sarana prasarana sesuai pedoman SPM Pendidikan Nasional.',
       annualMilestones: [
         'Pemberkasan 100% ASN tepat waktu (KGB, Kenaikan Pangkat, SKP Tahunan)',
@@ -1341,7 +1381,7 @@ export const initialArchives: ArchiveDocument[] = [
       id: 'ann-rep-pjg-2026',
       role: 'PENJAGA',
       year: 2026,
-      manualDocDate: 'Kota Bogor, 31 Desember 2026',
+      manualDocDate: 'Teluk, 31 Desember 2026',
       summary: 'Kinerja layanan pengamanan dan pemeliharaan fasilitas sekolah sepanjang tahun 2026 terlaksana secara optimal. Tidak terjadi kasus pembobolan, kehilangan inventaris, maupun gangguan ketertiban masyarakat di lingkungan sekolah.',
       annualMilestones: [
         'Keberhasilan mempertahankan status Zero Crime dan Zero Accident di lingkungan sekolah',
@@ -1384,7 +1424,7 @@ export const initialArchives: ArchiveDocument[] = [
       id: 'ann-rep-srv-2026',
       role: 'SERVICE',
       year: 2026,
-      manualDocDate: 'Kota Bogor, 31 Desember 2026',
+      manualDocDate: 'Teluk, 31 Desember 2026',
       summary: 'Laporan Tahunan Layanan Kebersihan Tahun 2026 menunjukkan keberhasilan pencapaian predikat Sekolah Adiwiyata Tingkat Mandiri dengan standar higienitas toilet dan pemilahan sampah organik/anorganik yang konsisten.',
       annualMilestones: [
         'Pengurangan volume sampah residu ke TPA sebesar 38% melalui komposting dan bank sampah',
@@ -1429,7 +1469,7 @@ export const initialArchives: ArchiveDocument[] = [
       role: 'PERPUS',
       month: 9,
       year: 2026,
-      manualDocDate: 'Kota Bogor, 30 September 2026',
+      manualDocDate: 'Teluk, 30 September 2026',
       summary: 'Layanan perpustakaan sekolah pada bulan September 2026 mencatatkan lonjakan pemustaka sebesar 25% pasca peluncuran program jam literasi terjadwal. Sebanyak 420 eksemplar buku berhasil disirkulasikan, 120 buku baru selesai dikatalogisasi DDC dan dilabeli barcode, serta 15 buku koleksi referensi rusak telah direstorasi.',
       achievements: [
         'Penyelesaian katalogisasi dan input data buku induk 120 judul buku bantuan BOS K-Merdeka',
@@ -1478,7 +1518,7 @@ export const initialArchives: ArchiveDocument[] = [
       role: 'LAB_IPA',
       month: 9,
       year: 2026,
-      manualDocDate: 'Kota Bogor, 30 September 2026',
+      manualDocDate: 'Teluk, 30 September 2026',
       summary: 'Pelayanan praktikum laboratorium IPA sepanjang bulan September 2026 berjalan tertib, aman, dan tanpa kecelakaan kerja (Zero Laboratory Accident). Terlaksana 36 sesi praktikum fisika dan biologi, seluruh mikroskop dan neraca terkalibrasi baik, serta pengelolaan limbah netralisasi dan K3 terlaksana sesuai standar.',
       achievements: [
         'Fasilitasi penyiapan alat & bahan 36 sesi praktikum IPA kelas 7, 8, dan 9 tepat waktu',

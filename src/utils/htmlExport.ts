@@ -60,7 +60,11 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     ? `Bulan ${MONTH_NAMES[(monthlyData?.month || 9) - 1]} Tahun ${monthlyData?.year || 2026}`
     : `Tahun Anggaran ${annualData?.year || 2026}`;
 
-  const docDate = manualDate || `${schoolConfig.kabupatenKota}, 30 September 2026`;
+  const exportPlace = [schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0] || '';
+  const defaultDateText = isMonthly && monthlyData 
+    ? `${MONTH_NAMES[(monthlyData.month || 9) - 1]} ${monthlyData.year || 2026}` 
+    : `31 Desember ${annualData?.year || 2026}`;
+  const docDate = manualDate || (exportPlace ? `${exportPlace}, ${defaultDateText}` : defaultDateText);
   const noSurat = nomorSurat || `800/${isMonthly ? `LAP-BLN/${monthlyData?.month || 9}` : 'LAP-THN'}/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`;
 
   // Relevant tasks for this report using robust string date parsing
@@ -636,13 +640,24 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         </div>
 
         <div class="kop-center">
-          <div class="kop-pemda">${schoolConfig.pemerintahDaerah}</div>
-          <div class="kop-dinas">${schoolConfig.dinasPendidikan}</div>
-          <div class="kop-sekolah">${schoolConfig.namaSekolah}</div>
+          ${schoolConfig.pemerintahDaerah && schoolConfig.pemerintahDaerah.trim() ? `<div class="kop-pemda">${schoolConfig.pemerintahDaerah}</div>` : ''}
+          ${schoolConfig.dinasPendidikan && schoolConfig.dinasPendidikan.trim() ? `<div class="kop-dinas">${schoolConfig.dinasPendidikan}</div>` : ''}
+          ${schoolConfig.namaSekolah && schoolConfig.namaSekolah.trim() ? `<div class="kop-sekolah">${schoolConfig.namaSekolah}</div>` : ''}
           <div class="kop-alamat">
-            NPSN: ${schoolConfig.npsn || '20202819'} · NSS: ${schoolConfig.nss || '201020201004'}<br>
-            ${schoolConfig.alamat}, ${schoolConfig.desaKecamatan}, ${schoolConfig.kabupatenKota}, ${schoolConfig.provinsi} ${schoolConfig.kodePos}<br>
-            Telp: ${schoolConfig.telepon || '-'} | Email: ${schoolConfig.email || '-'}
+            ${[
+              schoolConfig.npsn && schoolConfig.npsn.trim() ? `NPSN: ${schoolConfig.npsn.trim()}` : '',
+              schoolConfig.nss && schoolConfig.nss.trim() ? `NSS: ${schoolConfig.nss.trim()}` : ''
+            ].filter(Boolean).join(' · ')}${(schoolConfig.npsn || schoolConfig.nss) ? '<br>' : ''}
+            ${[
+              schoolConfig.alamat,
+              schoolConfig.desaKecamatan,
+              schoolConfig.kabupatenKota,
+              schoolConfig.provinsi
+            ].filter((s): s is string => typeof s === 'string' && s.trim().length > 0).join(', ')}${schoolConfig.kodePos && schoolConfig.kodePos.trim() ? ` Kode Pos ${schoolConfig.kodePos.trim()}` : ''}<br>
+            ${[
+              schoolConfig.telepon && schoolConfig.telepon.trim() ? `Telp: ${schoolConfig.telepon.trim()}` : '',
+              schoolConfig.email && schoolConfig.email.trim() ? `Email: ${schoolConfig.email.trim()}` : ''
+            ].filter(Boolean).join(' | ')}
           </div>
         </div>
 
@@ -693,10 +708,10 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
       </div>
 
       <!-- I. RINGKASAN KINERJA -->
-      <div class="section-title">I. RINGKASAN KINERJA & CAPAIAN TARGET OPERASIONAL</div>
+      <div class="section-title">I. RINGKASAN EKSEKUTIF KINERJA & CAPAIAN TARGET OPERASIONAL (${roleTitle.toUpperCase()})</div>
       <p class="justified-text">${reportData.summary}</p>
 
-      <div style="font-weight: bold; margin-bottom: 5px; font-size: 9.5pt;">Indikator Capaian Kinerja:</div>
+      <div style="font-weight: bold; margin-bottom: 5px; font-size: 9.5pt;">Rincian Capaian Indikator Kinerja yang Terlaksana (${roleTitle}):</div>
       <ol>
         ${(isMonthly ? monthlyData?.achievements : annualData?.annualMilestones)?.map(item => `<li>${item}</li>`).join('') || '<li>Tugas operasional terlaksana sesuai sasaran kerja.</li>'}
       </ol>
@@ -704,22 +719,38 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
       ${isMonthly && monthlyData ? `
       <div style="display: flex; gap: 16px; margin-top: 8px;">
         <div style="flex: 1;">
-          <div style="font-weight: bold; font-size: 9.5pt; color: #b91c1c; margin-bottom: 3px;">Kendala / Hambatan:</div>
+          <div style="font-weight: bold; font-size: 9.5pt; color: #b91c1c; margin-bottom: 3px;">Kendala / Hambatan di Lapangan:</div>
           <ul>
             ${monthlyData.obstacles?.map(obs => `<li>${obs}</li>`).join('') || '<li>Tidak ada kendala yang berarti.</li>'}
           </ul>
         </div>
         <div style="flex: 1;">
-          <div style="font-weight: bold; font-size: 9.5pt; color: #15803d; margin-bottom: 3px;">Solusi / Tindak Lanjut:</div>
+          <div style="font-weight: bold; font-size: 9.5pt; color: #15803d; margin-bottom: 3px;">Solusi / Upaya Pemecahan Masalah:</div>
           <ul>
             ${monthlyData.solutions?.map(sol => `<li>${sol}</li>`).join('') || '<li>Koordinasi berkala bersama satuan pendidikan berjalan optimal.</li>'}
           </ul>
         </div>
       </div>` : ''}
 
+      ${!isMonthly && annualData && annualData.obstacles && annualData.obstacles.length > 0 ? `
+      <div style="display: flex; gap: 16px; margin-top: 8px;">
+        <div style="flex: 1;">
+          <div style="font-weight: bold; font-size: 9.5pt; color: #b91c1c; margin-bottom: 3px;">Evaluasi Kendala Lapangan Terakumulasi:</div>
+          <ul>
+            ${annualData.obstacles.map(obs => `<li>${obs}</li>`).join('')}
+          </ul>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-weight: bold; font-size: 9.5pt; color: #15803d; margin-bottom: 3px;">Solusi / Mitigasi Kendala:</div>
+          <ul>
+            ${(annualData.solutions || []).map(sol => `<li>${sol}</li>`).join('')}
+          </ul>
+        </div>
+      </div>` : ''}
+
       ${!isMonthly && annualData ? `
       <div style="margin-top: 8px;">
-        <div style="font-weight: bold; font-size: 9.5pt; margin-bottom: 3px;">Rekomendasi Rencana Strategis Tahun Berikutnya:</div>
+        <div style="font-weight: bold; font-size: 9.5pt; margin-bottom: 3px;">Rekomendasi Rencana Strategis Tahun Depan:</div>
         <ul>
           ${annualData.strategicRecommendations?.map(rec => `<li>${rec}</li>`).join('') || '<li>Pemeliharaan berkesinambungan.</li>'}
         </ul>
@@ -958,22 +989,23 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
 
       <!-- V. LEMBAR PENGESAHAN RESMI (ANTI-TERPOTONG) -->
       <div class="approval-wrapper">
-        <table class="approval-table">
+        <table class="approval-table" style="width: 100%; table-layout: fixed; border-collapse: collapse;">
           <tr>
-            <!-- Kolom Kiri: Kepala Satuan Pendidikan -->
-            <td>
-              <div class="sign-title">Mengetahui / Mengesahkan,</div>
-              <div class="sign-title">Kepala ${schoolConfig.namaSekolah}</div>
+            <!-- Kolom Kiri: Kepala Satuan Pendidikan (Mengetahui / Mengesahkan) -->
+            <td style="width: 50%; vertical-align: top; text-align: center; padding: 0 16px;">
+              <div class="sign-date" style="visibility: hidden; height: 22px; line-height: 22px;" aria-hidden="true">&nbsp;</div>
+              <div class="sign-title" style="height: 22px; line-height: 22px; font-weight: 600;">Mengetahui / Mengesahkan,</div>
+              <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${schoolConfig.kepalaSekolah.jabatan || 'Kepala Satuan Pendidikan'}</div>
               
-              <div class="sign-box">
+              <div class="sign-box" style="height: 90px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
                 ${schoolConfig.stempelEnabled ? `
-                  <div class="stamp-overlay">
+                  <div class="stamp-overlay" style="position: absolute; left: 8%; top: -6px; width: 90px; height: 90px; pointer-events: none;">
                     ${schoolConfig.customStempelUrl ? `
                       <img src="${schoolConfig.customStempelUrl}" alt="Cap Stempel" style="width: 100%; height: 100%; object-fit: contain;">
                     ` : `
                       <div class="stamp-badge">
                         <span>★ DISDIK ★</span>
-                        <span>${schoolConfig.kabupatenKota.toUpperCase()}</span>
+                        <span>${(schoolConfig.kabupatenKota || 'RESMI').toUpperCase()}</span>
                         <span>RESMI</span>
                       </div>
                     `}
@@ -981,24 +1013,25 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
                 ` : ''}
 
                 ${schoolConfig.kepalaSekolah.signatureImage ? `
-                  <img src="${schoolConfig.kepalaSekolah.signatureImage}" alt="Tanda Tangan Kepsek" class="sign-image">
+                  <img src="${schoolConfig.kepalaSekolah.signatureImage}" alt="Tanda Tangan Kepsek" class="sign-image" style="max-height: 75px; max-width: 180px; object-fit: contain;">
                 ` : `
-                  <div class="signature-font">Rahmat Hidayat</div>
+                  <div class="signature-font">${schoolConfig.kepalaSekolah.signatureData || schoolConfig.kepalaSekolah.nama.split(' ')[0]}</div>
                 `}
               </div>
 
-              <div class="sign-name">${schoolConfig.kepalaSekolah.nama}</div>
-              <div class="sign-nip">${schoolConfig.kepalaSekolah.nip}</div>
+              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; text-decoration: underline;">${schoolConfig.kepalaSekolah.nama}</div>
+              <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${schoolConfig.kepalaSekolah.nip}</div>
             </td>
 
-            <!-- Kolom Kanan: Petugas Pelaksana -->
-            <td>
-              <div class="sign-date">${docDate}</div>
-              <div class="sign-title">Petugas Pelaksana Layanan Operasional,</div>
+            <!-- Kolom Kanan: Petugas Pelaksana (Yang Membuat Laporan) -->
+            <td style="width: 50%; vertical-align: top; text-align: center; padding: 0 16px;">
+              <div class="sign-date" style="height: 22px; line-height: 22px;">${docDate}</div>
+              <div class="sign-title" style="height: 22px; line-height: 22px; font-weight: 600;">Yang Membuat Laporan,</div>
+              <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${operator.jabatan}</div>
 
-              <div class="sign-box">
+              <div class="sign-box" style="height: 90px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
                 ${operator.signatureImage ? `
-                  <img src="${operator.signatureImage}" alt="Tanda Tangan Operator" class="sign-image">
+                  <img src="${operator.signatureImage}" alt="Tanda Tangan Operator" class="sign-image" style="max-height: 75px; max-width: 180px; object-fit: contain;">
                 ` : `
                   <div class="signature-font">
                     ${operator.signatureData || operator.nama.split(' ')[0]}
@@ -1006,9 +1039,8 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
                 `}
               </div>
 
-              <div class="sign-name">${operator.nama}</div>
-              <div class="sign-nip">${operator.nip}</div>
-              <div class="sign-rank">Jabatan: ${operator.jabatan}</div>
+              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; text-decoration: underline;">${operator.nama}</div>
+              <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${operator.nip}</div>
             </td>
           </tr>
         </table>

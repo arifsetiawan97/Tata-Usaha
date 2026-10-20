@@ -89,6 +89,51 @@ export const TupoksiManagerView: React.FC<TupoksiManagerViewProps> = ({
   const [editingCatDescription, setEditingCatDescription] = useState('');
   const [deleteConfirmCatId, setDeleteConfirmCatId] = useState<string | null>(null);
 
+  // AI Category Suggestions State
+  const [isAiSuggesting, setIsAiSuggesting] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<Array<{
+    name: string;
+    classification: 'pokok' | 'tambahan';
+    description: string;
+    reason?: string;
+  }> | null>(null);
+
+  const handleFetchAiSuggestions = async () => {
+    setIsAiSuggesting(true);
+    try {
+      const res = await fetch('/api/gemini/suggest-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: selectedRole,
+          existingCategories: roleCustomCategories
+        })
+      });
+      const data = await res.json();
+      if (data && Array.isArray(data.data)) {
+        setAiSuggestions(data.data);
+        showNotice(`Kecerdasan AI berhasil merumuskan ${data.data.length} rekomendasi kategori layanan baru!`);
+      }
+    } catch (err) {
+      console.error('Error fetching AI category suggestions:', err);
+      showNotice('Gagal mengambil rekomendasi AI');
+    } finally {
+      setIsAiSuggesting(false);
+    }
+  };
+
+  const handleAdoptSuggestion = (sug: { name: string; classification: 'pokok' | 'tambahan'; description: string }) => {
+    const created = addCustomCategory({
+      role: selectedRole,
+      name: sug.name,
+      classification: sug.classification,
+      description: sug.description
+    });
+    // Remove from suggestions list once adopted
+    setAiSuggestions(prev => prev ? prev.filter(item => item.name !== sug.name) : null);
+    showNotice(`Kategori layanan "${created.name}" berhasil diadopsi!`);
+  };
+
   const handleAddCustomCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
@@ -655,7 +700,82 @@ export const TupoksiManagerView: React.FC<TupoksiManagerViewProps> = ({
               </p>
             </div>
           </div>
+
+          {/* AI Recommendation Trigger Button */}
+          <button
+            type="button"
+            onClick={handleFetchAiSuggestions}
+            disabled={isAiSuggesting}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer disabled:opacity-50"
+            title="Dapatkan rekomendasi jenis kategori layanan baru secara cerdas dengan Gemini AI"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            <span>{isAiSuggesting ? 'Merumuskan Kategori AI...' : '✨ Rekomendasi Kategori AI'}</span>
+          </button>
         </div>
+
+        {/* AI Recommendations Banner (If loaded) */}
+        {aiSuggestions && aiSuggestions.length > 0 && (
+          <div className="p-4 sm:p-5 bg-gradient-to-r from-indigo-900 to-purple-950 text-white border-b border-indigo-700 space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <h4 className="text-xs sm:text-sm font-bold text-white">
+                  Rekomendasi Cerdas Kategori Layanan Baru (Gemini AI)
+                </h4>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-400 text-slate-950">
+                  {aiSuggestions.length} Pilihan Inovatif
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiSuggestions(null)}
+                className="text-indigo-300 hover:text-white text-xs font-semibold cursor-pointer"
+              >
+                ✕ Tutup Saran
+              </button>
+            </div>
+
+            <p className="text-[11.5px] text-indigo-200">
+              Berikut jenis kategori layanan yang dirumuskan secara khusus untuk memperkaya operasional {roleTitle}. Klik "+ Adopsi Kategori" untuk langsung menerapkannya:
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {aiSuggestions.map((sug, idx) => (
+                <div 
+                  key={idx} 
+                  className="bg-white/10 backdrop-blur-md p-3.5 rounded-xl border border-white/20 flex flex-col justify-between space-y-2 hover:bg-white/15 transition-all"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-xs font-bold text-white">{sug.name}</span>
+                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                        sug.classification === 'pokok' ? 'bg-blue-500/80 text-white' : 'bg-amber-500/80 text-white'
+                      }`}>
+                        {sug.classification === 'pokok' ? '⭐ Tugas Pokok' : '📌 Tugas Tambahan'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-indigo-100">{sug.description}</p>
+                    {sug.reason && (
+                      <p className="text-[10px] text-amber-300/90 mt-1 italic">
+                        💡 {sug.reason}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAdoptSuggestion(sug)}
+                    className="self-end px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-slate-950" />
+                    <span>+ Adopsi Kategori</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Form Tambah Kategori Layanan Baru */}
         <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200">

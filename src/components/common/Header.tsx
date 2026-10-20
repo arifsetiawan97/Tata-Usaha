@@ -19,10 +19,13 @@ import {
   AlertTriangle,
   KeyRound,
   Check,
-  Lock
+  Lock,
+  Bot,
+  Database
 } from 'lucide-react';
 import { LogoKabupatenDefault } from './KopSurat';
 import { initialSchoolConfig } from '../../data/initialData';
+import { AiAssistantModal } from './AiAssistantModal';
 
 export const Header: React.FC = () => {
   const { 
@@ -39,7 +42,8 @@ export const Header: React.FC = () => {
     inventories,
     archives,
     rolePins,
-    updateRolePin
+    updateRolePin,
+    syncStatus
   } = useApp();
 
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -48,6 +52,7 @@ export const Header: React.FC = () => {
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [newPinInput, setNewPinInput] = useState('');
   const [pinChangeNotice, setPinChangeNotice] = useState<string | null>(null);
+  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
 
   if (!currentRole) return null;
 
@@ -185,6 +190,23 @@ export const Header: React.FC = () => {
 
             {/* Right: Active Role Account Profile & Logout (Protected Role Isolation) */}
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* Database Server Sync Badge */}
+              <div 
+                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all ${
+                  syncStatus === 'synced' 
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                    : syncStatus === 'saving' 
+                    ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+                title="Status koneksi basis data server (CRUD otomatis & persistent)"
+              >
+                <Database className={`w-3.5 h-3.5 ${syncStatus === 'saving' ? 'animate-pulse text-amber-600' : syncStatus === 'synced' ? 'text-emerald-600' : 'text-slate-500'}`} />
+                <span>
+                  {syncStatus === 'synced' ? 'Database Terhubung' : syncStatus === 'saving' ? 'Menyimpan ke Server...' : 'Mode Lokal'}
+                </span>
+              </div>
+
               {/* Operator Profile Tag */}
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs ${roleMeta.badgeClass} shadow-2xs`}>
                 <div className="p-1 rounded-md bg-white/70">
@@ -212,6 +234,17 @@ export const Header: React.FC = () => {
                 title="Ganti PIN Keamanan Akun Ini"
               >
                 <KeyRound className="w-4 h-4" />
+              </button>
+
+              {/* Asisten Cerdas AI Button */}
+              <button
+                type="button"
+                onClick={() => setIsAiAssistantOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 rounded-lg transition-all shadow-xs cursor-pointer"
+                title="Buka Asisten Cerdas AI SI-OPS untuk seluruh lini operasional"
+              >
+                <Bot className="w-3.5 h-3.5 text-amber-300" />
+                <span className="hidden sm:inline">Asisten AI</span>
               </button>
 
               {/* Settings Button */}
@@ -442,6 +475,15 @@ export const Header: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* AI Assistant Modal */}
+      {isAiAssistantOpen && (
+        <AiAssistantModal
+          isOpen={isAiAssistantOpen}
+          onClose={() => setIsAiAssistantOpen(false)}
+          initialRole={currentRole}
+        />
       )}
     </>
   );

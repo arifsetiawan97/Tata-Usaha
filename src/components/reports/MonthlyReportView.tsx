@@ -8,6 +8,7 @@ import {
   isTaskInMonth, 
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from '../../utils/taskClassification';
+import { ROLE_OPERATIONAL_SPECS } from '../../data/roleOperationalSpecs';
 import { 
   FileText, 
   Printer, 
@@ -36,7 +37,8 @@ import {
   Shield,
   Building2,
   Filter,
-  Sliders
+  Sliders,
+  Eye
 } from 'lucide-react';
 
 interface MonthlyReportViewProps {
@@ -57,92 +59,34 @@ const OFFICIAL_MONTHLY_TEMPLATES: Record<RoleType, {
   solutions: string[];
 }> = {
   TU: {
-    summary: 'Pelaksanaan administrasi ketatausahaan sekolah pada periode bulan ini berjalan efektif dengan tingkat ketercapaian penyelesaian agenda surat dan berkas kepegawaian mencapai target. Pelayanan administrasi siswa dan inventarisasi sarana prasarana sekolah terkelola secara tertib dan transparan.',
-    achievements: [
-      'Penyelesaian registrasi buku agenda surat masuk dan surat keluar kedinasan 100% tepat waktu',
-      'Pembaruan berkas kenaikan pangkat dan data Dapodik kepegawaian tenaga pendidik & kependidikan',
-      'Rekonsiliasi berkala kartu inventaris barang (KIR) ruang kantor, lab, dan kelas',
-      'Pelayanan legalisasi berkas administrasi dan surat keterangan siswa aktif tanpa kendala'
-    ],
-    obstacles: [
-      'Arsip fisik dokumen tahun-tahun lampau memerlukan pemindaian digital secara bertahap',
-      'Keterlambatan konfirmasi surat undangan kedinasan dari instansi eksternal'
-    ],
-    solutions: [
-      'Mengagendakan pemindaian digital arsip secara terjadwal setiap akhir pekan',
-      'Berkoordinasi aktif melalui kontak narahubung WhatsApp dinas terkait'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.TU.getExecutiveSummaryMonthly('September', 2026, { total: 28, completed: 28, rate: 100 }),
+    achievements: ROLE_OPERATIONAL_SPECS.TU.monthlyAchievements,
+    obstacles: ROLE_OPERATIONAL_SPECS.TU.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.TU.fieldObstacles.map(o => o.solution)
   },
   PENJAGA: {
-    summary: 'Layanan pengamanan lingkungan dan pemeliharaan sarana prasarana sekolah pada periode bulan ini berlangsung kondusif. Seluruh pos penjagaan dan titik rawan terpatroli secara intensif siang dan malam hari. Kegiatan penyeberangan anak dan pengantaran surat kedinasan terlaksana sesuai protap.',
-    achievements: [
-      'Pengamanan lingkungan 24 jam terlaksana kondusif tanpa insiden gangguan kamtibmas',
-      'Pemeriksaan dan penguncian gerbang, ruang kelas, laboratorium serta kantor setiap sore & malam hari',
-      'Pengawasan ketertiban dan penyeberangan siswa di gerbang utama sekolah pada jam masuk dan pulang',
-      'Perbaikan sarana prasarana ringan: instalasi kran air, kunci gembok, dan penggantian lampu kelas',
-      'Pengantaran surat dinas dan dokumen SPM ke Dinas Pendidikan serta instansi mitra tepat waktu'
-    ],
-    obstacles: [
-      'Curah hujan tinggi menyebabkan penumpukan daun dan genangan di saluran pintu gerbang',
-      'Lampu penerangan selasar belakang sempat putus akibat fluktuasi voltase'
-    ],
-    solutions: [
-      'Pembersihan rutin sedimen saluran drainase setiap pagi bersama tim kebersihan',
-      'Pemasangan lampu cadangan LED hemat daya dan pengetesan instalasi box MCB'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.PENJAGA.getExecutiveSummaryMonthly('September', 2026, { total: 26, completed: 26, rate: 100 }),
+    achievements: ROLE_OPERATIONAL_SPECS.PENJAGA.monthlyAchievements,
+    obstacles: ROLE_OPERATIONAL_SPECS.PENJAGA.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.PENJAGA.fieldObstacles.map(o => o.solution)
   },
   SERVICE: {
-    summary: 'Pelaksanaan layanan operasional kebersihan sekolah pada bulan ini berhasil mempertahankan standar higienitas dan kenyamanan seluruh warga sekolah. Pembersihan rutin ruang kantor, ruang kelas, toilet (WC) guru dan siswa, serta pengelolaan pemilahan sampah terlaksana optimal.',
-    achievements: [
-      'Sanitasi harian 12 unit bilik WC siswa dan toilet guru terjaga bersih, wangi dan tidak berbau',
-      'Pembersihan dan pengepelan lantai ruang kantor kepala sekolah, ruang guru dan lobi utama dua kali sehari',
-      'Pengumpulan, pemilahan sampah organik dan anorganik serta pengangkutan ke TPS terjadwal lancar',
-      'Penyemprotan disinfektan dan pengharum ruangan berkala di ruang UKS dan perpustakaan'
-    ],
-    obstacles: [
-      'Ketersediaan stok cairan pembersih lantai dan sabun cuci tangan mendekati batas minimal di pertengahan bulan',
-      'Kran air di toilet blok barat sempat macet karena kerak endapan sumur bor'
-    ],
-    solutions: [
-      'Mengajukan amprah kebutuhan bahan habis pakai ke bagian TU seminggu sebelum stok habis',
-      'Membersihkan saringan kran dan koordinasi dengan penjaga sekolah untuk pemeliharaan pipa'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.SERVICE.getExecutiveSummaryMonthly('September', 2026, { total: 25, completed: 25, rate: 100 }),
+    achievements: ROLE_OPERATIONAL_SPECS.SERVICE.monthlyAchievements,
+    obstacles: ROLE_OPERATIONAL_SPECS.SERVICE.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.SERVICE.fieldObstacles.map(o => o.solution)
   },
   PERPUS: {
-    summary: 'Pelayanan sirkulasi, pengolahan klasifikasi DDC bahan pustaka, dan gerakan literasi sekolah pada bulan berjalan terlaksana secara terprogram dan tertib. Peningkatan frekuensi kunjungan pemustaka dan pemanfaatan pojok baca kelas terdata secara akuntabel.',
-    achievements: [
-      'Penyelesaian registrasi buku induk dan barcode scanner 100% koleksi buku pengayaan baru',
-      'Pelayanan sirkulasi peminjaman dan pengembalian buku siswa tanpa komplain layanan',
-      'Penyelenggaraan pendampingan 15 menit membaca dalam rangka Gerakan Literasi Sekolah (GLS)',
-      'Restorasi dan perbaikan jilid buku referensi yang mengalami kerusakan fisik',
-      'Penyusunan rekapitulasi statistik pemustaka dan buku terpopuler bulanan'
-    ],
-    obstacles: [
-      'Keterlambatan pengembalian buku pinjaman oleh sebagian peserta didik saat ujian',
-      'Kapasitas rak display buku baru perlu ditambah untuk menampung hibah buku'
-    ],
-    solutions: [
-      'Mengirimkan surat pemberitahuan pengembalian berkala melalui wali kelas',
-      'Mengajukan penambahan rak buku display akrilik pada usulan anggaran sekolah'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.PERPUS.getExecutiveSummaryMonthly('September', 2026, { total: 24, completed: 24, rate: 100 }),
+    achievements: ROLE_OPERATIONAL_SPECS.PERPUS.monthlyAchievements,
+    obstacles: ROLE_OPERATIONAL_SPECS.PERPUS.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.PERPUS.fieldObstacles.map(o => o.solution)
   },
   LAB_IPA: {
-    summary: 'Pelayanan praktikum sains laboratorium IPA sepanjang bulan berjalan berjalan lancar, aman, dan tanpa kecelakaan kerja (Zero Incident K3). Penyiapan alat dan bahan praktikum fisika/biologi, pencucian alat gelas kimia, serta pemeliharaan mikroskop dan neraca presisi tuntas sesuai standar.',
-    achievements: [
-      'Penyiapan alat peraga dan bahan reagen praktikum seluruh rombel tepat waktu sesuai jadwal',
-      'Pencucian, sterilisasi, dan penataan alat gelas laboratorium bebas residu kontaminan',
-      'Pengecekan fungsi dan kalibrasi rutin mikroskop siswa dan neraca Ohaus',
-      'Pemeriksaan kesiapsiagaan kotak P3K dan indikator tekanan tabung APAR di zona hijau',
-      'Pengelolaan limbah cair praktikum dengan metode netralisasi pH ramah lingkungan'
-    ],
-    obstacles: [
-      'Ketersediaan stok larutan reagen indikator menipis pada akhir periode praktikum',
-      'Sumbatan kotoran halus pada salah satu kran wastafel ruang preparasi lab'
-    ],
-    solutions: [
-      'Membuat usulan amprah bahan kimia habis pakai lebih awal ke bagian TU',
-      'Pembersihan saringan kran dan pemeliharaan pipa bersama tim sapras sekolah'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.LAB_IPA.getExecutiveSummaryMonthly('September', 2026, { total: 22, completed: 22, rate: 100 }),
+    achievements: ROLE_OPERATIONAL_SPECS.LAB_IPA.monthlyAchievements,
+    obstacles: ROLE_OPERATIONAL_SPECS.LAB_IPA.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.LAB_IPA.fieldObstacles.map(o => o.solution)
   }
 };
 
@@ -716,7 +660,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             value={reportState.manualDocDate}
             onChange={(e) => setReportState(prev => ({ ...prev, manualDocDate: e.target.value }))}
             className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-semibold w-full sm:w-64 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-            placeholder="Contoh: Kota Bogor, 30 September 2026"
+            placeholder="Contoh: Tempat, 30 September 2026"
           />
           <button
             type="button"
@@ -771,37 +715,141 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
         </button>
       </div>
 
-      {/* Uraian Ringkasan & Capaian Kinerja */}
-      <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4">
+      {/* ========================================================
+          I. RINGKASAN EKSEKUTIF KINERJA & CAPAIAN TARGET OPERASIONAL
+          ======================================================== */}
+      <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-6 bg-blue-600 rounded-full inline-block"></span>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 uppercase tracking-tight">
+                I. Ringkasan Eksekutif Kinerja & Capaian Target Operasional
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Disesuaikan khusus untuk portal akun: <span className="font-bold text-blue-700">{roleTitle}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              {monthTasks.length} Agenda Tercatat
+            </span>
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              {totalRate}% Capaian Target
+            </span>
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+              Standar SPM: Terpenuhi ✓
+            </span>
+          </div>
+        </div>
+
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-xs font-bold text-slate-900">
-              Ringkasan Eksekutif Kinerja Bulanan:
+            <label className="block text-xs font-bold text-slate-800">
+              Uraian Narasi Ringkasan Eksekutif Bulanan:
             </label>
-            <span className="text-[11px] text-slate-400">Dapat diedit bebas</span>
+            <span className="text-[11px] text-slate-400 font-medium">Dapat diedit bebas sesuai catatan riil</span>
           </div>
           <textarea
             rows={3}
             value={reportState.summary}
             onChange={(e) => setReportState(prev => ({ ...prev, summary: e.target.value }))}
-            className="w-full p-3 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 leading-relaxed"
+            className="w-full p-3 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 leading-relaxed font-sans"
+            placeholder="Ketik uraian ringkasan eksekutif kinerja bulanan..."
           />
         </div>
 
-        {/* Capaian Utama */}
-        <div>
-          <label className="block text-xs font-bold text-slate-900 mb-1.5">
-            Daftar Capaian & Prestasi Kinerja yang Terlaksana:
-          </label>
-          <div className="space-y-2 mb-2">
+        {/* ========================================================
+            INDIKATOR KINERJA KUNCI (KPI) & TARGET OPERASIONAL
+            ======================================================== */}
+        <div className="pt-2">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-1.5">
+              <Target className="w-4 h-4 text-indigo-600" />
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">
+                Matriks Target Operasional & Indikator Kinerja Kunci (KPI) - {roleTitle}
+              </h4>
+            </div>
+            <span className="text-[11px] text-slate-500 font-mono">
+              Standar Permendikbud Tata Kelola
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {(ROLE_OPERATIONAL_SPECS[effectiveRole]?.operationalKPIs || []).map((kpi, idx) => (
+              <div key={idx} className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 flex flex-col justify-between hover:bg-slate-50 transition-colors">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                      {kpi.code}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>{kpi.status === 'tercapai' ? 'Tercapai' : 'Proses'}</span>
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-900 leading-tight mb-2">
+                    {kpi.name}
+                  </p>
+                </div>
+                <div className="text-[11px] space-y-1 pt-1.5 border-t border-slate-200 text-slate-600">
+                  <div className="flex items-start justify-between gap-1">
+                    <span className="text-slate-500">Target:</span>
+                    <span className="font-semibold text-slate-800 text-right">{kpi.target}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-1">
+                    <span className="text-slate-500">Realisasi:</span>
+                    <span className="font-semibold text-emerald-700 text-right">{kpi.realization}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ========================================================
+            II. RINCIAN CAPAIAN INDIKATOR KINERJA YANG TERLAKSANA
+            ======================================================== */}
+        <div className="pt-4 border-t border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">
+                II. Rincian Capaian Indikator Kinerja yang Terlaksana ({roleTitle})
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Poin bukti keberhasilan pelaksanaan kegiatan operasional yang terlaksana sepanjang periode
+              </p>
+            </div>
+            {/* Quick preset buttons */}
+            <button
+              type="button"
+              onClick={() => {
+                const specItems = ROLE_OPERATIONAL_SPECS[effectiveRole]?.monthlyAchievements || [];
+                setReportState(prev => {
+                  const merged = Array.from(new Set([...prev.achievements, ...specItems]));
+                  return { ...prev, achievements: merged };
+                });
+                showNotification(`Poin indikator capaian standar ${roleTitle} berhasil disisipkan!`);
+              }}
+              className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md border border-indigo-200 flex items-center gap-1 cursor-pointer shrink-0"
+              title="Sisipkan seluruh poin capaian standar resmi untuk bidang ini"
+            >
+              <Sparkles className="w-3 h-3 text-indigo-600" />
+              <span>Muat Capaian Standar {roleTitle}</span>
+            </button>
+          </div>
+
+          <div className="space-y-2 mb-3">
             {reportState.achievements.map((item, idx) => (
-              <div key={idx} className="flex items-start gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
-                <span className="font-semibold text-blue-900 shrink-0">{idx + 1}.</span>
-                <span className="text-slate-800 flex-1">{item}</span>
+              <div key={idx} className="flex items-start gap-2 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200 text-xs">
+                <span className="font-bold text-blue-900 shrink-0 w-5">{idx + 1}.</span>
+                <span className="text-slate-800 flex-1 leading-relaxed">{item}</span>
                 <button
                   type="button"
                   onClick={() => removeAchievement(idx)}
-                  className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                  className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer transition-colors"
+                  title="Hapus butir capaian ini"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -812,7 +860,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Tambahkan poin capaian kinerja..."
+              placeholder={`Ketik capaian indikator baru untuk ${roleTitle}...`}
               value={newAchievement}
               onChange={(e) => setNewAchievement(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAchievement(); } }}
@@ -821,90 +869,127 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             <button
               type="button"
               onClick={addAchievement}
-              className="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg border border-slate-200 cursor-pointer"
+              className="px-3.5 py-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow-2xs cursor-pointer active:scale-95 transition-all"
             >
               Tambah
             </button>
           </div>
         </div>
 
-        {/* Kendala & Solusi */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          {/* Kendala */}
-          <div>
-            <label className="block text-xs font-bold text-slate-900 mb-1.5">
-              Kendala / Hambatan di Lapangan:
-            </label>
-            <div className="space-y-1.5 mb-2">
-              {reportState.obstacles.map((obs, idx) => (
-                <div key={idx} className="flex items-start gap-2 bg-amber-50/70 p-2 rounded-lg border border-amber-200 text-xs">
-                  <span className="font-semibold text-amber-900 shrink-0">•</span>
-                  <span className="text-slate-800 flex-1">{obs}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeObstacle(idx)}
-                    className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+        {/* ========================================================
+            III. KENDALA / HAMBATAN DI LAPANGAN & SOLUSI
+            ======================================================== */}
+        <div className="pt-4 border-t border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">
+                III. Kendala / Hambatan di Lapangan & Upaya Pemecahan Masalah (Solusi)
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Identifikasi hambatan operasional nyata di lapangan dan rencana mitigasi perbaikan ({roleTitle})
+              </p>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Tambah kendala..."
-                value={newObstacle}
-                onChange={(e) => setNewObstacle(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addObstacle(); } }}
-                className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-              />
-              <button
-                type="button"
-                onClick={addObstacle}
-                className="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg border border-slate-200 cursor-pointer"
-              >
-                Tambah
-              </button>
-            </div>
+            {/* Quick preset buttons */}
+            <button
+              type="button"
+              onClick={() => {
+                const specObstacles = ROLE_OPERATIONAL_SPECS[effectiveRole]?.fieldObstacles || [];
+                const obsTexts = specObstacles.map(o => o.obstacle);
+                const solTexts = specObstacles.map(o => o.solution);
+                setReportState(prev => ({
+                  ...prev,
+                  obstacles: Array.from(new Set([...prev.obstacles, ...obsTexts])),
+                  solutions: Array.from(new Set([...prev.solutions, ...solTexts]))
+                }));
+                showNotification(`Kendala dan solusi khas ${roleTitle} berhasil disisipkan!`);
+              }}
+              className="text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-md border border-amber-300 flex items-center gap-1 cursor-pointer shrink-0"
+              title="Sisipkan paket kendala lapangan dan solusi khas untuk bidang ini"
+            >
+              <AlertTriangle className="w-3 h-3 text-amber-600" />
+              <span>Muat Kendala Khas {roleTitle}</span>
+            </button>
           </div>
 
-          {/* Solusi */}
-          <div>
-            <label className="block text-xs font-bold text-slate-900 mb-1.5">
-              Solusi & Upaya Pemecahan Masalah:
-            </label>
-            <div className="space-y-1.5 mb-2">
-              {reportState.solutions.map((sol, idx) => (
-                <div key={idx} className="flex items-start gap-2 bg-emerald-50/70 p-2 rounded-lg border border-emerald-200 text-xs">
-                  <span className="font-semibold text-emerald-900 shrink-0">•</span>
-                  <span className="text-slate-800 flex-1">{sol}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeSolution(idx)}
-                    className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            {/* Kendala */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-amber-900">
+                Daftar Kendala / Hambatan di Lapangan:
+              </label>
+              <div className="space-y-2">
+                {reportState.obstacles.map((obs, idx) => (
+                  <div key={idx} className="flex items-start gap-2 bg-amber-50/70 p-2.5 rounded-lg border border-amber-200 text-xs">
+                    <span className="font-bold text-amber-900 shrink-0">•</span>
+                    <span className="text-slate-800 flex-1 leading-relaxed">{obs}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeObstacle(idx)}
+                      className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                      title="Hapus kendala ini"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder={`Tambah kendala lapangan (${roleTitle})...`}
+                  value={newObstacle}
+                  onChange={(e) => setNewObstacle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addObstacle(); } }}
+                  className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={addObstacle}
+                  className="px-3 py-1.5 text-xs font-medium bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg border border-amber-300 cursor-pointer"
+                >
+                  Tambah
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Tambah solusi..."
-                value={newSolution}
-                onChange={(e) => setNewSolution(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSolution(); } }}
-                className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-              />
-              <button
-                type="button"
-                onClick={addSolution}
-                className="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg border border-slate-200 cursor-pointer"
-              >
-                Tambah
-              </button>
+
+            {/* Solusi */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-emerald-900">
+                Solusi & Upaya Pemecahan Masalah:
+              </label>
+              <div className="space-y-2">
+                {reportState.solutions.map((sol, idx) => (
+                  <div key={idx} className="flex items-start gap-2 bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-200 text-xs">
+                    <span className="font-bold text-emerald-900 shrink-0">•</span>
+                    <span className="text-slate-800 flex-1 leading-relaxed">{sol}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSolution(idx)}
+                      className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                      title="Hapus solusi ini"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder={`Tambah solusi penanganan (${roleTitle})...`}
+                  value={newSolution}
+                  onChange={(e) => setNewSolution(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSolution(); } }}
+                  className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={addSolution}
+                  className="px-3 py-1.5 text-xs font-medium bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-lg border border-emerald-300 cursor-pointer"
+                >
+                  Tambah
+                </button>
+              </div>
             </div>
           </div>
         </div>

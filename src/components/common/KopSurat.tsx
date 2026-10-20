@@ -7,7 +7,10 @@ interface KopSuratProps {
   isPrintVersion?: boolean;
 }
 
-export const LogoKabupatenDefault: React.FC<{ className?: string }> = ({ className = "w-20 h-24" }) => (
+export const LogoKabupatenDefault: React.FC<{ className?: string; bannerText?: string }> = ({ 
+  className = "w-20 h-24",
+  bannerText = "PEMDA"
+}) => (
   <svg viewBox="0 0 120 140" className={className} xmlns="http://www.w3.org/2000/svg">
     {/* Indonesian Regional Emblem Silhouette / Coat of Arms */}
     <defs>
@@ -63,7 +66,7 @@ export const LogoKabupatenDefault: React.FC<{ className?: string }> = ({ classNa
     {/* Ribbon Banner */}
     <path d="M28 112 Q60 106 92 112 L88 122 Q60 116 32 122 Z" fill="#b91c1c" stroke="#fef08a" strokeWidth="1" />
     <text x="60" y="119" textAnchor="middle" fontSize="6.5" fontWeight="bold" fill="#ffffff" fontFamily="sans-serif">
-      KABUPATEN
+      {bannerText}
     </text>
   </svg>
 );
@@ -126,6 +129,15 @@ export const LogoTutWuriDefault: React.FC<{ className?: string }> = ({ className
 );
 
 export const KopSurat: React.FC<KopSuratProps> = ({ config, className = "", isPrintVersion = false }) => {
+  const pemdaUpper = (config.pemerintahDaerah || '').toUpperCase();
+  const bannerText = pemdaUpper.includes('PROVINSI') 
+    ? 'PROVINSI' 
+    : pemdaUpper.includes('KOTA') 
+      ? 'KOTA' 
+      : pemdaUpper.includes('KABUPATEN') 
+        ? 'KABUPATEN' 
+        : 'PEMDA';
+
   return (
     <div className={`w-full ${className}`}>
       {/* 3 Columns Layout: Kolom 1 (Kiri), Kolom 2 (Tengah), Kolom 3 (Kanan) */}
@@ -139,34 +151,54 @@ export const KopSurat: React.FC<KopSuratProps> = ({ config, className = "", isPr
               className="max-h-24 max-w-[90px] object-contain drop-shadow-sm" 
             />
           ) : (
-            <LogoKabupatenDefault className="w-20 h-24" />
+            <LogoKabupatenDefault className="w-20 h-24" bannerText={bannerText} />
           )}
         </div>
 
         {/* Kolom 2: Identitas Resmi Sekolah */}
         <div className="flex flex-col items-center justify-center leading-tight">
-          <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-slate-800 uppercase">
-            {config.pemerintahDaerah}
-          </h3>
-          <h2 className="text-xs sm:text-base font-bold tracking-wide text-slate-900 uppercase">
-            {config.dinasPendidikan}
-          </h2>
-          <h1 className="text-base sm:text-xl font-extrabold text-slate-950 uppercase tracking-tight my-0.5">
-            {config.namaSekolah}
-          </h1>
-          <p className="text-[10px] sm:text-xs text-slate-700 font-normal leading-snug">
-            {config.alamat}, {config.desaKecamatan}, {config.kabupatenKota}, {config.provinsi} {config.kodePos ? `Kode Pos ${config.kodePos}` : ''}
-          </p>
+          {config.pemerintahDaerah && config.pemerintahDaerah.trim() && (
+            <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-slate-800 uppercase">
+              {config.pemerintahDaerah}
+            </h3>
+          )}
+          {config.dinasPendidikan && config.dinasPendidikan.trim() && (
+            <h2 className="text-xs sm:text-base font-bold tracking-wide text-slate-900 uppercase">
+              {config.dinasPendidikan}
+            </h2>
+          )}
+          {config.namaSekolah && config.namaSekolah.trim() && (
+            <h1 className="text-base sm:text-xl font-extrabold text-slate-950 uppercase tracking-tight my-0.5">
+              {config.namaSekolah}
+            </h1>
+          )}
+          {(() => {
+            const parts = [
+              config.alamat,
+              config.desaKecamatan,
+              config.kabupatenKota,
+              config.provinsi
+            ].filter((s): s is string => typeof s === 'string' && s.trim().length > 0);
+            const addressText = parts.join(', ') + (config.kodePos && config.kodePos.trim() ? ` Kode Pos ${config.kodePos.trim()}` : '');
+            if (!addressText.trim()) return null;
+            return (
+              <p className="text-[10px] sm:text-xs text-slate-700 font-normal leading-snug">
+                {addressText}
+              </p>
+            );
+          })()}
           <div className="flex flex-wrap items-center justify-center gap-x-3 text-[9.5px] sm:text-[11px] text-slate-600 mt-0.5">
-            {config.telepon && <span>Telp: {config.telepon}</span>}
-            {config.email && <span>Pos-el: {config.email}</span>}
-            {config.website && <span>Laman: {config.website}</span>}
+            {config.telepon && config.telepon.trim() && <span>Telp: {config.telepon}</span>}
+            {config.email && config.email.trim() && <span>Pos-el: {config.email}</span>}
+            {config.website && config.website.trim() && <span>Laman: {config.website}</span>}
           </div>
-          <div className="flex items-center justify-center gap-3 text-[9px] sm:text-[10.5px] font-semibold text-slate-800 mt-0.5">
-            <span>NPSN: {config.npsn}</span>
-            <span>·</span>
-            <span>NSS: {config.nss}</span>
-          </div>
+          {(config.npsn || config.nss) && (
+            <div className="flex items-center justify-center gap-3 text-[9px] sm:text-[10.5px] font-semibold text-slate-800 mt-0.5">
+              {config.npsn && config.npsn.trim() && <span>NPSN: {config.npsn}</span>}
+              {config.npsn && config.nss && config.npsn.trim() && config.nss.trim() && <span>·</span>}
+              {config.nss && config.nss.trim() && <span>NSS: {config.nss}</span>}
+            </div>
+          )}
         </div>
 
         {/* Kolom 3: Logo Tut Wuri Handayani / Sekolah */}

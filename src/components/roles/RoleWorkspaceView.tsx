@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp, RoleSubTab } from '../../context/AppContext';
 import { RoleType } from '../../types';
 import { PenjagaView } from './PenjagaView';
@@ -22,12 +22,15 @@ import {
   FileText, 
   Award, 
   Boxes,
-  UserCheck
+  UserCheck,
+  Printer,
+  Bot
 } from 'lucide-react';
+import { AiAssistantModal } from '../common/AiAssistantModal';
 
 interface RoleWorkspaceViewProps {
   role: RoleType;
-  onOpenPrint: (reportType: 'monthly' | 'annual', data: any) => void;
+  onOpenPrint: (reportType: 'monthly' | 'annual', data: any, options?: { autoPrint?: boolean }) => void;
 }
 
 export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOpenPrint }) => {
@@ -37,8 +40,20 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
     roleSubTabs, 
     setRoleSubTab, 
     tupoksiDefinitions,
-    inventories
+    inventories,
+    monthlyReports,
+    generateMonthlyReportFromTasks
   } = useApp();
+
+  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
+
+  const handleDirectPrintCurrentMonth = () => {
+    const currentMonth = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    const existing = monthlyReports.find(r => r.role === role && r.month === currentMonth && r.year === currentYear);
+    const reportData = existing || generateMonthlyReportFromTasks(role, currentMonth, currentYear);
+    onOpenPrint('monthly', reportData, { autoPrint: true });
+  };
 
   const currentSubTab = roleSubTabs[role] || 'tasks';
 
@@ -157,18 +172,41 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
             </div>
           </div>
 
-          {/* Operator Profile Card */}
-          <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/15 shrink-0">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white">
-              <UserCheck className="w-4 h-4" />
-            </div>
-            <div className="text-right sm:text-left">
-              <p className="text-xs font-bold text-white leading-tight">
-                {operator.nama}
-              </p>
-              <p className="text-[10px] text-slate-300 font-mono">
-                {operator.nip}
-              </p>
+          {/* Quick Actions (Cetak Langsung & Asisten AI) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleDirectPrintCurrentMonth}
+              className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition-all shadow-md cursor-pointer active:scale-95"
+              title="Langsung cetak dokumen laporan bulanan resmi bulan ini ke printer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Cetak Langsung (Bulan Ini)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAiAssistantOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white text-xs font-bold rounded-xl transition-all shadow-md cursor-pointer active:scale-95"
+              title="Konsultasikan SOP, buat draf surat resmi, atau BAST dengan Asisten AI"
+            >
+              <Bot className="w-3.5 h-3.5 text-amber-300" />
+              <span>Asisten AI</span>
+            </button>
+
+            {/* Operator Profile Card */}
+            <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/15 shrink-0">
+              <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white">
+                <UserCheck className="w-3.5 h-3.5" />
+              </div>
+              <div className="text-right sm:text-left">
+                <p className="text-xs font-bold text-white leading-tight">
+                  {operator.nama}
+                </p>
+                <p className="text-[10px] text-slate-300 font-mono">
+                  {operator.nip}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -254,6 +292,15 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
           </div>
         )}
       </div>
+
+      {/* AI Assistant Modal for this Role */}
+      {isAiAssistantOpen && (
+        <AiAssistantModal
+          isOpen={isAiAssistantOpen}
+          onClose={() => setIsAiAssistantOpen(false)}
+          initialRole={role}
+        />
+      )}
     </div>
   );
 };

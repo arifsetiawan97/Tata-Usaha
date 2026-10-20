@@ -14,7 +14,10 @@ import {
   Upload, 
   Download, 
   FileSpreadsheet,
-  Check
+  Check,
+  Sparkles,
+  Printer,
+  Bot
 } from 'lucide-react';
 
 interface InventoryTableProps {
@@ -30,7 +33,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   readOnly = false,
   title
 }) => {
-  const { inventories, addInventory, updateInventory, deleteInventory, importInventories, currentRole } = useApp();
+  const { inventories, addInventory, updateInventory, deleteInventory, importInventories, currentRole, schoolConfig } = useApp();
   const effectiveRole = role || currentRole || 'TU';
   const roleTitle = 
     effectiveRole === 'TU' ? 'Tata Usaha' : 
@@ -44,6 +47,143 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [importStatus, setImportStatus] = useState('');
+
+  // AI Sarpras Audit State
+  const [isAnalyzingAi, setIsAnalyzingAi] = useState(false);
+  const [aiAuditResult, setAiAuditResult] = useState<{
+    conditionSummary: string;
+    readinessScore: number;
+    priorityAction: string;
+    recommendations: string[];
+    isAi?: boolean;
+  } | null>(null);
+  const [showAiAuditModal, setShowAiAuditModal] = useState(false);
+
+  const handleRunAiAudit = async () => {
+    setIsAnalyzingAi(true);
+    try {
+      const res = await fetch('/api/gemini/analyze-inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: effectiveRole,
+          inventories: inventories.filter(i => i.role === effectiveRole),
+          schoolConfig
+        })
+      });
+      const data = await res.json();
+      if (data && data.data) {
+        setAiAuditResult({ ...data.data, isAi: data.isAi });
+        setShowAiAuditModal(true);
+      }
+    } catch (err) {
+      console.error('Error running AI sarpras audit:', err);
+    } finally {
+      setIsAnalyzingAi(false);
+    }
+  };
+
+  const handleDirectPrintKir = () => {
+    const printWindow = window.open('', '_blank');
+    const operator = schoolConfig.operatorProfiles?.[effectiveRole] || {
+      nama: 'Petugas Layanan Operasional',
+      nip: '-',
+      jabatan: roleTitle
+    };
+    const items = inventories.filter(i => i.role === effectiveRole);
+    const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Buku Inventaris Sarana Kerja - ${roleTitle} - ${schoolConfig.namaSekolah}</title>
+          <style>
+            body { font-family: Arial, sans-serif; font-size: 10pt; line-height: 1.4; padding: 20px; color: #111; }
+            .header { text-align: center; border-bottom: 3px double #000; padding-bottom: 10px; margin-bottom: 15px; }
+            .header h3 { margin: 0; font-size: 13pt; text-transform: uppercase; }
+            .header h2 { margin: 2px 0; font-size: 15pt; }
+            .header p { margin: 2px 0; font-size: 9pt; color: #444; }
+            .title { text-align: center; margin: 15px 0; font-weight: bold; font-size: 12pt; text-decoration: underline; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }
+            th, td { border: 1px solid #000; padding: 5px 8px; }
+            th { background-color: #f0f0f0; text-align: center; font-weight: bold; }
+            .signatures { margin-top: 35px; width: 100%; display: flex; justify-content: space-between; page-break-inside: avoid; }
+            .sig-box { width: 45%; text-align: center; font-size: 9.5pt; }
+            @page { size: A4 portrait; margin: 1.5cm; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h3>PEMERINTAH DAERAH · DINAS PENDIDIKAN</h3>
+            <h2>${schoolConfig.namaSekolah.toUpperCase()}</h2>
+            <p>${schoolConfig.alamat || 'Alamat Sekolah'} · Telp: ${schoolConfig.telepon || '-'} · Email: ${schoolConfig.email || '-'}</p>
+          </div>
+
+          <div class="title">BUKU INDUK INVENTARIS SARANA PRASARANA KERJA (KIR)</div>
+          <p style="text-align: center; font-size: 9pt; margin-top: -10px;">Unit Kerja: <strong>${roleTitle}</strong> · Tanggal Cetak: ${dateStr}</p>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30px;">No</th>
+                <th>Kode Barang</th>
+                <th>Nama Barang & Merk / Tipe</th>
+                <th>Kategori</th>
+                <th>Jml</th>
+                <th>Kondisi</th>
+                <th>Lokasi Simpan</th>
+                <th>Tahun</th>
+                <th>Keterangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((it, idx) => `
+                <tr>
+                  <td style="text-align: center;">${idx + 1}</td>
+                  <td style="font-family: monospace;">${it.kodeBarang}</td>
+                  <td><strong>${it.namaBarang}</strong><br><small style="color: #555;">${it.merkModel || '-'}</small></td>
+                  <td>${it.kategori}</td>
+                  <td style="text-align: center;">${it.jumlah} ${it.satuan}</td>
+                  <td style="text-align: center;">${it.kondisi}</td>
+                  <td>${it.lokasiPenyimpanan}</td>
+                  <td style="text-align: center;">${it.tahunPengadaan || '-'}</td>
+                  <td>${it.keterangan || '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="signatures" style="display: table; width: 100%; margin-top: 40px;">
+            <div style="display: table-cell; width: 50%; text-align: center;">
+              Mengetahui,<br>
+              Kepala ${schoolConfig.namaSekolah}<br><br><br><br>
+              <strong>( ${schoolConfig.kepalaSekolah.nama} )</strong><br>
+              NIP. ${schoolConfig.kepalaSekolah.nip}
+            </div>
+            <div style="display: table-cell; width: 50%; text-align: center;">
+              ${[schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0] ? `${[schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0]}, ` : ''}${dateStr}<br>
+              Petugas / Penanggung Jawab Sarpras,<br><br><br><br>
+              <strong>( ${operator.nama} )</strong><br>
+              NIP. ${operator.nip}
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+    } else {
+      window.print();
+    }
+  };
 
   // Form state
   const [formData, setFormData] = useState<Omit<InventoryItem, 'id' | 'role'>>({
@@ -213,6 +353,29 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                 <option value="Rusak Berat">Rusak Berat</option>
               </select>
 
+              {/* Direct Print KIR Button */}
+              <button
+                type="button"
+                onClick={handleDirectPrintKir}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors shadow-2xs cursor-pointer"
+                title="Cetak langsung Buku Inventaris Sarana Kerja (KIR) resmi ke printer"
+              >
+                <Printer className="w-3.5 h-3.5 text-white" />
+                <span>Cetak Langsung (KIR)</span>
+              </button>
+
+              {/* AI Sarpras Audit Button */}
+              <button
+                type="button"
+                onClick={handleRunAiAudit}
+                disabled={isAnalyzingAi}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+                title="Lakukan audit kelayakan sarana prasarana cerdas otomatis dengan Gemini AI"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                <span>{isAnalyzingAi ? 'Menganalisis AI...' : 'Audit Sarpras (AI)'}</span>
+              </button>
+
               {/* Import Button */}
               <button
                 type="button"
@@ -228,7 +391,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
               <button
                 type="button"
                 onClick={handleOpenAdd}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Tambah Barang</span>
@@ -551,6 +714,108 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                   {importStatus}
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI SARPRAS AUDIT MODAL */}
+      {showAiAuditModal && aiAuditResult && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-xs">
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Audit Kelayakan Sarpras AI
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Analisis Kesiapsiagaan Aset & Sarana Kerja ({roleTitle})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAiAuditModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Score card */}
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-200 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider">
+                    Indeks Kelayakan Sarpras:
+                  </p>
+                  <p className="text-2xl font-black text-indigo-700">
+                    {aiAuditResult.readinessScore}%
+                  </p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  aiAuditResult.readinessScore >= 80 
+                    ? 'bg-emerald-100 text-emerald-800' 
+                    : aiAuditResult.readinessScore >= 60 
+                    ? 'bg-amber-100 text-amber-800' 
+                    : 'bg-rose-100 text-rose-800'
+                }`}>
+                  {aiAuditResult.readinessScore >= 80 ? '✓ Sangat Laik Pakai' : aiAuditResult.readinessScore >= 60 ? '⚠️ Butuh Pemeliharaan' : '🚨 Kritis'}
+                </span>
+              </div>
+
+              {/* Condition Summary */}
+              <div>
+                <p className="font-bold text-slate-800 mb-1">Ringkasan Kondisi Lapangan:</p>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-700 leading-relaxed">
+                  {aiAuditResult.conditionSummary}
+                </div>
+              </div>
+
+              {/* Priority Action */}
+              <div>
+                <p className="font-bold text-rose-800 mb-1">Tindakan Prioritas Utama:</p>
+                <div className="bg-rose-50 p-3 rounded-lg border border-rose-200 text-rose-900 font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{aiAuditResult.priorityAction}</span>
+                </div>
+              </div>
+
+              {/* Technical Recommendations */}
+              <div>
+                <p className="font-bold text-slate-800 mb-1">Rekomendasi Tindak Lanjut:</p>
+                <ul className="space-y-1.5">
+                  {aiAuditResult.recommendations.map((rec, i) => (
+                    <li key={i} className="flex items-start gap-2 text-slate-600">
+                      <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                      <span>{rec}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={handleDirectPrintKir}
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Cetak Buku KIR</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAiAuditModal(false)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>

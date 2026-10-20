@@ -69,8 +69,12 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const monthlyData = isMonthly ? (reportData as MonthlyReport) : null;
   const annualData = !isMonthly ? (reportData as AnnualReport) : null;
 
+  const placeName = [schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0] || '';
+  const defaultDateStr = isMonthly && monthlyData 
+    ? `${MONTH_NAMES[monthlyData.month - 1]} ${monthlyData.year}`
+    : `31 Desember ${annualData?.year || 2026}`;
   const [manualDate, setManualDate] = useState<string>(
-    reportData.manualDocDate || `${schoolConfig.kabupatenKota}, 30 September 2026`
+    reportData.manualDocDate || `${placeName ? `${placeName}, ` : ''}${defaultDateStr}`
   );
 
   const [nomorSurat, setNomorSurat] = useState<string>(
@@ -235,7 +239,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
               value={manualDate}
               onChange={(e) => setManualDate(e.target.value)}
               className="bg-transparent text-xs text-white font-medium focus:outline-hidden w-full xs:w-48 sm:w-52"
-              placeholder="Kota Bogor, 30 September 2026"
+              placeholder="Tempat, Tanggal Dokumen..."
             />
           </div>
 
@@ -418,7 +422,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                     {/* RINGKASAN KINERJA */}
                     <div className="my-3 text-xs break-inside-avoid">
                       <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-2 print:border-black">
-                        I. RINGKASAN EKSEKUTIF KINERJA & CAPAIAN TARGET OPERASIONAL
+                        I. RINGKASAN EKSEKUTIF KINERJA & CAPAIAN TARGET OPERASIONAL ({roleTitle.toUpperCase()})
                       </h4>
                       <p className="text-justify leading-relaxed text-slate-800 indent-6">
                         {reportData.summary}
@@ -427,7 +431,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                       {/* CAPAIAN / MILESTONES */}
                       <div className="mt-2.5">
                         <p className="font-semibold text-slate-900 mb-1">
-                          Rincian Capaian Indikator Kinerja yang Terlaksana:
+                          Rincian Capaian Indikator Kinerja yang Terlaksana ({roleTitle}):
                         </p>
                         <ol className="list-decimal pl-5 space-y-1 text-slate-800">
                           {isMonthly ? (
@@ -465,13 +469,35 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                       )}
 
                       {!isMonthly && annualData && (
-                        <div className="mt-2.5 pt-1.5 border-t border-slate-200">
-                          <p className="font-semibold text-slate-900 mb-1">Rekomendasi Rencana Strategis & Kebutuhan Operasional:</p>
-                          <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
-                            {annualData.strategicRecommendations.map((rec, idx) => (
-                              <li key={idx}>{rec}</li>
-                            ))}
-                          </ul>
+                        <div className="mt-2.5 pt-1.5 border-t border-slate-200 space-y-2">
+                          {annualData.obstacles && annualData.obstacles.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                              <div>
+                                <p className="font-semibold text-slate-900 mb-1">Evaluasi Kendala / Hambatan Lapangan Terakumulasi:</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                                  {annualData.obstacles.map((obs, idx) => (
+                                    <li key={idx}>{obs}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div>
+                                <p className="font-semibold text-slate-900 mb-1">Solusi & Mitigasi Kendala:</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                                  {(annualData.solutions || []).map((sol, idx) => (
+                                    <li key={idx}>{sol}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-semibold text-slate-900 mb-1">Rekomendasi Rencana Strategis & Kebutuhan Operasional:</p>
+                            <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                              {annualData.strategicRecommendations.map((rec, idx) => (
+                                <li key={idx}>{rec}</li>
+                              ))}
+                            </ul>
+                          </div>
                         </div>
                       )}
 

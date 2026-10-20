@@ -9,9 +9,12 @@ import { AnnualReportView } from './components/reports/AnnualReportView';
 import { PrintDocumentView } from './components/reports/PrintDocumentView';
 import { InventoryTable } from './components/common/InventoryTable';
 import { DocumentArchiveView } from './components/archive/DocumentArchiveView';
+import { AiAssistantModal } from './components/common/AiAssistantModal';
+import { Bot, Sparkles } from 'lucide-react';
 
 function MainLayout() {
   const { currentRole, activeNavTab } = useApp();
+  const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
 
   // Print view state
   const [printState, setPrintState] = useState<{
@@ -73,6 +76,27 @@ function MainLayout() {
           </p>
         </div>
       </footer>
+
+      {/* Floating Global AI Assistant Trigger */}
+      <button
+        type="button"
+        onClick={() => setIsFloatingAiOpen(true)}
+        className="fixed bottom-6 right-6 z-40 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer no-print ring-4 ring-indigo-400/20"
+        title="Buka Asisten Cerdas AI SI-OPS"
+      >
+        <Bot className="w-5 h-5 text-amber-300" />
+        <span className="text-xs tracking-wide">Asisten AI SI-OPS</span>
+        <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+      </button>
+
+      {/* Global AI Assistant Modal */}
+      {isFloatingAiOpen && (
+        <AiAssistantModal
+          isOpen={isFloatingAiOpen}
+          onClose={() => setIsFloatingAiOpen(false)}
+          initialRole={currentRole}
+        />
+      )}
     </div>
   );
 }

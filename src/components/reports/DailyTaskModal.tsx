@@ -25,7 +25,10 @@ import {
   Target,
   BookmarkCheck,
   Plus,
-  FolderPlus
+  FolderPlus,
+  Brain,
+  Wand2,
+  Loader2
 } from 'lucide-react';
 
 interface DailyTaskModalProps {
@@ -71,6 +74,11 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
   const [newCatClassification, setNewCatClassification] = useState<'pokok' | 'tambahan'>('pokok');
   const [newCatDescription, setNewCatDescription] = useState('');
   const [categoryNotice, setCategoryNotice] = useState<string | null>(null);
+
+  // AI Assistant Drafting state
+  const [showAiDraftBox, setShowAiDraftBox] = useState(false);
+  const [aiPromptInput, setAiPromptInput] = useState('');
+  const [isDraftingAi, setIsDraftingAi] = useState(false);
 
   // Primary tab: form vs import
   const [activeTab, setActiveTab] = useState<'form' | 'import'>(
@@ -416,6 +424,49 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     setNewCatName('');
     setNewCatDescription('');
     setShowAddCategoryModal(false);
+  };
+
+  // AI Formulator Handler
+  const handleDraftWithAi = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!aiPromptInput.trim()) return;
+    setIsDraftingAi(true);
+    try {
+      const res = await fetch('/api/gemini/draft-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role,
+          roughPrompt: aiPromptInput.trim(),
+          date: formData.date,
+          category: formData.category
+        })
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        const d = json.data;
+        setFormData(prev => ({
+          ...prev,
+          title: d.title || prev.title,
+          description: d.description || prev.description,
+          location: d.location || prev.location,
+          volumeUnit: d.volumeUnit || prev.volumeUnit,
+          timeStart: d.timeStart || prev.timeStart,
+          timeEnd: d.timeEnd || prev.timeEnd,
+          category: d.categoryRecommendation || prev.category,
+          taskType: d.taskType || prev.taskType,
+          status: d.status || prev.status
+        }));
+        setAppliedPresetNotice(`✨ Tugas dinas berhasil dirumuskan secara baku oleh AI!`);
+        setInputMode('manual');
+        setShowAiDraftBox(false);
+        setAiPromptInput('');
+      }
+    } catch (err) {
+      console.error('Draft with AI error:', err);
+    } finally {
+      setIsDraftingAi(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {

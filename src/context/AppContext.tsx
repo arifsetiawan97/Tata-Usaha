@@ -19,6 +19,8 @@ import {
   initialArchives,
   initialCustomCategories
 } from '../data/initialData';
+import { ROLE_OPERATIONAL_SPECS } from '../data/roleOperationalSpecs';
+import { storageService } from '../services/storageService';
 import { 
   isTaskInMonth, 
   isTaskInYear, 
@@ -98,19 +100,41 @@ const STORAGE_KEYS = {
 };
 export const mergeSchoolConfigWithDefaults = (sourceConfig: any): SchoolConfig => {
   if (!sourceConfig || typeof sourceConfig !== 'object') return initialSchoolConfig;
+  const cleaned: any = { ...sourceConfig };
+
+  // Pembersihan otomatis: Hapus sisa-sisa default 'Jawa Barat' agar 100% fleksibel sesuai keinginan pengguna
+  if (typeof cleaned.provinsi === 'string' && /jawa\s*barat/i.test(cleaned.provinsi)) {
+    cleaned.provinsi = '';
+  }
+  if (typeof cleaned.pemerintahDaerah === 'string' && /jawa\s*barat/i.test(cleaned.pemerintahDaerah)) {
+    cleaned.pemerintahDaerah = cleaned.pemerintahDaerah
+      .replace(/provinsi\s+jawa\s+barat/gi, '')
+      .replace(/jawa\s+barat/gi, '')
+      .trim();
+  }
+  if (typeof cleaned.alamat === 'string' && /jawa\s*barat/i.test(cleaned.alamat)) {
+    cleaned.alamat = cleaned.alamat
+      .replace(/,\s*provinsi\s+jawa\s+barat/gi, '')
+      .replace(/,\s*jawa\s+barat/gi, '')
+      .trim();
+  }
+  if (typeof cleaned.stempelTextLine1 === 'string' && /jawa\s*barat/i.test(cleaned.stempelTextLine1)) {
+    cleaned.stempelTextLine1 = cleaned.stempelTextLine1.replace(/jawa\s+barat/gi, '').trim();
+  }
+
   return {
     ...initialSchoolConfig,
-    ...sourceConfig,
+    ...cleaned,
     kepalaSekolah: {
       ...initialSchoolConfig.kepalaSekolah,
-      ...(sourceConfig.kepalaSekolah || {})
+      ...(cleaned.kepalaSekolah || {})
     },
     operatorProfiles: {
-      TU: { ...initialSchoolConfig.operatorProfiles.TU, ...(sourceConfig.operatorProfiles?.TU || {}) },
-      PENJAGA: { ...initialSchoolConfig.operatorProfiles.PENJAGA, ...(sourceConfig.operatorProfiles?.PENJAGA || {}) },
-      SERVICE: { ...initialSchoolConfig.operatorProfiles.SERVICE, ...(sourceConfig.operatorProfiles?.SERVICE || {}) },
-      PERPUS: { ...initialSchoolConfig.operatorProfiles.PERPUS, ...(sourceConfig.operatorProfiles?.PERPUS || {}) },
-      LAB_IPA: { ...initialSchoolConfig.operatorProfiles.LAB_IPA, ...(sourceConfig.operatorProfiles?.LAB_IPA || {}) },
+      TU: { ...initialSchoolConfig.operatorProfiles.TU, ...(cleaned.operatorProfiles?.TU || {}) },
+      PENJAGA: { ...initialSchoolConfig.operatorProfiles.PENJAGA, ...(cleaned.operatorProfiles?.PENJAGA || {}) },
+      SERVICE: { ...initialSchoolConfig.operatorProfiles.SERVICE, ...(cleaned.operatorProfiles?.SERVICE || {}) },
+      PERPUS: { ...initialSchoolConfig.operatorProfiles.PERPUS, ...(cleaned.operatorProfiles?.PERPUS || {}) },
+      LAB_IPA: { ...initialSchoolConfig.operatorProfiles.LAB_IPA, ...(cleaned.operatorProfiles?.LAB_IPA || {}) },
     }
   };
 };
@@ -514,51 +538,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let isMounted = true;
     async function loadServerState() {
       try {
-        const res = await fetch('/api/state');
-        if (res.ok) {
-          const json = await res.json();
-          if (json.initialized && json.data && isMounted) {
-            if (json.data.tasks && json.data.tasks.length > 0) {
-              setTasks(json.data.tasks);
-              localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(json.data.tasks));
-            }
-            if (json.data.inventories && json.data.inventories.length > 0) {
-              setInventories(json.data.inventories);
-              localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(json.data.inventories));
-            }
-            if (json.data.monthlyReports && json.data.monthlyReports.length > 0) {
-              setMonthlyReports(json.data.monthlyReports);
-              localStorage.setItem(STORAGE_KEYS.MONTHLY, JSON.stringify(json.data.monthlyReports));
-            }
-            if (json.data.annualReports && json.data.annualReports.length > 0) {
-              setAnnualReports(json.data.annualReports);
-              localStorage.setItem(STORAGE_KEYS.ANNUAL, JSON.stringify(json.data.annualReports));
-            }
-            if (json.data.archives && json.data.archives.length > 0) {
-              setArchives(json.data.archives);
-              localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(json.data.archives));
-            }
-            if (json.data.schoolConfig) {
-              const mergedConfig = mergeSchoolConfigWithDefaults(json.data.schoolConfig);
-              setSchoolConfig(mergedConfig);
-              localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(mergedConfig));
-            }
-            if (json.data.tupoksiDefinitions) {
-              const mergedTupoksi: TupoksiDefinitionsMap = {
-                ...OFFICIAL_TUPOKSI_DEFINITIONS,
-                ...json.data.tupoksiDefinitions
-              };
-              setTupoksiDefinitions(mergedTupoksi);
-              localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(mergedTupoksi));
-            }
-            if (json.data.customCategories && Array.isArray(json.data.customCategories)) {
-              setCustomCategories(json.data.customCategories);
-              localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(json.data.customCategories));
-            }
+        const json = await storageService.fetchServerState();
+        if (json && json.initialized && json.data && isMounted) {
+          if (json.data.tasks && json.data.tasks.length > 0) {
+            setTasks(json.data.tasks);
+            localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(json.data.tasks));
           }
+          if (json.data.inventories && json.data.inventories.length > 0) {
+            setInventories(json.data.inventories);
+            localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(json.data.inventories));
+          }
+          if (json.data.monthlyReports && json.data.monthlyReports.length > 0) {
+            setMonthlyReports(json.data.monthlyReports);
+            localStorage.setItem(STORAGE_KEYS.MONTHLY, JSON.stringify(json.data.monthlyReports));
+          }
+          if (json.data.annualReports && json.data.annualReports.length > 0) {
+            setAnnualReports(json.data.annualReports);
+            localStorage.setItem(STORAGE_KEYS.ANNUAL, JSON.stringify(json.data.annualReports));
+          }
+          if (json.data.archives && json.data.archives.length > 0) {
+            setArchives(json.data.archives);
+            localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(json.data.archives));
+          }
+          if (json.data.schoolConfig) {
+            const mergedConfig = mergeSchoolConfigWithDefaults(json.data.schoolConfig);
+            setSchoolConfig(mergedConfig);
+            localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(mergedConfig));
+          }
+          if (json.data.tupoksiDefinitions) {
+            const mergedTupoksi: TupoksiDefinitionsMap = {
+              ...OFFICIAL_TUPOKSI_DEFINITIONS,
+              ...json.data.tupoksiDefinitions
+            };
+            setTupoksiDefinitions(mergedTupoksi);
+            localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(mergedTupoksi));
+          }
+          if (json.data.customCategories && Array.isArray(json.data.customCategories)) {
+            setCustomCategories(json.data.customCategories);
+            localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(json.data.customCategories));
+          }
+          setSyncStatus('synced');
         }
       } catch (err) {
         console.warn('Server offline / fallback to local storage', err);
+        setSyncStatus('offline');
       } finally {
         isInitialLoad.current = false;
       }
@@ -583,25 +606,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus('saving');
       const timer = setTimeout(async () => {
         try {
-          const res = await fetch('/api/state', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tasks,
-              inventories,
-              monthlyReports,
-              annualReports,
-              archives,
-              schoolConfig,
-              tupoksiDefinitions,
-              customCategories
-            })
+          const ok = await storageService.syncServerState({
+            tasks,
+            inventories,
+            monthlyReports,
+            annualReports,
+            archives,
+            schoolConfig,
+            tupoksiDefinitions,
+            customCategories
           });
-          if (res.ok) {
-            setSyncStatus('synced');
-          } else {
-            setSyncStatus('offline');
-          }
+          setSyncStatus(ok ? 'synced' : 'offline');
         } catch (e) {
           setSyncStatus('offline');
         }
@@ -649,16 +664,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai');
     const tambahanCompleted = tambahanTasks.filter(t => t.status === 'selesai');
 
-    const roleTitle = role === 'TU' ? 'Tata Usaha' : role === 'PENJAGA' ? 'Penjaga Sekolah' : 'Layanan Kebersihan (Service)';
+    const roleTitle = 
+      role === 'TU' ? 'Tata Usaha (Administrasi Sekolah)' : 
+      role === 'PENJAGA' ? 'Penjaga Sekolah (Keamanan & Sarpras)' : 
+      role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
+      role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
+
     const monthNames = [
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
     ];
     const monthName = monthNames[month - 1] || `Bulan ${month}`;
     const formattedManualDate = `${config.kabupatenKota}, 30 ${monthName} ${year}`;
+    const completionRate = roleTasks.length > 0 ? Math.round((completed.length / roleTasks.length) * 100) : 100;
 
     const achievementsList: string[] = [];
-    if (role === 'PENJAGA') {
+    if (role === 'PERPUS') {
+      const sirkulasiCount = roleTasks.filter(t => t.category === 'sirkulasi_peminjaman' || t.title.toLowerCase().includes('pinjam') || t.title.toLowerCase().includes('kembali')).length;
+      const katalogCount = roleTasks.filter(t => t.category === 'katalogisasi_buku' || t.title.toLowerCase().includes('katalog') || t.title.toLowerCase().includes('induk') || t.title.toLowerCase().includes('barcode')).length;
+      const literasiCount = roleTasks.filter(t => t.category === 'layanan_literasi' || t.title.toLowerCase().includes('literasi') || t.title.toLowerCase().includes('baca')).length;
+      const rawatCount = roleTasks.filter(t => t.category === 'perawatan_buku' || t.title.toLowerCase().includes('jilid') || t.title.toLowerCase().includes('rawat')).length;
+      const stockCount = roleTasks.filter(t => t.category === 'stock_opname' || t.title.toLowerCase().includes('stock') || t.title.toLowerCase().includes('inventaris')).length;
+
+      achievementsList.push(`Pelayanan sirkulasi peminjaman dan pengembalian bahan pustaka bagi pemustaka (${sirkulasiCount > 0 ? sirkulasiCount : 24} transaksi layanan tercatat tertib)`);
+      achievementsList.push(`Pengolahan katalogisasi DDC, input buku induk & pelabelan barcode koleksi baru (${katalogCount > 0 ? katalogCount : 18} kegiatan pengolahan tuntas)`);
+      achievementsList.push(`Pendampingan kegiatan literasi 15 menit membaca rutin dan pembinaan pojok baca kelas (${literasiCount > 0 ? literasiCount : 20} sesi aktif)`);
+      achievementsList.push(`Realisasi tugas pokok (Tupoksi) perpustakaan: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
+      achievementsList.push(`Realisasi tugas tambahan literasi: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
+      if (rawatCount > 0) {
+        achievementsList.push(`Restorasi, pengeleman, dan perbaikan jilid buku yang mengalami kerusakan fisik (${rawatCount} eksemplar buku tertangani)`);
+      }
+      if (stockCount > 0) {
+        achievementsList.push(`Pelaksanaan stock opname dan verifikasi fisik koleksi bahan pustaka (${stockCount} sesi inventarisasi)`);
+      }
+    } else if (role === 'LAB_IPA') {
+      const prepCount = roleTasks.filter(t => t.category === 'persiapan_praktikum' || t.title.toLowerCase().includes('praktikum') || t.title.toLowerCase().includes('reagen')).length;
+      const alatCount = roleTasks.filter(t => t.category === 'pemeliharaan_alat' || t.title.toLowerCase().includes('mikroskop') || t.title.toLowerCase().includes('alat gelas')).length;
+      const k3Count = roleTasks.filter(t => t.category === 'k3_laboratorium' || t.title.toLowerCase().includes('apar') || t.title.toLowerCase().includes('p3k') || t.title.toLowerCase().includes('keselamatan')).length;
+      const invCount = roleTasks.filter(t => t.category === 'inventaris_bahan' || t.title.toLowerCase().includes('stok') || t.title.toLowerCase().includes('bahan kimia')).length;
+
+      achievementsList.push(`Fasilitasi penyiapan set alat peraga dan bahan praktikum fisika, kimia, biologi seluruh rombel tepat waktu (${prepCount > 0 ? prepCount : 22} sesi praktikum terlaksana)`);
+      achievementsList.push(`Pencucian, sterilisasi alat gelas kimia, dan kalibrasi rutin mikroskop serta neraca Ohaus (${alatCount > 0 ? alatCount : 18} sesi pemeliharaan bebas residu)`);
+      achievementsList.push(`Pemeriksaan kesiapsiagaan K3 laboratorium (indikator tabung APAR, kotak emergency P3K, dan netralisasi limbah) tercatat Zero Incident`);
+      achievementsList.push(`Realisasi tugas pokok (Tupoksi) laboratorium: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
+      achievementsList.push(`Realisasi tugas tambahan praktikum/penataan: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
+      if (invCount > 0) {
+        achievementsList.push(`Pencatatan kartu kendali stok bahan kimia habis pakai dan logbook pemakaian lab terarsip valid (${invCount} berkas)`);
+      }
+    } else if (role === 'PENJAGA') {
       const gateCount = roleTasks.filter(t => t.title.toLowerCase().includes('pintu') || t.title.toLowerCase().includes('gerbang')).length;
       const patrolCount = roleTasks.filter(t => t.category === 'keamanan' || t.category === 'inspeksi_malam').length;
       const repairCount = roleTasks.filter(t => t.category === 'perbaikan_sapras').length;
@@ -668,8 +721,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (gateCount > 0) {
         achievementsList.push(`Pelaksanaan SOP harian buka-tutup pintu gerbang utama & gedung sekolah (${gateCount} kegiatan tercatat)`);
       }
-      achievementsList.push(`Pelaksanaan tugas pokok keamanan gedung & pos penjagaan (${patrolCount > 0 ? patrolCount : 24} kali kegiatan terverifikasi)`);
-      achievementsList.push(`Realisasi tugas pokok (Tupoksi) tuntas: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok terlaksana`);
+      achievementsList.push(`Pelaksanaan patroli keamanan berkala gedung & pos penjagaan (${patrolCount > 0 ? patrolCount : 24} kali kegiatan terverifikasi Zero Incident)`);
+      achievementsList.push(`Realisasi tugas pokok (Tupoksi) pengamanan: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok terlaksana`);
       achievementsList.push(`Realisasi tugas tambahan insidental: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
       if (repairCount > 0) {
         achievementsList.push(`Penyelesaian perbaikan sarana & prasarana ringan swakelola (${repairCount} unit sapras tertangani)`);
@@ -678,7 +731,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         achievementsList.push(`Pengawasan ketertiban dan keselamatan siswa di jam masuk & pulang sekolah (${watchCount} hari efektif)`);
       }
       if (mailCount > 0) {
-        achievementsList.push(`Ekspedisi pengantaran surat dinas ke dinas dan instansi mitra (${mailCount} berkas dinas)`);
+        achievementsList.push(`Ekspedisi pengantaran surat dinas ke dinas dan instansi mitra (${mailCount} berkas dinas tepat waktu)`);
       }
     } else if (role === 'TU') {
       const pnsCount = roleTasks.filter(t => t.category === 'kepegawaian').length;
@@ -686,28 +739,113 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saprasCount = roleTasks.filter(t => t.category === 'sapras').length;
       const suratIn = roleTasks.filter(t => t.category === 'surat_masuk').length;
       const suratOut = roleTasks.filter(t => t.category === 'surat_keluar').length;
-      achievementsList.push(`Pengelolaan administrasi kepegawaian GTK dan verifikasi berkas ASN (${pnsCount > 0 ? pnsCount : 6} agenda kegiatan)`);
+      achievementsList.push(`Pengelolaan administrasi kepegawaian GTK dan verifikasi berkas ASN/PPPK (${pnsCount > 0 ? pnsCount : 6} agenda kegiatan)`);
       achievementsList.push(`Pencatatan Buku Induk, mutasi siswa dan penerbitan surat keterangan (${siswaCount > 0 ? siswaCount : 15} permohonan tuntas)`);
       achievementsList.push(`Registrasi agenda surat dinas masuk (${suratIn > 0 ? suratIn : 28} surat) dan surat dinas keluar (${suratOut > 0 ? suratOut : 18} surat)`);
       achievementsList.push(`Realisasi tugas pokok (Tupoksi) administrasi: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
       achievementsList.push(`Realisasi tugas tambahan/layanan umum: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
       if (saprasCount > 0) {
-        achievementsList.push(`Rekonsiliasi dan verifikasi fisik inventaris barang KIB A s.d. E (${saprasCount} sesi audit)`);
+        achievementsList.push(`Rekonsiliasi dan verifikasi fisik inventaris barang KIB A s.d. E (${saprasCount} sesi audit tercatat)`);
       }
     } else {
+      // SERVICE
       const wcCount = roleTasks.filter(t => t.category === 'kebersihan_wc').length;
       const officeCount = roleTasks.filter(t => t.category === 'kebersihan_kantor').length;
       const wasteCount = roleTasks.filter(t => t.category === 'kebersihan_sampah').length;
-      achievementsList.push(`Sanitasi dan sterilisasi seluruh toilet guru & toilet siswa (${wcCount > 0 ? wcCount : 30} hari terlaksana)`);
-      achievementsList.push(`Pembersihan menyeluruh ruang kantor pimpinan, ruang guru, ruang TU & perpustakaan (${officeCount > 0 ? officeCount : 24} hari kerja)`);
+      const tamanCount = roleTasks.filter(t => t.category === 'perawatan_taman' || t.category === 'kebersihan_halaman').length;
+      achievementsList.push(`Sanitasi dan sterilisasi seluruh toilet guru & toilet siswa bebas bau dan jentik (${wcCount > 0 ? wcCount : 30} hari terlaksana)`);
+      achievementsList.push(`Pembersihan menyeluruh ruang kantor pimpinan, ruang guru, ruang TU & perpustakaan (${officeCount > 0 ? officeCount : 24} hari kerja 2 kali sehari)`);
       achievementsList.push(`Pengangkutan harian dan pemilahan sampah organik serta anorganik ke TPS (${wasteCount > 0 ? wasteCount : 24} kali pengangkutan)`);
       achievementsList.push(`Realisasi tugas pokok (Tupoksi) kebersihan: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
-      achievementsList.push(`Realisasi tugas tambahan lingkungan: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
+      achievementsList.push(`Realisasi tugas tambahan sanitasi: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
+      if (tamanCount > 0) {
+        achievementsList.push(`Pemeliharaan keasrian taman depan, penyiraman tanaman, dan kebersihan halaman (${tamanCount} kegiatan terlaksana)`);
+      }
     }
 
-    const summaryText = `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional ${roleTitle} telah melaksanakan ${roleTasks.length} tugas operasional kedinasan (${tupoksiTasks.length} Tugas Pokok/Tupoksi dan ${tambahanTasks.length} Tugas Tambahan). Sebanyak ${completed.length} tugas telah tuntas diselesaikan dengan tingkat ketercapaian kinerja (SPM) sebesar ${roleTasks.length > 0 ? Math.round((completed.length / roleTasks.length) * 100) : 100}%. Seluruh inventaris dinas yang dioperasikan dalam kondisi terawat.`;
+    const summaryTemplates: Record<RoleType, string> = {
+      PERPUS: `Sepanjang bulan ${monthName} ${year}, Layanan Operasional Perpustakaan Sekolah telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 24} agenda kerja (${completionRate}%). Seluruh pelayanan sirkulasi pemustaka, katalogisasi DDC dan pelabelan buku kurikulum merdeka, pendampingan Gerakan Literasi Sekolah (GLS), serta restorasi koleksi fisik terselenggara secara akuntabel dan tertib sesuai standar tata naskah dinas.`,
+      LAB_IPA: `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional Laboratorium IPA telah menuntaskan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 22} pekerjaan (${completionRate}%). Penyiapan alat dan bahan praktikum fisika, kimia, dan biologi berjalan lancar, sterilisasi alat gelas dan kalibrasi mikroskop tuntas, serta standar keselamatan kerja (Zero Incident K3) dan pengelolaan limbah ramah lingkungan terjaga optimal.`,
+      TU: `Sepanjang bulan ${monthName} ${year}, Layanan Operasional Administrasi Tata Usaha telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 28} agenda kedinasan (${completionRate}%). Tata kelola persuratan dinas masuk dan keluar, pelayanan administrasi kesiswaan (buku induk, mutasi, dan legalisasi), pemutakhiran data Dapodik kepegawaian, serta rekonsiliasi berkala buku inventaris barang (KIR) terselenggara sesuai SOP standar pelayanan minimal (SPM).`,
+      PENJAGA: `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional Penjaga Sekolah telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 26} tugas pengamanan (${completionRate}%). Seluruh pos penjagaan dan titik rawan terpantau aman dan kondusif dengan status Zero Incident (nihil pencurian, kebakaran, dan gangguan kamtibmas), pengawasan keselamatan penyeberangan jalan peserta didik terlaksana tertib, serta kesiapsiagaan operasional sarana gedung terpelihara prima.`,
+      SERVICE: `Kinerja Layanan Operasional Kebersihan (Service) pada bulan ${monthName} ${year} telah menuntaskan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 25} kegiatan sanitasi (${completionRate}%). Higienitas seluruh bilik toilet guru dan siswa senantiasa bersih dan bebas bau, pembersihan ruang pimpinan, kantor guru, ruang kelas, dan selasar terlaksana 2 kali sehari, serta pengelolaan pemilahan sampah organik dan anorganik ke TPS berjalan lancar.`
+    };
+
+    const summaryText = summaryTemplates[role] || summaryTemplates.TU;
+
+    const roleObstacles: Record<RoleType, string[]> = {
+      PERPUS: [
+        'Keterlambatan pengembalian buku pinjaman oleh sebagian peserta didik saat mendekati pekan ujian/asesmen',
+        'Kapasitas rak display buku baru perlu ditambah untuk menampung hibah koleksi pengayaan dan literasi',
+        'Beberapa eksemplar buku ensiklopedia dan kamus referensi tebal mengalami kelonggaran jilid akibat frekuensi pemakaian tinggi'
+      ],
+      LAB_IPA: [
+        'Ketersediaan stok larutan reagen indikator asam-basa dan bahan habis pakai menipis pada akhir periode praktikum',
+        'Sumbatan kotoran halus pada salah satu kran wastafel ruang preparasi laboratorium',
+        'Keterbatasan set lensa mikroskop cadangan untuk mengantisipasi rombongan belajar berjumlah besar'
+      ],
+      TU: [
+        'Volume dokumen warkat fisik tahun lampau membutuhkan proses pemindaian digital (e-Arsip) secara berkelanjutan',
+        'Koordinasi konfirmasi surat undangan kedinasan dari instansi eksternal yang mendekati tenggat waktu acara',
+        'Beban server pusat Dapodik dan SIASN BKN yang mengalami lonjakan akses menjelang batas akhir sinkronisasi'
+      ],
+      PENJAGA: [
+        'Kondisi cuaca hujan dengan intensitas lebat yang memerlukan pengawasan ekstra terhadap saluran air dan talang atap',
+        'Kebutuhan peremajaan lampu senter patroli malam baterai lithium dan penambahan gembok master-key cadangan',
+        'Kepadatan lalu lintas kendaraan di depan gerbang utama pada saat jam masuk dan kepulangan serentak peserta didik'
+      ],
+      SERVICE: [
+        'Ketersediaan stok bahan habis pakai pembersih lantai, sabun cair cuci tangan, dan kantong sampah sempat menipis di akhir bulan',
+        'Endapan kerak lumut dan air sumur bor pada lantai selasar luar dan wastafel toilet akibat curah hujan tinggi',
+        'Peningkatan volume timbulan sampah dedaunan pada saat musim kemarau berangin kencang di area lapangan terbuka'
+      ]
+    };
+
+    const roleSolutions: Record<RoleType, string[]> = {
+      PERPUS: [
+        'Menerbitkan surat pemberitahuan pengembalian dan berkoordinasi aktif dengan wali kelas masing-masing rombel',
+        'Mengajukan usulan penambahan rak display buku akrilik dan karpet area baca lesehan pada perencanaan anggaran sekolah',
+        'Melakukan pengeleman ulang dengan perekat jilid khusus serta pelapisan sampul plastik mika untuk memperpanjang usia pakai buku'
+      ],
+      LAB_IPA: [
+        'Membuat usulan amprah bahan kimia habis pakai lebih awal ke bagian tata usaha dan bendahara operasional sekolah',
+        'Pembersihan saringan kran wastafel serta pemeliharaan saluran pipa bersama tim sarana prasarana sekolah',
+        'Mengatur jadwal giliran pemakaian mikroskop antarkelompok secara terstruktur sehingga praktikum berjalan lancar'
+      ],
+      TU: [
+        'Menetapkan jadwal pemindaian digital berkas arsip secara terstruktur setiap akhir pekan menggunakan scanner berkecepatan tinggi',
+        'Mengoptimalkan saluran komunikasi cepat dinas melalui narahubung WhatsApp grup kedinasan',
+        'Melakukan sinkronisasi data Dapodik pada jam kerja pagi hari atau malam hari saat beban server rendah'
+      ],
+      PENJAGA: [
+        'Pembersihan berkala endapan sampah pada saluran drainase bersama petugas kebersihan untuk mencegah genangan',
+        'Pengajuan inventarisasi pengadaan senter patroli LED baterai lithium dan gembok master-key ke bagian TU',
+        'Penataan pembagian zona antrean penjemputan dan kerja sama pengamanan marka jalan bersama juru parkir sekolah'
+      ],
+      SERVICE: [
+        'Pemberian jadwal pengajuan amprah bahan pembersih secara teratur 7 hari sebelum stok persediaan di gudang menipis',
+        'Pembersihan intensif permukaan lantai luar menggunakan sikat kawat dan cairan pembersih kerak anti-licin',
+        'Pengomposan sampah daun secara mandiri di bak komposter sekolah untuk mengurangi residu sampah ke TPS'
+      ]
+    };
 
     const existing = existingList.find(r => r.role === role && r.month === month && r.year === year);
+    const isOldGenericObstacle = existing?.obstacles?.some(obs => 
+      obs.includes('Kebutuhan penggantian beberapa suku cadang') || 
+      obs.includes('Faktor cuaca hujan lebat yang memerlukan penanganan ekstra di lapangan')
+    );
+
+    const finalObstacles = (!existing?.obstacles || existing.obstacles.length === 0 || isOldGenericObstacle || forceFresh)
+      ? (roleObstacles[role] || roleObstacles.TU)
+      : existing.obstacles;
+
+    const finalSolutions = (!existing?.solutions || existing.solutions.length === 0 || isOldGenericObstacle || forceFresh)
+      ? (roleSolutions[role] || roleSolutions.TU)
+      : existing.solutions;
+
+    const finalSummary = (!existing?.summary || forceFresh || existing.summary.includes('Operator Layanan Operasional undefined'))
+      ? summaryText
+      : existing.summary;
 
     return {
       id: existing?.id || `m-rep-${role.toLowerCase()}-${month}-${year}`,
@@ -715,16 +853,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       month,
       year,
       manualDocDate: existing?.manualDocDate || formattedManualDate,
-      summary: summaryText,
+      summary: finalSummary,
       achievements: achievementsList,
-      obstacles: existing?.obstacles && existing.obstacles.length > 0 ? existing.obstacles : [
-        'Kebutuhan penggantian beberapa suku cadang dan bahan pakai habis operasional',
-        'Faktor cuaca hujan lebat yang memerlukan penanganan ekstra di lapangan'
-      ],
-      solutions: existing?.solutions && existing.solutions.length > 0 ? existing.solutions : [
-        'Pengajuan restock bahan habis pakai ke bagian bendahara / sapras sekolah',
-        'Penyesuaian jadwal pelaksanaan pekerjaan lapangan pada saat cuaca kondusif'
-      ],
+      obstacles: finalObstacles,
+      solutions: finalSolutions,
       approvalStatus: existing?.approvalStatus || 'diajukan'
     };
   };
@@ -858,31 +990,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const generateAnnualReportFromMonthly = (role: RoleType, year: number): AnnualReport => {
     const existing = annualReports.find(r => r.role === role && r.year === year);
-    const roleTitle = 
-      role === 'TU' ? 'Tata Usaha' : 
-      role === 'PENJAGA' ? 'Penjaga Sekolah' : 
-      role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
-      role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
+    const spec = ROLE_OPERATIONAL_SPECS[role];
     const formattedManualDate = `${schoolConfig.kabupatenKota}, 31 Desember ${year}`;
 
     if (existing) return existing;
+
+    const roleTasksYear = tasks.filter(t => t.role === role && isTaskInYear(t.date, year));
+    const completedTasksYear = roleTasksYear.filter(t => t.status === 'selesai');
+    const rate = roleTasksYear.length > 0 ? Math.round((completedTasksYear.length / roleTasksYear.length) * 100) : 98;
 
     return {
       id: `ann-rep-${role.toLowerCase()}-${year}`,
       role,
       year,
       manualDocDate: formattedManualDate,
-      summary: `Laporan Tahunan Kinerja Layanan Operasional ${roleTitle} Tahun Anggaran ${year} merupakan hasil konsolidasi 12 bulan laporan operasional harian dan bulanan yang mencerminkan pemenuhan target standar pelayanan minimal (SPM) satuan pendidikan.`,
-      annualMilestones: [
+      summary: spec 
+        ? spec.getExecutiveSummaryAnnual(year, { total: roleTasksYear.length, completed: completedTasksYear.length, rate })
+        : `Laporan Tahunan Kinerja Layanan Operasional ${role} Tahun Anggaran ${year}.`,
+      annualMilestones: spec ? [...spec.annualMilestones] : [
         `Realisasi pemenuhan target layanan operasional tahunan melampaui 97.5%`,
-        `Terjaganya kelengkapan dan kondisi fisik inventaris sarana prasarana penunjang`,
-        `Ketiadaan catatan kendala mayor yang menghambat operasional proses belajar mengajar`,
-        `Dokumentasi pengesahan berjenjang lengkap dan akuntabel`
+        `Terjaganya kelengkapan dan kondisi fisik inventaris sarana prasarana penunjang`
       ],
-      strategicRecommendations: [
-        `Penyusunan alokasi anggaran pemeliharaan preventif sarana operasional di RKAS tahun berikutnya`,
-        `Pengadaan perlengkapan kerja modern berstandar K3 untuk efisiensi waktu kerja`,
-        `Peningkatan kompetensi operator layanan operasional melalui pelatihan berkala`
+      obstacles: spec ? spec.fieldObstacles.map(o => o.obstacle) : [],
+      solutions: spec ? spec.fieldObstacles.map(o => o.solution) : [],
+      strategicRecommendations: spec ? [...spec.strategicRecommendations] : [
+        `Penyusunan alokasi anggaran pemeliharaan preventif sarana operasional di RKAS tahun berikutnya`
       ],
       approvalStatus: 'diajukan'
     };

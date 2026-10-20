@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RoleType, AnnualReport } from '../../types';
 import { InventoryTable } from '../common/InventoryTable';
+import { ROLE_OPERATIONAL_SPECS } from '../../data/roleOperationalSpecs';
 import { 
   Award, 
   Printer, 
@@ -25,7 +26,9 @@ import {
   Shield,
   Building2,
   Sliders,
-  Eye
+  Eye,
+  Target,
+  AlertTriangle
 } from 'lucide-react';
 
 interface AnnualReportViewProps {
@@ -43,71 +46,43 @@ const OFFICIAL_ANNUAL_TEMPLATES: Record<RoleType, {
   summary: string;
   annualMilestones: string[];
   strategicRecommendations: string[];
+  obstacles: string[];
+  solutions: string[];
 }> = {
   TU: {
-    summary: 'Kinerja ketatausahaan sekolah sepanjang tahun anggaran ini berhasil merealisasikan seluruh target pelayanan publik, tata kelola kearsipan dan kepegawaian secara akuntabel. Digitalisasi berkas surat masuk dan surat keluar terlaksana, pengelolaan Dapodik dan inventaris sarana prasarana sekolah tuntas tertib administrasi.',
-    annualMilestones: [
-      'Penyelesaian 100% pengelolaan buku agenda surat masuk & keluar kedinasan sepanjang tahun',
-      'Pemutakhiran berkas berkala kepegawaian PNS, PPPK, dan honorer tanpa keterlambatan SK',
-      'Penyusunan Laporan Inventaris Sarana Prasarana (KIR) akhir tahun untuk evaluasi Disdik',
-      'Pemberian layanan administrasi surat keterangan dan legalisasi untuk 450+ peserta didik'
-    ],
-    strategicRecommendations: [
-      'Peningkatan pengadaan printer berkecepatan tinggi dan scanner scanner ADF untuk digitalisasi arsip',
-      'Pelatihan berkelanjutan aplikasi persuratan dan pengarsipan elektronik (e-Office)'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.TU.getExecutiveSummaryAnnual(2026, { total: 320, completed: 315, rate: 98 }),
+    annualMilestones: ROLE_OPERATIONAL_SPECS.TU.annualMilestones,
+    strategicRecommendations: ROLE_OPERATIONAL_SPECS.TU.strategicRecommendations,
+    obstacles: ROLE_OPERATIONAL_SPECS.TU.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.TU.fieldObstacles.map(o => o.solution)
   },
   PENJAGA: {
-    summary: 'Pengamanan lingkungan sekolah dan pemeliharaan sarana prasarana fisik sepanjang tahun berjalan secara kondusif dan nihil insiden bahaya. Pelaksanaan patroli siang-malam, kesiapsiagaan tanggap cuaca ekstrem, serta keteraturan penyeberangan anak dan pengantaran surat dinas terlaksana sesuai SOP.',
-    annualMilestones: [
-      'Zero incident (nihil kecelakaan, kebakaran, dan pencurian sarana sekolah) selama satu tahun',
-      'Pemeriksaan rutin harian kunci 24 ruang kelas, 3 laboratorium, perpustakaan, dan gedung kantor',
-      'Pemeliharaan preventif sarana: perbaikan berkala sanitasi pipa air, saklar lampu, dan pagar keliling',
-      'Pelayanan penyeberangan jalan aman bagi seluruh siswa setiap hari efektif sekolah'
-    ],
-    strategicRecommendations: [
-      'Penambahan 4 titik CCTV di area sudut belakang lapangan dan parkir timur',
-      'Peremajaan senter patroli berkekuatan tinggi dan jas hujan dinas untuk musim penghujan'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.PENJAGA.getExecutiveSummaryAnnual(2026, { total: 300, completed: 298, rate: 99 }),
+    annualMilestones: ROLE_OPERATIONAL_SPECS.PENJAGA.annualMilestones,
+    strategicRecommendations: ROLE_OPERATIONAL_SPECS.PENJAGA.strategicRecommendations,
+    obstacles: ROLE_OPERATIONAL_SPECS.PENJAGA.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.PENJAGA.fieldObstacles.map(o => o.solution)
   },
   SERVICE: {
-    summary: 'Layanan kebersihan dan sanitasi lingkungan sekolah sepanjang tahun anggaran ini mampu mewujudkan lingkungan belajar yang sehat, higienis, dan nyaman sesuai standar sekolah Adiwiyata. Pengelolaan sampah terpilah dan pembersihan harian seluruh fasilitas terlaksana konsisten.',
-    annualMilestones: [
-      'Pemeliharaan kebersihan harian untuk 18 ruang kelas, 4 ruang staf/pimpinan, dan 12 unit toilet',
-      'Pengelolaan pemilahan sampah organik dan anorganik dengan tingkat keterangkutan 100% ke TPS',
-      'Pemberian perlakuan sanitasi disinfeksi berkala di titik-titik kumpul utama sekolah',
-      'Penghargaan sekolah berwawasan lingkungan bersih tingkat kota/kabupaten'
-    ],
-    strategicRecommendations: [
-      'Pengadaan mesin polisher lantai otomatis untuk mempercepat perawatan lobi dan selasar utama',
-      'Penambahan tempat sampah pilah 3 warna di setiap selasar depan ruang kelas'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.SERVICE.getExecutiveSummaryAnnual(2026, { total: 290, completed: 288, rate: 99 }),
+    annualMilestones: ROLE_OPERATIONAL_SPECS.SERVICE.annualMilestones,
+    strategicRecommendations: ROLE_OPERATIONAL_SPECS.SERVICE.strategicRecommendations,
+    obstacles: ROLE_OPERATIONAL_SPECS.SERVICE.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.SERVICE.fieldObstacles.map(o => o.solution)
   },
   PERPUS: {
-    summary: 'Kinerja layanan perpustakaan sekolah sepanjang tahun anggaran ini berhasil mewujudkan peningkatan literasi peserta didik dan penataan bahan pustaka terakreditasi. Otomasi sistem sirkulasi terintegrasi dan peremajaan koleksi buku terselenggara optimal.',
-    annualMilestones: [
-      'Peningkatan indeks peminjaman buku peserta didik sebesar 42% dibanding tahun sebelumnya',
-      'Penyelesaian 100% stock opname koleksi buku teks dan buku pengayaan perpustakaan',
-      'Otomasi katalog digital OPAC dan pencetakan kartu anggota berbarcode untuk seluruh peserta didik',
-      'Pembentukan dan pengaktifan 12 Pojok Literasi Tematik di seluruh selasar rombel kelas'
-    ],
-    strategicRecommendations: [
-      'Pengembangan koleksi digital e-Perpus sekolah dan integrasi sistem perpustakaan daerah',
-      'Penambahan unit rak buku dua muka dan meja baca mandiri untuk menampung pemustaka jam istirahat'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.PERPUS.getExecutiveSummaryAnnual(2026, { total: 275, completed: 272, rate: 99 }),
+    annualMilestones: ROLE_OPERATIONAL_SPECS.PERPUS.annualMilestones,
+    strategicRecommendations: ROLE_OPERATIONAL_SPECS.PERPUS.strategicRecommendations,
+    obstacles: ROLE_OPERATIONAL_SPECS.PERPUS.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.PERPUS.fieldObstacles.map(o => o.solution)
   },
   LAB_IPA: {
-    summary: 'Pengelolaan laboratorium IPA sepanjang tahun anggaran ini berhasil memfasilitasi seluruh target praktikum kurikulum sains nasional secara tertib, aman, dan tanpa insiden kecelakaan kerja. Pemeliharaan berkala instrumen presisi dan pengelolaan K3 terlaksana secara prima.',
-    annualMilestones: [
-      'Ketercapaian 100% jam praktikum IPA seluruh rombel kelas 7, 8, dan 9 (144 sesi)',
-      'Kalibrasi berkala seluruh mikroskop optik, neraca presisi, dan instrumen ukur fisika',
-      'Penerapan SOP Keselamatan Kerja (K3) dan penanganan limbah praktikum ramah lingkungan',
-      'Pendampingan tim ekstrakurikuler Karya Ilmiah Remaja (KIR) hingga meraih medali sains kota'
-    ],
-    strategicRecommendations: [
-      'Pengadaan lemari asam mini (fume hood) untuk reaksi kimia uap dan pembakaran',
-      'Peremajaan preparat mikroskop jaringan tubuh manusia dan kit sensor fisika digital'
-    ]
+    summary: ROLE_OPERATIONAL_SPECS.LAB_IPA.getExecutiveSummaryAnnual(2026, { total: 260, completed: 258, rate: 99 }),
+    annualMilestones: ROLE_OPERATIONAL_SPECS.LAB_IPA.annualMilestones,
+    strategicRecommendations: ROLE_OPERATIONAL_SPECS.LAB_IPA.strategicRecommendations,
+    obstacles: ROLE_OPERATIONAL_SPECS.LAB_IPA.fieldObstacles.map(o => o.obstacle),
+    solutions: ROLE_OPERATIONAL_SPECS.LAB_IPA.fieldObstacles.map(o => o.solution)
   }
 };
 
@@ -155,6 +130,8 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
   const [reportState, setReportState] = useState<AnnualReport>(activeReport);
   const [newMilestone, setNewMilestone] = useState('');
   const [newRec, setNewRec] = useState('');
+  const [newObstacle, setNewObstacle] = useState('');
+  const [newSolution, setNewSolution] = useState('');
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -276,7 +253,9 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         ...prev,
         summary: tpl.summary,
         annualMilestones: [...tpl.annualMilestones],
-        strategicRecommendations: [...tpl.strategicRecommendations]
+        strategicRecommendations: [...tpl.strategicRecommendations],
+        obstacles: [...tpl.obstacles],
+        solutions: [...tpl.solutions]
       }));
       showNotification(`Template resmi tahunan ${roleTitle} berhasil diterapkan!`);
     }
@@ -310,6 +289,8 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             summary: parsed.summary || prev.summary,
             annualMilestones: Array.isArray(parsed.annualMilestones) ? parsed.annualMilestones : prev.annualMilestones,
             strategicRecommendations: Array.isArray(parsed.strategicRecommendations) ? parsed.strategicRecommendations : prev.strategicRecommendations,
+            obstacles: Array.isArray(parsed.obstacles) ? parsed.obstacles : prev.obstacles,
+            solutions: Array.isArray(parsed.solutions) ? parsed.solutions : prev.solutions,
             manualDocDate: parsed.manualDocDate || prev.manualDocDate
           }));
           showNotification('Template laporan tahunan berhasil diimpor!');
@@ -339,6 +320,26 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
 
   const removeRecommendation = (index: number) => {
     setReportState(prev => ({ ...prev, strategicRecommendations: prev.strategicRecommendations.filter((_, i) => i !== index) }));
+  };
+
+  const addObstacle = () => {
+    if (!newObstacle.trim()) return;
+    setReportState(prev => ({ ...prev, obstacles: [...(prev.obstacles || []), newObstacle.trim()] }));
+    setNewObstacle('');
+  };
+
+  const removeObstacle = (index: number) => {
+    setReportState(prev => ({ ...prev, obstacles: (prev.obstacles || []).filter((_, i) => i !== index) }));
+  };
+
+  const addSolution = () => {
+    if (!newSolution.trim()) return;
+    setReportState(prev => ({ ...prev, solutions: [...(prev.solutions || []), newSolution.trim()] }));
+    setNewSolution('');
+  };
+
+  const removeSolution = (index: number) => {
+    setReportState(prev => ({ ...prev, solutions: (prev.solutions || []).filter((_, i) => i !== index) }));
   };
 
   return (
@@ -548,7 +549,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             value={reportState.manualDocDate}
             onChange={(e) => setReportState(prev => ({ ...prev, manualDocDate: e.target.value }))}
             className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-semibold w-full sm:w-64 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-            placeholder="Contoh: Kota Bogor, 31 Desember 2026"
+            placeholder="Contoh: Tempat, 31 Desember 2026"
           />
           <button
             type="button"
@@ -654,34 +655,136 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         </button>
       </div>
 
-      {/* Ringkasan & Capaian Tahunan */}
-      <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4">
+      {/* ========================================================
+          I. RINGKASAN EKSEKUTIF KINERJA TAHUNAN & CAPAIAN TARGET OPERASIONAL
+          ======================================================== */}
+      <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-6 bg-amber-600 rounded-full inline-block"></span>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 uppercase tracking-tight">
+                I. Ringkasan Eksekutif Kinerja Tahunan & Capaian Target Operasional
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                Disesuaikan khusus untuk portal akun: <span className="font-bold text-amber-700">{roleTitle}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+              {totalYearTasks} Total Tugas Tahunan
+            </span>
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              {avgCompletionRate}% Rata-rata Ketercapaian
+            </span>
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              Standar Akreditasi: Terpenuhi ✓
+            </span>
+          </div>
+        </div>
+
         <div>
-          <label className="block text-xs font-bold text-slate-900 mb-1.5">
-            Ringkasan Eksekutif Kinerja Tahunan:
+          <label className="block text-xs font-bold text-slate-800 mb-1.5">
+            Uraian Narasi Ringkasan Eksekutif Tahunan:
           </label>
           <textarea
             rows={4}
             value={reportState.summary}
             onChange={(e) => setReportState(prev => ({ ...prev, summary: e.target.value }))}
-            className="w-full p-3 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 leading-relaxed"
+            className="w-full p-3 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 leading-relaxed font-sans"
+            placeholder="Ketik uraian ringkasan eksekutif kinerja tahunan..."
           />
         </div>
 
-        {/* Capaian Utama / Milestones */}
-        <div>
-          <label className="block text-xs font-bold text-slate-900 mb-1.5">
-            Capaian Utama & Indikator Keberhasilan Tahunan:
-          </label>
-          <div className="space-y-2 mb-2">
+        {/* ========================================================
+            INDIKATOR KINERJA KUNCI (KPI) & TARGET TAHUNAN
+            ======================================================== */}
+        <div className="pt-2">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-1.5">
+              <Target className="w-4 h-4 text-amber-600" />
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">
+                Matriks Target Operasional & Indikator Kinerja Kunci (KPI) Tahunan - {roleTitle}
+              </h4>
+            </div>
+            <span className="text-[11px] text-slate-500 font-mono">
+              Evaluasi 12 Bulan Kerja
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {(ROLE_OPERATIONAL_SPECS[effectiveRole]?.operationalKPIs || []).map((kpi, idx) => (
+              <div key={idx} className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 flex flex-col justify-between hover:bg-slate-50 transition-colors">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-mono font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300">
+                      {kpi.code}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Tuntas 1 Tahun</span>
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-900 leading-tight mb-2">
+                    {kpi.name}
+                  </p>
+                </div>
+                <div className="text-[11px] space-y-1 pt-1.5 border-t border-slate-200 text-slate-600">
+                  <div className="flex items-start justify-between gap-1">
+                    <span className="text-slate-500">Target Tahunan:</span>
+                    <span className="font-semibold text-slate-800 text-right">{kpi.target}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-1">
+                    <span className="text-slate-500">Realisasi Akumulatif:</span>
+                    <span className="font-semibold text-emerald-700 text-right">{kpi.realization}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ========================================================
+            II. RINCIAN CAPAIAN INDIKATOR KINERJA YANG TERLAKSANA (MILESTONES)
+            ======================================================== */}
+        <div className="pt-4 border-t border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">
+                II. Rincian Capaian Indikator Kinerja yang Terlaksana (Milestones & Target SPM)
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Pencapaian strategis tahunan yang berhasil diselesaikan sepanjang tahun anggaran ({roleTitle})
+              </p>
+            </div>
+            {/* Quick preset buttons */}
+            <button
+              type="button"
+              onClick={() => {
+                const specItems = ROLE_OPERATIONAL_SPECS[effectiveRole]?.annualMilestones || [];
+                setReportState(prev => {
+                  const merged = Array.from(new Set([...prev.annualMilestones, ...specItems]));
+                  return { ...prev, annualMilestones: merged };
+                });
+                showNotification(`Poin milestone standar tahunan ${roleTitle} berhasil disisipkan!`);
+              }}
+              className="text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-md border border-amber-300 flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <Sparkles className="w-3 h-3 text-amber-600" />
+              <span>Muat Capaian Tahunan {roleTitle}</span>
+            </button>
+          </div>
+
+          <div className="space-y-2 mb-3">
             {reportState.annualMilestones.map((item, idx) => (
-              <div key={idx} className="flex items-start gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
-                <span className="font-semibold text-amber-900 shrink-0">{idx + 1}.</span>
-                <span className="text-slate-800 flex-1">{item}</span>
+              <div key={idx} className="flex items-start gap-2 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200 text-xs">
+                <span className="font-bold text-amber-900 shrink-0 w-5">{idx + 1}.</span>
+                <span className="text-slate-800 flex-1 leading-relaxed">{item}</span>
                 <button
                   type="button"
                   onClick={() => removeMilestone(idx)}
-                  className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                  className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -692,7 +795,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Tambahkan poin capaian tahunan..."
+              placeholder={`Tambah capaian tahunan baru (${roleTitle})...`}
               value={newMilestone}
               onChange={(e) => setNewMilestone(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMilestone(); } }}
@@ -701,27 +804,168 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             <button
               type="button"
               onClick={addMilestone}
-              className="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg border border-slate-200 cursor-pointer"
+              className="px-3.5 py-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow-2xs cursor-pointer active:scale-95 transition-all"
             >
               Tambah
             </button>
           </div>
         </div>
 
-        {/* Rekomendasi Rencana Strategis Tahun Depan */}
-        <div>
-          <label className="block text-xs font-bold text-slate-900 mb-1.5">
-            Rekomendasi Rencana Strategis & Kebutuhan Operasional Tahun Depan:
-          </label>
-          <div className="space-y-2 mb-2">
+        {/* ========================================================
+            III. EVALUASI KENDALA / HAMBATAN LAPANGAN TERAKUMULASI
+            ======================================================== */}
+        <div className="pt-4 border-t border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">
+                III. Evaluasi Kendala / Hambatan Lapangan Terakumulasi & Mitigasi ({roleTitle})
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Pencatatan akumulasi hambatan operasional lapangan sepanjang 12 bulan dan solusi terapan
+              </p>
+            </div>
+            {/* Quick preset buttons */}
+            <button
+              type="button"
+              onClick={() => {
+                const specObstacles = ROLE_OPERATIONAL_SPECS[effectiveRole]?.fieldObstacles || [];
+                const obsTexts = specObstacles.map(o => o.obstacle);
+                const solTexts = specObstacles.map(o => o.solution);
+                setReportState(prev => ({
+                  ...prev,
+                  obstacles: Array.from(new Set([...(prev.obstacles || []), ...obsTexts])),
+                  solutions: Array.from(new Set([...(prev.solutions || []), ...solTexts]))
+                }));
+                showNotification(`Kendala tahunan khas ${roleTitle} berhasil disisipkan!`);
+              }}
+              className="text-[11px] font-semibold text-rose-800 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-md border border-rose-300 flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <AlertTriangle className="w-3 h-3 text-rose-600" />
+              <span>Muat Kendala Lapangan {roleTitle}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            {/* Kendala */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-amber-900">
+                Daftar Kendala / Hambatan yang Terjadi:
+              </label>
+              <div className="space-y-2">
+                {(reportState.obstacles || []).map((obs, idx) => (
+                  <div key={idx} className="flex items-start gap-2 bg-amber-50/70 p-2.5 rounded-lg border border-amber-200 text-xs">
+                    <span className="font-bold text-amber-900 shrink-0">•</span>
+                    <span className="text-slate-800 flex-1 leading-relaxed">{obs}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeObstacle(idx)}
+                      className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder={`Tambah kendala terakumulasi (${roleTitle})...`}
+                  value={newObstacle}
+                  onChange={(e) => setNewObstacle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addObstacle(); } }}
+                  className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={addObstacle}
+                  className="px-3 py-1.5 text-xs font-medium bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg border border-amber-300 cursor-pointer"
+                >
+                  Tambah
+                </button>
+              </div>
+            </div>
+
+            {/* Solusi */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-emerald-900">
+                Solusi & Tindak Lanjut yang Telah Dilakukan:
+              </label>
+              <div className="space-y-2">
+                {(reportState.solutions || []).map((sol, idx) => (
+                  <div key={idx} className="flex items-start gap-2 bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-200 text-xs">
+                    <span className="font-bold text-emerald-900 shrink-0">•</span>
+                    <span className="text-slate-800 flex-1 leading-relaxed">{sol}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSolution(idx)}
+                      className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder={`Tambah solusi tindak lanjut (${roleTitle})...`}
+                  value={newSolution}
+                  onChange={(e) => setNewSolution(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSolution(); } }}
+                  className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={addSolution}
+                  className="px-3 py-1.5 text-xs font-medium bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-lg border border-emerald-300 cursor-pointer"
+                >
+                  Tambah
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================
+            IV. REKOMENDASI RENCANA STRATEGIS TAHUN DEPAN
+            ======================================================== */}
+        <div className="pt-4 border-t border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">
+                IV. Rekomendasi Rencana Strategis & Kebutuhan Operasional Tahun Depan ({roleTitle})
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Usulan kebutuhan anggaran, peralatan K3, dan peningkatan kompetensi di RKAS mendatang
+              </p>
+            </div>
+            {/* Quick preset buttons */}
+            <button
+              type="button"
+              onClick={() => {
+                const specRecs = ROLE_OPERATIONAL_SPECS[effectiveRole]?.strategicRecommendations || [];
+                setReportState(prev => {
+                  const merged = Array.from(new Set([...prev.strategicRecommendations, ...specRecs]));
+                  return { ...prev, strategicRecommendations: merged };
+                });
+                showNotification(`Rekomendasi strategis ${roleTitle} berhasil disisipkan!`);
+              }}
+              className="text-[11px] font-semibold text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md border border-blue-200 flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <Sparkles className="w-3 h-3 text-blue-600" />
+              <span>Muat Rekomendasi {roleTitle}</span>
+            </button>
+          </div>
+
+          <div className="space-y-2 mb-3">
             {reportState.strategicRecommendations.map((item, idx) => (
-              <div key={idx} className="flex items-start gap-2 bg-blue-50/70 p-2 rounded-lg border border-blue-200 text-xs">
-                <span className="font-semibold text-blue-900 shrink-0">•</span>
-                <span className="text-slate-800 flex-1">{item}</span>
+              <div key={idx} className="flex items-start gap-2 bg-blue-50/70 p-2.5 rounded-lg border border-blue-200 text-xs">
+                <span className="font-bold text-blue-900 shrink-0">•</span>
+                <span className="text-slate-800 flex-1 leading-relaxed">{item}</span>
                 <button
                   type="button"
                   onClick={() => removeRecommendation(idx)}
-                  className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                  className="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -732,7 +976,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Tambahkan poin rekomendasi strategis..."
+              placeholder={`Tambah rekomendasi operasional tahun depan (${roleTitle})...`}
               value={newRec}
               onChange={(e) => setNewRec(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addRecommendation(); } }}
@@ -741,7 +985,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             <button
               type="button"
               onClick={addRecommendation}
-              className="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg border border-slate-200 cursor-pointer"
+              className="px-3.5 py-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow-2xs cursor-pointer active:scale-95 transition-all"
             >
               Tambah
             </button>

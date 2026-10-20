@@ -125,7 +125,18 @@ export interface AnnualReport {
   summary: string;
   annualMilestones: string[];
   strategicRecommendations: string[];
+  obstacles?: string[];
+  solutions?: string[];
   approvalStatus: 'draft' | 'diajukan' | 'disetujui_kasubag' | 'disahkan_kepsek';
+}
+
+export interface OperationalKPI {
+  code: string;
+  name: string;
+  target: string;
+  realization: string;
+  unit: string;
+  status: 'tercapai' | 'dalam_proses';
 }
 
 export interface SchoolOfficer {

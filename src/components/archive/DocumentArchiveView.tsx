@@ -66,6 +66,49 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
   const [inspectorNip, setInspectorNip] = useState('NIP. 19681120 199403 1 004');
   const [inspectorInstitution, setInspectorInstitution] = useState('Pengawas Satuan Pendidikan Disdik');
 
+  // AI Document Audit State
+  const [isAuditingDoc, setIsAuditingDoc] = useState(false);
+  const [auditDocModal, setAuditDocModal] = useState<{
+    doc: ArchiveDocument;
+    result: {
+      auditRating: string;
+      complianceSummary: string;
+      complianceNotes: string[];
+      riskAssessment: string;
+      actionItems: string[];
+      isAi?: boolean;
+    };
+  } | null>(null);
+
+  const handleRunDocAudit = async (doc: ArchiveDocument) => {
+    setIsAuditingDoc(true);
+    try {
+      const res = await fetch('/api/gemini/audit-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentTitle: doc.title,
+          role: doc.role,
+          checklist: doc.checklist,
+          period: doc.period,
+          approvalStatus: doc.approvalStatus
+        })
+      });
+      const data = await res.json();
+      if (data && data.data) {
+        setAuditDocModal({
+          doc,
+          result: { ...data.data, isAi: data.isAi }
+        });
+      }
+    } catch (err) {
+      console.error('Error running document audit:', err);
+      showNotification('Gagal melakukan audit AI dokumen');
+    } finally {
+      setIsAuditingDoc(false);
+    }
+  };
+
   const showNotification = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 4000);
@@ -473,6 +516,18 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
                       <span>Cetak Langsung</span>
                     </button>
 
+                    {/* AUDIT KESIAPAN DOKUMEN AI */}
+                    <button
+                      type="button"
+                      onClick={() => handleRunDocAudit(doc)}
+                      disabled={isAuditingDoc}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+                      title="Analisis kesiapan audit dinas dengan Gemini AI"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                      <span>Audit AI</span>
+                    </button>
+
                     {/* BUKA & CETAK DOKUMEN */}
                     <button
                       type="button"
@@ -776,6 +831,130 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Ya, Hapus Permanen</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL AUDIT KESIAPAN DOKUMEN AI */}
+      {auditDocModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Audit Kesiapan Dokumen Dinas (AI)
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Audit Readiness Assessment Tata Naskah Dinas Pendidikan
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuditDocModal(null)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Document Identity Banner */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1 font-mono text-[11px]">
+                <div className="font-bold text-indigo-700">{auditDocModal.doc.regNumber}</div>
+                <div className="font-sans font-bold text-slate-900 text-xs">{auditDocModal.doc.title}</div>
+                <div className="text-slate-500 font-sans">No. Surat: {auditDocModal.doc.nomorSurat} · Petugas: {auditDocModal.doc.operatorName}</div>
+              </div>
+
+              {/* Rating & Risk Cards */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-3 rounded-xl border border-indigo-200">
+                  <p className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider">
+                    Predikat Kepatuhan:
+                  </p>
+                  <p className="text-base font-black text-indigo-700 mt-0.5">
+                    {auditDocModal.result.auditRating}
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-3 rounded-xl border border-slate-200">
+                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                    Tingkat Risiko Temuan:
+                  </p>
+                  <p className={`text-xs font-black mt-1 ${
+                    auditDocModal.result.riskAssessment.includes('Rendah')
+                      ? 'text-emerald-700'
+                      : auditDocModal.result.riskAssessment.includes('Sedang')
+                      ? 'text-amber-700'
+                      : 'text-rose-700'
+                  }`}>
+                    {auditDocModal.result.riskAssessment}
+                  </p>
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div>
+                <p className="font-bold text-slate-800 mb-1">Telaah Kepatuhan Naskah Dinas:</p>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-700 leading-relaxed">
+                  {auditDocModal.result.complianceSummary}
+                </div>
+              </div>
+
+              {/* Compliance Notes */}
+              <div>
+                <p className="font-bold text-slate-800 mb-1">Catatan Verifikasi & Kelengkapan Bukti:</p>
+                <ul className="space-y-1">
+                  {auditDocModal.result.complianceNotes.map((note, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-slate-600">
+                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>{note}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Action items */}
+              <div>
+                <p className="font-bold text-slate-800 mb-1">Langkah Penyempurnaan Rekomendasi:</p>
+                <ul className="space-y-1">
+                  {auditDocModal.result.actionItems.map((act, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-slate-600">
+                      <ChevronRight className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                      <span>{act}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  const targetDoc = auditDocModal.doc;
+                  setAuditDocModal(null);
+                  onOpenDocument(targetDoc.documentType as any, targetDoc.reportData, { autoPrint: true });
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+                title="Langsung cetak dokumen ini ke printer"
+              >
+                <Printer className="w-3.5 h-3.5 text-white" />
+                <span>Cetak Langsung Dokumen</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAuditDocModal(null)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+              >
+                Tutup
               </button>
             </div>
           </div>

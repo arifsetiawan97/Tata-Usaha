@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SchoolConfig, RoleType } from '../../types';
+import { KopSurat } from '../common/KopSurat';
 import { X, Save, Building, UserCheck, Stamp, Image as ImageIcon, Upload, Download } from 'lucide-react';
 
 interface SchoolConfigModalProps {
@@ -250,32 +251,60 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Kecamatan</label>
                   <input
                     type="text"
-                    value={formData.desaKecamatan}
+                    value={formData.desaKecamatan || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, desaKecamatan: e.target.value }))}
                     className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg"
+                    placeholder="Kecamatan..."
                   />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Kabupaten/Kota</label>
                   <input
                     type="text"
-                    value={formData.kabupatenKota}
+                    value={formData.kabupatenKota || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, kabupatenKota: e.target.value }))}
                     className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg"
+                    placeholder="Kabupaten/Kota..."
                   />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">Provinsi (Opsional)</label>
+                    {formData.provinsi && formData.provinsi.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, provinsi: '' }))}
+                        className="text-[10px] text-rose-600 hover:text-rose-800 underline font-medium cursor-pointer"
+                        title="Kosongkan provinsi dari baris alamat"
+                      >
+                        Hapus / Kosongkan
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={formData.provinsi || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, provinsi: e.target.value }))}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:bg-white"
+                    placeholder="Kosongkan jika tidak dipakai pada alamat"
+                  />
+                  <span className="text-[10px] text-slate-500 block mt-0.5">
+                    Kosongkan jika tidak ingin mencantumkan nama provinsi di baris alamat kop surat.
+                  </span>
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Kode Pos</label>
                   <input
                     type="text"
-                    value={formData.kodePos}
+                    value={formData.kodePos || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, kodePos: e.target.value }))}
                     className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg"
+                    placeholder="Kode Pos..."
                   />
                 </div>
               </div>
@@ -307,6 +336,22 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                     onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
                     className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg"
                   />
+                </div>
+              </div>
+
+              {/* LIVE PRATINJAU KOP SURAT REAL-TIME */}
+              <div className="mt-4 pt-3 border-t border-slate-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                    <Building className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Pratinjau Langsung Kop Surat (Live Preview Sesuai Keinginan Pengguna)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 italic">
+                    Tampilan real-time persis seperti di laporan cetak
+                  </span>
+                </div>
+                <div className="p-3 bg-white border border-slate-300 rounded-lg shadow-2xs overflow-x-auto">
+                  <KopSurat config={formData} />
                 </div>
               </div>
             </div>
@@ -562,7 +607,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                   value={formData.stempelTextLine1}
                   onChange={(e) => setFormData(prev => ({ ...prev, stempelTextLine1: e.target.value }))}
                   className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg"
-                  placeholder="Contoh: DINAS PENDIDIKAN KOTA BOGOR"
+                  placeholder="Contoh: DINAS PENDIDIKAN DAN KEBUDAYAAN"
                 />
               </div>
 
@@ -573,7 +618,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                   value={formData.stempelTextLine2}
                   onChange={(e) => setFormData(prev => ({ ...prev, stempelTextLine2: e.target.value }))}
                   className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg"
-                  placeholder="Contoh: SMP NEGERI 1 BOGOR RAYA"
+                  placeholder="Contoh: SMP NEGERI SATU ATAP TELUK"
                 />
               </div>
 

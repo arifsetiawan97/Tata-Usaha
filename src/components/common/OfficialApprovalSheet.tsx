@@ -306,17 +306,21 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
     defaultSignName: string
   ) => {
     const customSig = signatures[targetKey];
+    const formattedNip = officer.nip 
+      ? (officer.nip.startsWith('NIP') ? officer.nip : `NIP. ${officer.nip}`) 
+      : '-';
 
     return (
-      <div className="flex flex-col items-center justify-between min-h-[125px] w-full relative">
-        <div className="w-full min-h-[75px] flex items-center justify-center relative my-0.5">
+      <div className="flex flex-col items-center w-full relative">
+        {/* Signature Drawing / QR / Digital Box with fixed height so every column aligns symmetrically */}
+        <div className="w-full h-24 sm:h-28 flex items-center justify-center relative my-1">
           {/* 1. MODE: MANUAL / TANDA TANGAN BASAH (Untuk cetak kertas fisik & pena) */}
           {signatureMode === 'manual' && (
-            <div className="w-full flex flex-col items-center justify-center py-2">
-              <div className="text-[10px] text-slate-400 font-mono italic mb-6 no-print">
+            <div className="w-full h-full flex flex-col items-center justify-center">
+              <div className="text-[10px] text-slate-400 font-mono italic mb-4 no-print">
                 (Ruang Tanda Tangan Basah & Cap Fisik)
               </div>
-              <div className="w-44 border-b border-dotted border-slate-400 my-1"></div>
+              <div className="w-40 sm:w-48 border-b border-dotted border-slate-400"></div>
             </div>
           )}
 
@@ -332,18 +336,18 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
 
           {/* 3. MODE: GORES / GAMBAR SCAN ASLI */}
           {signatureMode === 'image' && (
-            <div className="w-full flex flex-col items-center justify-center">
+            <div className="w-full h-full flex flex-col items-center justify-center">
               {customSig ? (
                 <img 
                   src={customSig} 
                   alt="Tanda Tangan" 
-                  className="max-h-16 max-w-[180px] object-contain drop-shadow-xs" 
+                  className="max-h-20 max-w-[190px] object-contain drop-shadow-xs" 
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center p-2 border border-dashed border-slate-300 rounded-lg bg-slate-50 text-slate-400 w-full max-w-[200px]">
                   <span className="text-[10px] italic">Belum ada goresan tanda tangan</span>
                   {!isPrintVersion && (
-                    <div className="flex items-center gap-1.5 mt-1.5 no-print">
+                    <div className="flex items-center gap-1.5 mt-1 no-print">
                       <button
                         type="button"
                         onClick={() => handleOpenPad(targetKey)}
@@ -360,16 +364,16 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
 
           {/* 4. MODE: DIGITAL / FONT RESMI TERVERIFIKASI (Default) */}
           {signatureMode === 'digital' && (
-            <>
+            <div className="w-full h-full flex flex-col items-center justify-center">
               {customSig ? (
                 <img 
                   src={customSig} 
                   alt="Tanda Tangan" 
-                  className="max-h-16 max-w-[180px] object-contain drop-shadow-xs" 
+                  className="max-h-20 max-w-[190px] object-contain drop-shadow-xs" 
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center">
-                  <span className="signature-font text-2xl sm:text-3xl text-blue-900 select-none tracking-wide transform -rotate-3 py-0.5">
+                  <span className="signature-font text-2xl sm:text-3xl text-blue-900 select-none tracking-wide transform -rotate-3 py-1">
                     {officer.signatureData || defaultSignName}
                   </span>
                   <div className="flex items-center gap-1 text-[8.5px] text-emerald-800 font-medium bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 no-print">
@@ -378,12 +382,12 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
 
           {/* Interactive Action Buttons per-signer (Screen Only, when in digital or image mode) */}
           {!isPrintVersion && (signatureMode === 'digital' || signatureMode === 'image') && (
-            <div className="absolute right-0 bottom-0 flex items-center gap-1 no-print">
+            <div className="absolute right-0 -bottom-1 flex items-center gap-1 no-print">
               <label 
                 className="cursor-pointer text-[10px] text-slate-600 hover:text-blue-700 bg-white/95 hover:bg-blue-50 px-1.5 py-0.5 rounded border border-slate-300 transition-colors flex items-center gap-1 shadow-2xs"
                 title="Unggah file foto / scan tanda tangan"
@@ -422,14 +426,18 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
           )}
         </div>
 
-        {/* Officer Name & NIP (PANGKAT/GOLONGAN DIHAPUS SESUAI PERMINTAAN RESMI) */}
-        <div className="text-center w-full mt-1">
-          <p className="font-bold text-xs sm:text-sm text-slate-950 uppercase underline decoration-1 underline-offset-2 tracking-wide">
-            {officer.nama}
-          </p>
-          <p className="text-[10px] sm:text-xs text-slate-800 mt-0.5 font-medium tracking-tight">
-            NIP. {officer.nip}
-          </p>
+        {/* Officer Name & NIP with strict equal row heights for 100% horizontal alignment */}
+        <div className="text-center w-full mt-2">
+          <div className="h-6 flex items-center justify-center">
+            <p className="font-bold text-xs sm:text-sm text-slate-950 uppercase underline decoration-1 underline-offset-2 tracking-wide truncate max-w-[280px]">
+              {officer.nama}
+            </p>
+          </div>
+          <div className="h-5 flex items-center justify-center mt-0.5">
+            <p className="text-[10px] sm:text-xs text-slate-800 font-mono tracking-tight truncate max-w-[280px]">
+              {formattedNip}
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -651,59 +659,77 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
         LAYOUT LEMBAR PENGESAHAN DOKUMEN RESMI
         Tersedia pilihan 2 Kolom (Standar) atau 3 Kolom (Lengkap dengan Kasubag TU)
       */}
+      {/* 
+        LAYOUT LEMBAR PENGESAHAN DOKUMEN RESMI
+        Tersedia pilihan 2 Kolom (Standar) atau 3 Kolom (Lengkap dengan Kasubag TU)
+        Sejajar posisi kiri dan kanan tanda tangan secara simetris dan rapi
+      */}
       {layoutMode === '2_col' ? (
         /* ==================== 2 COLUMNS LAYOUT ==================== */
         <div 
-          className="grid grid-cols-2 gap-6 pt-2 relative items-start break-inside-avoid print:grid-cols-2"
+          className="grid grid-cols-2 gap-4 sm:gap-8 pt-2 relative items-start break-inside-avoid print:grid-cols-2"
           style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
         >
           {/* KOLOM KIRI: MENGETAHUI KEPALA SEKOLAH */}
           <div className="flex flex-col items-center text-center relative px-2">
-            <p className="text-xs sm:text-sm font-semibold text-slate-800 mb-0.5">
-              Mengetahui,
-            </p>
-            <p className="text-[11px] sm:text-xs text-slate-700 font-medium mb-2">
-              Kepala {config.namaSekolah}
-            </p>
+            {/* Baris 1: Spacer sejajar persis dengan baris tanggal kolom kanan */}
+            <div className="h-7 sm:h-8 flex items-center justify-center invisible select-none" aria-hidden="true">
+              &nbsp;
+            </div>
+
+            {/* Baris 2: Header Tindakan (Sejajar baris 2 kolom kanan) */}
+            <div className="h-6 flex items-center justify-center">
+              <p className="text-xs sm:text-sm font-semibold text-slate-900 leading-tight">
+                Mengetahui / Mengesahkan,
+              </p>
+            </div>
+
+            {/* Baris 3: Jabatan (Sejajar baris 3 kolom kanan) */}
+            <div className="h-6 flex items-center justify-center mb-1">
+              <p className="text-[11px] sm:text-xs text-slate-800 font-medium truncate max-w-[280px] leading-tight">
+                {config.kepalaSekolah.jabatan || 'Kepala Satuan Pendidikan'}
+              </p>
+            </div>
             
+            {/* Baris 4: Kotak Tanda Tangan & Cap Stempel */}
             <div className="relative w-full max-w-[280px]">
               {/* Rubber Stamp Overlay on Kepala Sekolah */}
               {showStempel && (
-                <div className="absolute -top-4 -left-6 sm:-left-8 z-10 pointer-events-none">
+                <div className="absolute -top-3 -left-5 sm:-left-7 z-10 pointer-events-none">
                   <StempelResmiSekolah 
                     config={{ ...config, customStempelUrl: customStempel }} 
-                    size={135} 
+                    size={125} 
                   />
                 </div>
               )}
-              {renderSignatureBox(kepsek, 'kepsek', 'RahmatH')}
+              {renderSignatureBox(kepsek, 'kepsek', kepsek.nama.split(' ')[0] || 'Kepala')}
             </div>
           </div>
 
           {/* KOLOM KANAN: TEMPAT, TANGGAL & YANG MEMBUAT LAPORAN */}
           <div className="flex flex-col items-center text-center px-2">
-            {/* Tanggal Manual di atas Pembuat Laporan */}
-            <div className="flex items-center justify-center gap-1.5 mb-1">
+            {/* Baris 1: Tanggal Manual di atas Pembuat Laporan (Sejajar persis dengan baris 1 kolom kiri) */}
+            <div className="h-7 sm:h-8 flex items-center justify-center gap-1.5">
               {isEditingDate && !isPrintVersion ? (
                 <div className="flex items-center gap-1 bg-amber-50 p-1 rounded-lg border border-amber-300 no-print">
                   <input
                     type="text"
                     value={tempDate}
                     onChange={(e) => setTempDate(e.target.value)}
-                    className="text-xs px-2 py-1 border border-amber-400 rounded bg-white font-medium text-slate-900 w-52"
-                    placeholder="Kota Bogor, 30 September 2026"
+                    className="text-xs px-2 py-0.5 border border-amber-400 rounded bg-white font-medium text-slate-900 w-52"
+                    placeholder="Tempat, Tanggal (misal: Teluk, 30 September 2026)"
                   />
                   <button
                     type="button"
                     onClick={handleDateSave}
-                    className="px-2 py-1 text-xs bg-emerald-600 text-white font-semibold rounded hover:bg-emerald-700 cursor-pointer"
+                    className="px-2 py-0.5 text-xs bg-emerald-600 text-white font-semibold rounded hover:bg-emerald-700 cursor-pointer"
                   >
                     OK
                   </button>
                   <button
                     type="button"
                     onClick={() => { setTempDate(manualDate); setIsEditingDate(false); }}
-                    className="px-1.5 py-1 text-xs text-slate-500 cursor-pointer"
+                    className="px-1.5 py-0.5 text-xs text-slate-500 cursor-pointer"
                   >
                     Batal
                   </button>
@@ -727,13 +753,21 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
               )}
             </div>
 
-            <p className="text-xs sm:text-sm font-semibold text-slate-800 mb-0.5">
-              Yang Membuat Laporan,
-            </p>
-            <p className="text-[11px] sm:text-xs text-slate-700 font-medium mb-2">
-              {operator.jabatan}
-            </p>
+            {/* Baris 2: Header Tindakan (Sejajar baris 2 kolom kiri) */}
+            <div className="h-6 flex items-center justify-center">
+              <p className="text-xs sm:text-sm font-semibold text-slate-900 leading-tight">
+                Yang Membuat Laporan,
+              </p>
+            </div>
 
+            {/* Baris 3: Jabatan (Sejajar baris 3 kolom kiri) */}
+            <div className="h-6 flex items-center justify-center mb-1">
+              <p className="text-[11px] sm:text-xs text-slate-800 font-medium truncate max-w-[280px] leading-tight">
+                {operator.jabatan || 'Petugas Pelaksana'}
+              </p>
+            </div>
+
+            {/* Baris 4: Kotak Tanda Tangan */}
             <div className="w-full max-w-[280px]">
               {renderSignatureBox(operator, 'operator', operator.nama.split(' ')[0])}
             </div>
@@ -747,34 +781,48 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
         >
           {/* KOLOM 1: MENGETAHUI KEPALA SEKOLAH */}
           <div className="flex flex-col items-center text-center relative px-1">
-            <p className="text-[11px] sm:text-xs font-semibold text-slate-800 mb-0.5">
-              Mengetahui,
-            </p>
-            <p className="text-[10px] sm:text-[11px] text-slate-700 font-medium mb-2">
-              Kepala {config.namaSekolah}
-            </p>
+            <div className="h-7 sm:h-8 flex items-center justify-center invisible select-none" aria-hidden="true">
+              &nbsp;
+            </div>
+            <div className="h-6 flex items-center justify-center">
+              <p className="text-[11px] sm:text-xs font-semibold text-slate-900 leading-tight">
+                Mengetahui / Mengesahkan,
+              </p>
+            </div>
+            <div className="h-6 flex items-center justify-center mb-1">
+              <p className="text-[10px] sm:text-[11px] text-slate-800 font-medium truncate max-w-[220px] leading-tight">
+                {config.kepalaSekolah.jabatan || 'Kepala Satuan Pendidikan'}
+              </p>
+            </div>
             
             <div className="relative w-full max-w-[220px]">
               {showStempel && (
-                <div className="absolute -top-4 -left-4 z-10 pointer-events-none">
+                <div className="absolute -top-3 -left-3 z-10 pointer-events-none">
                   <StempelResmiSekolah 
                     config={{ ...config, customStempelUrl: customStempel }} 
-                    size={110} 
+                    size={105} 
                   />
                 </div>
               )}
-              {renderSignatureBox(kepsek, 'kepsek', 'RahmatH')}
+              {renderSignatureBox(kepsek, 'kepsek', kepsek.nama.split(' ')[0] || 'Kepala')}
             </div>
           </div>
 
           {/* KOLOM 2: MENYETUJUI KASUBAG TU / KOORDINATOR URUSAN */}
           <div className="flex flex-col items-center text-center px-1">
-            <p className="text-[11px] sm:text-xs font-semibold text-slate-800 mb-0.5">
-              Menyetujui,
-            </p>
-            <p className="text-[10px] sm:text-[11px] text-slate-700 font-medium mb-2">
-              Kasubag Tata Usaha
-            </p>
+            <div className="h-7 sm:h-8 flex items-center justify-center invisible select-none" aria-hidden="true">
+              &nbsp;
+            </div>
+            <div className="h-6 flex items-center justify-center">
+              <p className="text-[11px] sm:text-xs font-semibold text-slate-900 leading-tight">
+                Menyetujui,
+              </p>
+            </div>
+            <div className="h-6 flex items-center justify-center mb-1">
+              <p className="text-[10px] sm:text-[11px] text-slate-800 font-medium truncate max-w-[220px] leading-tight">
+                Kasubag Tata Usaha
+              </p>
+            </div>
 
             <div className="w-full max-w-[220px]">
               {renderSignatureBox(
@@ -787,19 +835,19 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
 
           {/* KOLOM 3: TEMPAT, TANGGAL & YANG MEMBUAT LAPORAN */}
           <div className="flex flex-col items-center text-center px-1">
-            <div className="flex items-center justify-center gap-1 mb-1">
+            <div className="h-7 sm:h-8 flex items-center justify-center gap-1">
               {isEditingDate && !isPrintVersion ? (
                 <div className="flex items-center gap-1 bg-amber-50 p-1 rounded-lg border border-amber-300 no-print">
                   <input
                     type="text"
                     value={tempDate}
                     onChange={(e) => setTempDate(e.target.value)}
-                    className="text-xs px-2 py-1 border border-amber-400 rounded bg-white font-medium text-slate-900 w-44"
+                    className="text-xs px-2 py-0.5 border border-amber-400 rounded bg-white font-medium text-slate-900 w-44"
                   />
                   <button
                     type="button"
                     onClick={handleDateSave}
-                    className="px-2 py-1 text-xs bg-emerald-600 text-white font-semibold rounded cursor-pointer"
+                    className="px-2 py-0.5 text-xs bg-emerald-600 text-white font-semibold rounded cursor-pointer"
                   >
                     OK
                   </button>
@@ -822,12 +870,16 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
               )}
             </div>
 
-            <p className="text-[11px] sm:text-xs font-semibold text-slate-800 mb-0.5">
-              Yang Membuat Laporan,
-            </p>
-            <p className="text-[10px] sm:text-[11px] text-slate-700 font-medium mb-2">
-              {operator.jabatan}
-            </p>
+            <div className="h-6 flex items-center justify-center">
+              <p className="text-[11px] sm:text-xs font-semibold text-slate-900 leading-tight">
+                Yang Membuat Laporan,
+              </p>
+            </div>
+            <div className="h-6 flex items-center justify-center mb-1">
+              <p className="text-[10px] sm:text-[11px] text-slate-800 font-medium truncate max-w-[220px] leading-tight">
+                {operator.jabatan}
+              </p>
+            </div>
 
             <div className="w-full max-w-[220px]">
               {renderSignatureBox(operator, 'operator', operator.nama.split(' ')[0])}
