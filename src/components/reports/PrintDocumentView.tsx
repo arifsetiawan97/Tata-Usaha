@@ -12,6 +12,7 @@ import {
   getTaskClassification, 
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from '../../utils/taskClassification';
+import { formatOfficialNameWithDegree } from '../../utils/formatters';
 import { 
   Printer, 
   Download, 
@@ -835,7 +836,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                         <tbody>
                           <tr className="border-b border-slate-300">
                             <td className="w-44 py-0.5 px-2 font-semibold bg-slate-100 border-r border-slate-300 print:bg-slate-200">Nama Petugas Pelaksana</td>
-                            <td className="py-0.5 px-2 font-bold text-slate-900">{operator.nama}</td>
+                            <td className="py-0.5 px-2 font-bold text-slate-900">{formatOfficialNameWithDegree(operator.nama)}</td>
                           </tr>
                           <tr className="border-b border-slate-300">
                             <td className="py-0.5 px-2 font-semibold bg-slate-100 border-r border-slate-300 print:bg-slate-200">NIP / NIPPK</td>
@@ -856,7 +857,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                           <tr>
                             <td className="py-0.5 px-2 font-semibold bg-slate-100 border-r border-slate-300 print:bg-slate-200">Pejabat Pengesah (Penilai)</td>
                             <td className="py-0.5 px-2 font-bold text-slate-900">
-                              {schoolConfig.kepalaSekolah.nama} ({schoolConfig.kepalaSekolah.nip})
+                              {formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama)} ({schoolConfig.kepalaSekolah.nip})
                             </td>
                           </tr>
                         </tbody>

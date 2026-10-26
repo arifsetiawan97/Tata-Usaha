@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SchoolConfig, RoleType } from '../../types';
 import { initialSchoolConfig } from '../../data/initialData';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
+import { formatOfficialNameWithDegree } from '../../utils/formatters';
 import { 
   Edit3, 
   CheckCircle2, 
@@ -317,10 +318,11 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
           {/* 1. MODE: MANUAL / TANDA TANGAN BASAH (Untuk cetak kertas fisik & pena) */}
           {signatureMode === 'manual' && (
             <div className="w-full h-full flex flex-col items-center justify-center">
-              <div className="text-[10px] text-slate-400 font-mono italic mb-4 no-print">
-                (Ruang Tanda Tangan Basah & Cap Fisik)
-              </div>
-              <div className="w-40 sm:w-48 border-b border-dotted border-slate-400"></div>
+              {!isPrintVersion && (
+                <div className="text-[10px] text-slate-400 font-mono italic select-none no-print">
+                  (Ruang Tanda Tangan Basah & Cap Fisik)
+                </div>
+              )}
             </div>
           )}
 
@@ -429,8 +431,8 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
         {/* Officer Name & NIP with strict equal row heights for 100% horizontal alignment */}
         <div className="text-center w-full mt-2">
           <div className="h-6 flex items-center justify-center">
-            <p className="font-bold text-xs sm:text-sm text-slate-950 uppercase underline decoration-1 underline-offset-2 tracking-wide truncate max-w-[280px]">
-              {officer.nama}
+            <p className="font-bold text-xs sm:text-sm text-slate-950 underline decoration-1 underline-offset-2 tracking-wide truncate max-w-[280px]">
+              {formatOfficialNameWithDegree(officer.nama)}
             </p>
           </div>
           <div className="h-5 flex items-center justify-center mt-0.5">

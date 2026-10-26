@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { InventoryItem, RoleType } from '../../types';
 import { exportInventoryToCsv, parseInventoryCsv } from '../../data/taskPresets';
+import { formatOfficialNameWithDegree } from '../../utils/formatters';
 import { 
   Plus, 
   Edit2, 
@@ -158,13 +159,13 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
             <div style="display: table-cell; width: 50%; text-align: center;">
               Mengetahui,<br>
               Kepala ${schoolConfig.namaSekolah}<br><br><br><br>
-              <strong>( ${schoolConfig.kepalaSekolah.nama} )</strong><br>
+              <strong>( ${formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama)} )</strong><br>
               NIP. ${schoolConfig.kepalaSekolah.nip}
             </div>
             <div style="display: table-cell; width: 50%; text-align: center;">
               ${[schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0] ? `${[schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0]}, ` : ''}${dateStr}<br>
               Petugas / Penanggung Jawab Sarpras,<br><br><br><br>
-              <strong>( ${operator.nama} )</strong><br>
+              <strong>( ${formatOfficialNameWithDegree(operator.nama)} )</strong><br>
               NIP. ${operator.nip}
             </div>
           </div>

@@ -5,6 +5,7 @@ import {
   getTaskClassification, 
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from './taskClassification';
+import { formatOfficialNameWithDegree } from './formatters';
 
 interface DocumentExportParams {
   reportType: 'monthly' | 'annual';
@@ -1019,7 +1020,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
                 `}
               </div>
 
-              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; text-decoration: underline;">${schoolConfig.kepalaSekolah.nama}</div>
+              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; text-decoration: underline;">${formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama)}</div>
               <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${schoolConfig.kepalaSekolah.nip}</div>
             </td>
 
@@ -1039,7 +1040,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
                 `}
               </div>
 
-              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; text-decoration: underline;">${operator.nama}</div>
+              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; text-decoration: underline;">${formatOfficialNameWithDegree(operator.nama)}</div>
               <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${operator.nip}</div>
             </td>
           </tr>
