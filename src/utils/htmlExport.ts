@@ -1,4 +1,4 @@
-import { SchoolConfig, MonthlyReport, AnnualReport, RoleType, TaskLog, InventoryItem, TupoksiDefinitionsMap } from '../types';
+import { SchoolConfig, MonthlyReport, AnnualReport, RoleType, TaskLog, InventoryItem, TupoksiDefinitionsMap, LibraryBookItem, LibraryMemberStats } from '../types';
 import { 
   isTaskInMonth, 
   isTaskInYear, 
@@ -16,6 +16,8 @@ interface DocumentExportParams {
   tupoksiDefinitions?: TupoksiDefinitionsMap;
   manualDate?: string;
   nomorSurat?: string;
+  libraryBooks?: LibraryBookItem[];
+  libraryMemberStats?: LibraryMemberStats;
 }
 
 const MONTH_NAMES = [
@@ -38,7 +40,9 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     inventories,
     tupoksiDefinitions,
     manualDate,
-    nomorSurat
+    nomorSurat,
+    libraryBooks = [],
+    libraryMemberStats
   } = params;
 
   const isMonthly = reportType === 'monthly';
@@ -779,6 +783,31 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
           </ul>
         </div>
       </div>
+      ${role === 'PERPUS' ? `
+      <!-- III. REKAPITULASI ANGGOTA PERPUSTAKAAN -->
+      <div class="section-title">III. REKAPITULASI ANGGOTA PERPUSTAKAAN (PEMUSTAKA SEKOLAH)</div>
+      <table class="data-table" style="margin-top: 4px; margin-bottom: 8px;">
+        <thead>
+          <tr>
+            <th>Guru (Pendidik)</th>
+            <th>Tenaga Kependidikan (Staff)</th>
+            <th style="text-align: center;">Siswa (L)</th>
+            <th style="text-align: center;">Siswa (P)</th>
+            <th style="text-align: center;">Total Seluruh Pemustaka</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${libraryMemberStats?.guruPendidik || 0} orang</td>
+            <td>${libraryMemberStats?.staffTendik || 0} orang</td>
+            <td style="text-align: center;">${libraryMemberStats?.siswaLaki || 0} orang</td>
+            <td style="text-align: center;">${libraryMemberStats?.siswaPerempuan || 0} orang</td>
+            <td style="text-align: center; font-weight: bold; color: #1e3a8a;">
+              ${(libraryMemberStats?.guruPendidik || 0) + (libraryMemberStats?.staffTendik || 0) + (libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0)} orang
+            </td>
+          </tr>
+        </tbody>
+      </table>` : ''}
     </div>
 
     <!-- Lembar 1 Page Footer -->
@@ -937,8 +966,57 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         <span>No: ${noSurat}</span>
       </div>
 
+      ${role === 'PERPUS' ? `
+      <!-- KOLEKSI BUKU PERPUSTAKAAN -->
+      <div class="section-title">
+        ${isMonthly 
+          ? `IV. LAMPIRAN PENAMBAHAN BUKU BARU BULAN ${MONTH_NAMES[(monthlyData?.month || 9) - 1].toUpperCase()} ${monthlyData?.year || 2026}`
+          : `IV. LAMPIRAN KATALOG SELURUH DATA BUKU PERPUSTAKAAN TERDATA`
+        }
+      </div>
+      <table class="data-table" style="margin-bottom: 12px;">
+        <thead>
+          <tr>
+            <th class="col-no">No</th>
+            <th>Judul Buku</th>
+            <th>Pengarang / Penerbit</th>
+            <th>Kelas</th>
+            <th>DDC</th>
+            <th>Kategori</th>
+            <th>${isMonthly ? 'Tgl Masuk' : 'Tahun'}</th>
+            <th style="text-align: center;">Jml</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(() => {
+            const perpusBooks = isMonthly && monthlyData
+              ? libraryBooks.filter(b => {
+                  const targetKey = `${monthlyData.year}-${String(monthlyData.month).padStart(2, '0')}`;
+                  const rawBulan = String(b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : ''));
+                  return rawBulan.startsWith(targetKey) || (Boolean(b.tanggalMasuk) && b.tanggalMasuk.startsWith(targetKey));
+                })
+              : libraryBooks;
+            if (perpusBooks.length === 0) {
+              return `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 10px;">${isMonthly ? 'Pada bulan berjalan tidak terdapat penambahan buku baru yang masuk / dibeli.' : 'Belum ada data buku yang terdaftar.'}</td></tr>`;
+            }
+            return perpusBooks.slice(0, isMonthly ? 10 : 15).map((b, idx) => `
+              <tr>
+                <td class="col-no">${idx + 1}</td>
+                <td style="font-weight: 600;">${b.judul}</td>
+                <td>${b.pengarang || '-'} ${b.penerbit ? `(${b.penerbit})` : ''}</td>
+                <td>${b.kelas || '-'}</td>
+                <td style="font-family: monospace;">${b.ddcKlasifikasi || '-'}</td>
+                <td style="text-transform: uppercase;">${b.statusBuku || b.kategori || 'umum'}</td>
+                <td>${isMonthly ? (b.tanggalMasuk || '-') : (b.tahunBeli || '-')}</td>
+                <td style="text-align: center; font-weight: bold;">${b.jumlah} eks</td>
+              </tr>
+            `).join('');
+          })()}
+        </tbody>
+      </table>` : ''}
+
       <!-- IV. INVENTARIS SARANA PRASARANA KERJA -->
-      <div class="section-title">IV. DAFTAR INVENTARIS SARANA PRASARANA OPERASIONAL KERJA</div>
+      <div class="section-title">${role === 'PERPUS' ? 'V.' : 'IV.'} DAFTAR INVENTARIS SARANA PRASARANA OPERASIONAL KERJA</div>
       <table class="data-table">
         <thead>
           <tr>

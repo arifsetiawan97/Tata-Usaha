@@ -7,7 +7,19 @@
  * Pembaruan kode frontend tidak akan merusak atau menghapus data pengguna di server database.
  */
 
-import { TaskLog, InventoryItem, MonthlyReport, AnnualReport, ArchiveDocument, SchoolConfig, CustomCategory, TupoksiDefinitionsMap } from '../types';
+import { 
+  TaskLog, 
+  InventoryItem, 
+  MonthlyReport, 
+  AnnualReport, 
+  ArchiveDocument, 
+  SchoolConfig, 
+  CustomCategory, 
+  TupoksiDefinitionsMap,
+  LibraryBookItem,
+  LibraryMemberItem,
+  LibraryMemberStats
+} from '../types';
 
 export interface AppStateData {
   tasks: TaskLog[];
@@ -18,10 +30,13 @@ export interface AppStateData {
   archives: ArchiveDocument[];
   tupoksiDefinitions: TupoksiDefinitionsMap;
   customCategories: CustomCategory[];
+  libraryBooks?: LibraryBookItem[];
+  libraryMembers?: LibraryMemberItem[];
+  libraryMemberStats?: LibraryMemberStats;
   lastUpdated?: string;
 }
 
-export type CrudCollection = 'tasks' | 'inventories' | 'monthlyReports' | 'annualReports' | 'archives' | 'customCategories';
+export type CrudCollection = 'tasks' | 'inventories' | 'monthlyReports' | 'annualReports' | 'archives' | 'customCategories' | 'libraryBooks' | 'libraryMembers';
 
 class StorageService {
   private isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;

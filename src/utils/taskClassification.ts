@@ -70,7 +70,12 @@ export function getTaskClassification(
     // - Administrasi Keuangan BOS & BKU (keuangan_bos)
     // - Inventarisasi Barang Sarpras & KIB (sapras)
     // - Sinkronisasi & Pemutakhiran Dapodik (dapodik)
-    if (category === 'layanan_umum') {
+    if (
+      category === 'layanan_umum' ||
+      category === 'fasilitasi_rapat' ||
+      category === 'pelayanan_mutasi' ||
+      category === 'legalisir_dokumen'
+    ) {
       return 'tambahan';
     }
     return 'pokok';

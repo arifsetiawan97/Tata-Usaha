@@ -3,6 +3,12 @@ import { useApp } from '../../context/AppContext';
 import { InventoryItem, RoleType } from '../../types';
 import { exportInventoryToCsv, parseInventoryCsv } from '../../data/taskPresets';
 import { formatOfficialNameWithDegree } from '../../utils/formatters';
+import { KopSurat } from './KopSurat';
+import { 
+  downloadInventoryExcelTemplate, 
+  exportInventoriesToExcel, 
+  parseInventoryExcelFile 
+} from '../../utils/excelHelper';
 import { 
   Plus, 
   Edit2, 
@@ -34,7 +40,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   readOnly = false,
   title
 }) => {
-  const { inventories, addInventory, updateInventory, deleteInventory, importInventories, currentRole, schoolConfig } = useApp();
+  const { inventories, addInventory, updateInventory, deleteInventory, deleteMultipleInventories, importInventories, currentRole, schoolConfig } = useApp();
   const effectiveRole = role || currentRole || 'TU';
   const roleTitle = 
     effectiveRole === 'TU' ? 'Tata Usaha' : 
@@ -48,6 +54,13 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [importStatus, setImportStatus] = useState('');
+  const [parsedExcelItems, setParsedExcelItems] = useState<Omit<InventoryItem, 'id'>[]>([]);
+  const [isParsingExcel, setIsParsingExcel] = useState(false);
+  const [excelFileName, setExcelFileName] = useState('');
+
+  // Bulk Selection States
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
 
   // AI Sarpras Audit State
   const [isAnalyzingAi, setIsAnalyzingAi] = useState(false);
@@ -84,106 +97,10 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
     }
   };
 
+  const [isKirPrintModalOpen, setIsKirPrintModalOpen] = useState(false);
+
   const handleDirectPrintKir = () => {
-    const printWindow = window.open('', '_blank');
-    const operator = schoolConfig.operatorProfiles?.[effectiveRole] || {
-      nama: 'Petugas Layanan Operasional',
-      nip: '-',
-      jabatan: roleTitle
-    };
-    const items = inventories.filter(i => i.role === effectiveRole);
-    const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Buku Inventaris Sarana Kerja - ${roleTitle} - ${schoolConfig.namaSekolah}</title>
-          <style>
-            body { font-family: Arial, sans-serif; font-size: 10pt; line-height: 1.4; padding: 20px; color: #111; }
-            .header { text-align: center; border-bottom: 3px double #000; padding-bottom: 10px; margin-bottom: 15px; }
-            .header h3 { margin: 0; font-size: 13pt; text-transform: uppercase; }
-            .header h2 { margin: 2px 0; font-size: 15pt; }
-            .header p { margin: 2px 0; font-size: 9pt; color: #444; }
-            .title { text-align: center; margin: 15px 0; font-weight: bold; font-size: 12pt; text-decoration: underline; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }
-            th, td { border: 1px solid #000; padding: 5px 8px; }
-            th { background-color: #f0f0f0; text-align: center; font-weight: bold; }
-            .signatures { margin-top: 35px; width: 100%; display: flex; justify-content: space-between; page-break-inside: avoid; }
-            .sig-box { width: 45%; text-align: center; font-size: 9.5pt; }
-            @page { size: A4 portrait; margin: 1.5cm; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h3>PEMERINTAH DAERAH · DINAS PENDIDIKAN</h3>
-            <h2>${schoolConfig.namaSekolah.toUpperCase()}</h2>
-            <p>${schoolConfig.alamat || 'Alamat Sekolah'} · Telp: ${schoolConfig.telepon || '-'} · Email: ${schoolConfig.email || '-'}</p>
-          </div>
-
-          <div class="title">BUKU INDUK INVENTARIS SARANA PRASARANA KERJA (KIR)</div>
-          <p style="text-align: center; font-size: 9pt; margin-top: -10px;">Unit Kerja: <strong>${roleTitle}</strong> · Tanggal Cetak: ${dateStr}</p>
-
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 30px;">No</th>
-                <th>Kode Barang</th>
-                <th>Nama Barang & Merk / Tipe</th>
-                <th>Kategori</th>
-                <th>Jml</th>
-                <th>Kondisi</th>
-                <th>Lokasi Simpan</th>
-                <th>Tahun</th>
-                <th>Keterangan</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items.map((it, idx) => `
-                <tr>
-                  <td style="text-align: center;">${idx + 1}</td>
-                  <td style="font-family: monospace;">${it.kodeBarang}</td>
-                  <td><strong>${it.namaBarang}</strong><br><small style="color: #555;">${it.merkModel || '-'}</small></td>
-                  <td>${it.kategori}</td>
-                  <td style="text-align: center;">${it.jumlah} ${it.satuan}</td>
-                  <td style="text-align: center;">${it.kondisi}</td>
-                  <td>${it.lokasiPenyimpanan}</td>
-                  <td style="text-align: center;">${it.tahunPengadaan || '-'}</td>
-                  <td>${it.keterangan || '-'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div class="signatures" style="display: table; width: 100%; margin-top: 40px;">
-            <div style="display: table-cell; width: 50%; text-align: center;">
-              Mengetahui,<br>
-              Kepala ${schoolConfig.namaSekolah}<br><br><br><br>
-              <strong>( ${formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama)} )</strong><br>
-              NIP. ${schoolConfig.kepalaSekolah.nip}
-            </div>
-            <div style="display: table-cell; width: 50%; text-align: center;">
-              ${[schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0] ? `${[schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0]}, ` : ''}${dateStr}<br>
-              Petugas / Penanggung Jawab Sarpras,<br><br><br><br>
-              <strong>( ${formatOfficialNameWithDegree(operator.nama)} )</strong><br>
-              NIP. ${operator.nip}
-            </div>
-          </div>
-
-          <script>
-            window.onload = function() {
-              window.print();
-            };
-          </script>
-        </body>
-      </html>
-    `;
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-    } else {
-      window.print();
-    }
+    setIsKirPrintModalOpen(true);
   };
 
   // Form state
@@ -269,15 +186,83 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
     setIsModalOpen(false);
   };
 
+  const handleDownloadExcelTemplate = () => {
+    downloadInventoryExcelTemplate(effectiveRole);
+  };
+
+  const handleExportExcel = () => {
+    exportInventoriesToExcel(roleInventories, roleTitle);
+  };
+
   const handleDownloadTemplateCsv = () => {
-    const csvContent = exportInventoryToCsv(roleInventories);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const csvContent = exportInventoryToCsv(roleInventories, effectiveRole);
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `template_inventaris_${effectiveRole.toLowerCase()}.csv`;
+    link.download = `template_inventaris_${effectiveRole.toLowerCase()}_excel.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleExcelFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsParsingExcel(true);
+      setExcelFileName(file.name);
+      setImportStatus(`Membaca berkas ${file.name}...`);
+
+      const parsed = await parseInventoryExcelFile(file, effectiveRole);
+      if (parsed.length > 0) {
+        setParsedExcelItems(parsed);
+        setImportStatus(`Berhasil membaca ${parsed.length} barang dari berkas "${file.name}". Silakan tinjau dan konfirmasi.`);
+      } else {
+        setParsedExcelItems([]);
+        setImportStatus('Tidak ada data barang yang valid pada berkas Excel.');
+      }
+    } catch (err) {
+      console.error('Error parsing inventory excel:', err);
+      setImportStatus('Format berkas tidak valid. Pastikan format .xlsx, .xls, atau .csv');
+    } finally {
+      setIsParsingExcel(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleCommitParsedExcelImport = () => {
+    if (parsedExcelItems.length === 0) return;
+    importInventories(parsedExcelItems);
+    setImportStatus(`Berhasil mengimpor ${parsedExcelItems.length} barang inventaris!`);
+    setTimeout(() => {
+      setIsImportModalOpen(false);
+      setParsedExcelItems([]);
+      setExcelFileName('');
+      setImportStatus('');
+    }, 1000);
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === roleInventories.length && roleInventories.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(roleInventories.map(i => i.id));
+    }
+  };
+
+  const handleToggleSelectItem = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleConfirmBulkDelete = () => {
+    if (selectedIds.length > 0) {
+      deleteMultipleInventories(selectedIds);
+      setSelectedIds([]);
+      setIsBulkDeleteModalOpen(false);
+    }
   };
 
   const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -377,15 +362,31 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                 <span>{isAnalyzingAi ? 'Menganalisis AI...' : 'Audit Sarpras (AI)'}</span>
               </button>
 
+              {/* Ekspor Excel Button */}
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-2xs cursor-pointer"
+                title="Ekspor seluruh buku inventaris ini ke berkas Microsoft Excel (.xlsx)"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Ekspor Excel (.xlsx)</span>
+              </button>
+
               {/* Import Button */}
               <button
                 type="button"
-                onClick={() => setIsImportModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors border border-slate-200"
-                title="Impor dari berkas CSV atau unduh templat"
+                onClick={() => {
+                  setParsedExcelItems([]);
+                  setExcelFileName('');
+                  setImportStatus('');
+                  setIsImportModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-colors shadow-2xs cursor-pointer"
+                title="Impor dari berkas Excel (.xlsx) atau CSV dengan pemetaan kolom otomatis"
               >
-                <Upload className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Impor CSV</span>
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Impor Excel / CSV</span>
               </button>
 
               {/* Add Item Button */}
@@ -414,11 +415,53 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
         </div>
       )}
 
+      {/* Bulk Delete / Selection Action Bar */}
+      {selectedIds.length > 0 && !isPrintVersion && !readOnly && (
+        <div className="mb-3 p-2.5 sm:px-4 bg-rose-50 border border-rose-200 rounded-lg flex flex-wrap items-center justify-between gap-2 shadow-xs animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white">
+              {selectedIds.length}
+            </span>
+            <span className="text-xs font-semibold text-rose-900">
+              barang inventaris dipilih
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-300 rounded-md transition-colors"
+            >
+              Batal Pilihan
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md transition-colors shadow-xs cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Hapus Pilihan ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table Container - Mobile friendly responsive scroll */}
       <div className="overflow-x-auto border border-slate-200 rounded-lg bg-white print:border-black print:rounded-none">
         <table className="w-full text-left text-xs border-collapse min-w-[650px] sm:min-w-full">
           <thead>
             <tr className="bg-slate-100 text-slate-800 border-b border-slate-200 font-semibold print:bg-slate-200 print:text-black print:border-black">
+              {!isPrintVersion && !readOnly && (
+                <th className="py-2 px-2 text-center w-8 border-r border-slate-200 print:border-black no-print">
+                  <input
+                    type="checkbox"
+                    checked={roleInventories.length > 0 && selectedIds.length === roleInventories.length}
+                    onChange={handleToggleSelectAll}
+                    title="Pilih semua barang inventaris"
+                    className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </th>
+              )}
               <th className="py-2 px-2 text-center w-8 border-r border-slate-200 print:border-black">No</th>
               <th className="py-2 px-2.5 border-r border-slate-200 print:border-black">Kode Barang</th>
               <th className="py-2 px-3 border-r border-slate-200 print:border-black">Nama Barang & Merk / Tipe</th>
@@ -435,13 +478,24 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
           <tbody className="divide-y divide-slate-100 print:divide-black">
             {roleInventories.length === 0 ? (
               <tr>
-                <td colSpan={isPrintVersion || readOnly ? 8 : 9} className="py-6 text-center text-slate-400 italic">
+                <td colSpan={isPrintVersion || readOnly ? 8 : 10} className="py-6 text-center text-slate-400 italic">
                   Belum ada data inventaris untuk kategori ini.
                 </td>
               </tr>
             ) : (
               roleInventories.map((item, idx) => (
-                <tr key={item.id} className="hover:bg-slate-50/80 transition-colors print:hover:bg-transparent">
+                <tr key={item.id} className={`hover:bg-slate-50/80 transition-colors print:hover:bg-transparent ${selectedIds.includes(item.id) ? 'bg-blue-50/40' : ''}`}>
+                  {!isPrintVersion && !readOnly && (
+                    <td className="py-2 px-2 text-center border-r border-slate-200 print:border-black no-print">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(item.id)}
+                        onChange={() => handleToggleSelectItem(item.id)}
+                        title={`Pilih ${item.namaBarang}`}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </td>
+                  )}
                   <td className="py-2 px-2 text-center text-slate-500 font-mono text-[11px] border-r border-slate-200 print:border-black print:text-black">
                     {idx + 1}
                   </td>
@@ -668,53 +722,178 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
 
       {/* Import / Export Modal */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50">
-              <h3 className="font-semibold text-slate-900 text-sm sm:text-base">
-                Impor & Ekspor Data Inventaris ({roleTitle})
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
+                  <FileSpreadsheet className="w-5 h-5 text-blue-200" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base">
+                    Templat & Impor Data Inventaris ({roleTitle})
+                  </h3>
+                  <p className="text-[11px] text-blue-200">
+                    Mendukung berkas Microsoft Excel (.xlsx, .xls) & CSV dengan kolom otomatis
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setIsImportModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-slate-200 text-slate-500"
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setParsedExcelItems([]);
+                  setExcelFileName('');
+                }}
+                className="p-1 rounded-lg hover:bg-white/15 text-white transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs">
-              <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
-                <p className="font-bold text-blue-900">Format Template CSV Inventaris:</p>
-                <p className="text-slate-600 text-[11px] leading-relaxed">
-                  Unduh template format CSV yang sudah siap diisi menggunakan Microsoft Excel atau Google Sheets.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleDownloadTemplateCsv}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-blue-100 text-blue-700 border border-blue-300 rounded-lg font-semibold transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Unduh Template CSV Inventaris</span>
-                </button>
+            <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+              {/* Template Download Box */}
+              <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <p className="font-bold text-emerald-950 text-xs flex items-center gap-1.5">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+                    <span>Unduh Templat Format Excel Resmi:</span>
+                  </p>
+                  <p className="text-emerald-800 text-[11px] leading-relaxed">
+                    Dilengkapi kolom Excel resmi kedinasan: Kode, Nama Barang & Merk, Kategori, Jumlah, Satuan, Kondisi, Lokasi Simpan, Sumber Dana, dan Keterangan.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleDownloadExcelTemplate}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold transition-colors shadow-xs cursor-pointer whitespace-nowrap"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Unduh Templat Excel (.xlsx)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplateCsv}
+                    className="flex items-center gap-1 px-3 py-2 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>CSV</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50/50">
-                <Upload className="w-7 h-7 text-blue-600 mx-auto mb-2 opacity-80" />
-                <p className="font-semibold text-slate-800">Unggah Berkas CSV Inventaris</p>
-                <p className="text-[11px] text-slate-500 mt-1 mb-3">Kolom otomatis dipetakan ke buku inventaris</p>
+              {/* Upload Dropzone */}
+              <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-5 text-center bg-slate-50/60 transition-colors">
+                <FileSpreadsheet className="w-8 h-8 text-blue-600 mx-auto mb-2 opacity-90" />
+                <p className="font-bold text-slate-800 text-sm">Unggah Berkas Excel Inventaris (.xlsx / .xls / .csv)</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 mb-3">Kolom otomatis dipetakan ke buku inventaris sarana kerja</p>
                 
-                <label className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-xs">
-                  <span>Pilih Berkas CSV</span>
-                  <input type="file" accept=".csv,text/csv" onChange={handleCsvImport} className="hidden" />
+                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors shadow-xs text-xs">
+                  <Upload className="w-4 h-4" />
+                  <span>{isParsingExcel ? 'Membaca Berkas Excel...' : 'Pilih Berkas Excel / CSV'}</span>
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                    onChange={handleExcelFileUpload} 
+                    className="hidden" 
+                  />
                 </label>
+                {excelFileName && (
+                  <p className="text-[11px] text-slate-600 mt-2 font-mono">
+                    Berkas aktif: <strong>{excelFileName}</strong>
+                  </p>
+                )}
               </div>
 
+              {/* Status Message */}
               {importStatus && (
-                <p className="font-semibold text-center text-blue-700 bg-blue-50 p-2 rounded-lg border border-blue-200">
-                  {importStatus}
-                </p>
+                <div className={`p-3 rounded-lg text-xs font-semibold border flex items-center gap-2 ${
+                  importStatus.includes('Berhasil') 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                    : 'bg-blue-50 border-blue-200 text-blue-900'
+                }`}>
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{importStatus}</span>
+                </div>
               )}
+
+              {/* Parsed Excel Items Preview */}
+              {parsedExcelItems.length > 0 && (
+                <div className="space-y-2 border border-blue-200 rounded-xl p-3 bg-blue-50/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                      <Check className="w-4 h-4 text-blue-700" />
+                      Pratinjau Data ({parsedExcelItems.length} barang inventaris terbaca):
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Total Aset: {parsedExcelItems.reduce((acc, it) => acc + (it.jumlah || 1), 0)} unit
+                    </span>
+                  </div>
+
+                  <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-lg bg-white shadow-2xs">
+                    <table className="w-full text-left text-[11px] divide-y divide-slate-100">
+                      <thead className="bg-slate-50 sticky top-0 text-slate-700 font-bold">
+                        <tr>
+                          <th className="py-2 px-2.5 text-center w-8">No</th>
+                          <th className="py-2 px-2.5">Kode</th>
+                          <th className="py-2 px-2.5">Nama Barang</th>
+                          <th className="py-2 px-2.5">Kategori</th>
+                          <th className="py-2 px-2.5 text-center">Jml</th>
+                          <th className="py-2 px-2.5">Kondisi</th>
+                          <th className="py-2 px-2.5">Lokasi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {parsedExcelItems.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/70">
+                            <td className="py-1.5 px-2.5 text-center text-slate-400">{idx + 1}</td>
+                            <td className="py-1.5 px-2.5 font-mono text-[10px] text-slate-600">{item.kodeBarang}</td>
+                            <td className="py-1.5 px-2.5 font-semibold text-slate-900">{item.namaBarang}</td>
+                            <td className="py-1.5 px-2.5 text-slate-600">{item.kategori}</td>
+                            <td className="py-1.5 px-2.5 text-center font-bold text-slate-800">{item.jumlah} {item.satuan}</td>
+                            <td className="py-1.5 px-2.5">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                item.kondisi === 'Baik' ? 'bg-emerald-100 text-emerald-800' :
+                                item.kondisi === 'Rusak Ringan' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                              }`}>
+                                {item.kondisi}
+                              </span>
+                            </td>
+                            <td className="py-1.5 px-2.5 text-slate-500">{item.lokasiPenyimpanan}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCommitParsedExcelImport}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Simpan & Masukkan ke Inventaris ({parsedExcelItems.length} Barang)</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setParsedExcelItems([]);
+                  setExcelFileName('');
+                  setImportStatus('');
+                }}
+                className="px-4 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
@@ -817,6 +996,235 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
               >
                 Tutup
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md p-5 space-y-4 animate-scaleIn">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-100 rounded-full shrink-0">
+                <AlertTriangle className="w-6 h-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Hapus {selectedIds.length} Barang Terpilih?</h3>
+                <p className="text-xs text-slate-500">Tindakan ini permanen dan menghapus barang dari inventaris.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700">
+              Anda akan menghapus data <strong className="text-rose-700 font-bold">{selectedIds.length} barang inventaris</strong> yang dipilih berikut:
+            </p>
+
+            <div className="max-h-36 overflow-y-auto bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-1.5 text-xs">
+              {roleInventories.filter(i => selectedIds.includes(i.id)).slice(0, 6).map(item => (
+                <div key={item.id} className="text-slate-700 truncate flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                  <span className="font-semibold text-slate-900">{item.namaBarang}</span>
+                  <span className="text-slate-400 font-mono text-[11px]">({item.kodeBarang})</span>
+                </div>
+              ))}
+              {selectedIds.length > 6 && (
+                <p className="text-[11px] text-slate-500 italic pl-3">
+                  ... dan {selectedIds.length - 6} barang lainnya terpilih.
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkDelete}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-xs cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Ya, Hapus {selectedIds.length} Barang</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CETAK RESMI BUKU INVENTARIS SARPRAS (KIR) DENGAN KOP SURAT */}
+      {isKirPrintModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsKirPrintModalOpen(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col animate-scaleIn relative">
+            {/* Top Bar Controls */}
+            <div className="shrink-0 p-4 bg-slate-900 text-white flex items-center justify-between no-print border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-sm">Pratinjau Cetak Buku Inventaris Sarana Kerja (KIR)</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Cetak Langsung</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsKirPrintModalOpen(false)}
+                  className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Tutup</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Document Sheet */}
+            <div className="flex-1 overflow-y-auto p-8 sm:p-12 text-slate-900 bg-white font-serif leading-relaxed text-xs sm:text-sm print:p-0 print:overflow-visible">
+              {/* Kop Surat Resmi Sekolah dengan Logo Kiri & Kanan */}
+              <KopSurat config={schoolConfig} isPrintVersion={true} className="mb-4" />
+
+              {/* Judul Dokumen KIR */}
+              <div className="text-center mb-6 space-y-1">
+                <h4 className="font-bold text-sm sm:text-base uppercase tracking-wider underline">
+                  BUKU INDUK INVENTARIS SARANA PRASARANA KERJA (KIR)
+                </h4>
+                <div className="text-xs font-sans text-slate-600">
+                  Unit Kerja: <strong>{roleTitle}</strong> · Satuan Pendidikan: <strong>{schoolConfig.namaSekolah}</strong>
+                </div>
+                <div className="text-[11px] font-mono text-slate-500">
+                  Tanggal Cetak: {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+
+              {/* Tabel Inventaris */}
+              <div className="overflow-x-auto mb-6">
+                <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[11px] font-sans">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400 print:bg-slate-200">
+                      <th className="py-2 px-2 text-center w-8 border border-slate-400">No</th>
+                      <th className="py-2 px-2 border border-slate-400">Kode Barang</th>
+                      <th className="py-2 px-2.5 border border-slate-400">Nama Barang & Merk / Tipe</th>
+                      <th className="py-2 px-2 border border-slate-400">Kategori</th>
+                      <th className="py-2 px-2 text-center border border-slate-400">Jumlah</th>
+                      <th className="py-2 px-2 text-center border border-slate-400">Kondisi</th>
+                      <th className="py-2 px-2 border border-slate-400">Lokasi Simpan</th>
+                      <th className="py-2 px-2 text-center border border-slate-400">Tahun</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roleInventories.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-6 text-center text-slate-500 italic border border-slate-300">
+                          Belum ada data barang inventaris yang tercatat untuk unit kerja ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      roleInventories.map((it, idx) => (
+                        <tr key={it.id} className="border-b border-slate-300">
+                          <td className="py-1.5 px-2 text-center font-mono border border-slate-300">{idx + 1}</td>
+                          <td className="py-1.5 px-2 font-mono text-[10px] border border-slate-300">{it.kodeBarang}</td>
+                          <td className="py-1.5 px-2.5 border border-slate-300">
+                            <span className="font-bold text-slate-900 block">{it.namaBarang}</span>
+                            <span className="text-[10px] text-slate-500 block">{it.merkModel || '-'}</span>
+                          </td>
+                          <td className="py-1.5 px-2 border border-slate-300">{it.kategori}</td>
+                          <td className="py-1.5 px-2 text-center font-bold border border-slate-300">{it.jumlah} {it.satuan}</td>
+                          <td className="py-1.5 px-2 text-center border border-slate-300">
+                            <span className={`text-[10px] font-bold ${
+                              it.kondisi === 'Baik' ? 'text-emerald-700' : 'text-amber-700'
+                            }`}>
+                              {it.kondisi}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-2 border border-slate-300">{it.lokasiPenyimpanan}</td>
+                          <td className="py-1.5 px-2 text-center font-mono border border-slate-300">{it.tahunPengadaan || '-'}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-400 print:bg-slate-200">
+                    <tr>
+                      <td colSpan={4} className="py-2 px-2 text-center uppercase text-[10px]">
+                        Total Aset Terdata: {roleInventories.length} Jenis Barang
+                      </td>
+                      <td className="py-2 px-2 text-center font-mono font-bold text-blue-900">
+                        {roleInventories.reduce((s, i) => s + (Number(i.jumlah) || 1), 0)} Unit
+                      </td>
+                      <td colSpan={3} className="py-2 px-2 text-slate-600 text-[10px]">
+                        Baik: {countBaik} · Rusak Ringan: {countRusakRingan} · Rusak Berat: {countRusakBerat}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Lembar Tanda Tangan Pengesahan KIR */}
+              <div className="pt-6 grid grid-cols-2 gap-8 text-center font-sans text-xs break-inside-avoid">
+                <div className="flex flex-col items-center">
+                  <div className="text-slate-600">Mengetahui,</div>
+                  <div className="font-semibold text-slate-800 mt-0.5">Kepala {schoolConfig.namaSekolah}</div>
+                  <div className="h-20 flex items-center justify-center">
+                    {/* Ruang tanda tangan */}
+                  </div>
+                  <div className="font-bold text-slate-900 underline text-xs">
+                    {formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama)}
+                  </div>
+                  <div className="text-[11px] text-slate-600 mt-0.5">
+                    NIP: {schoolConfig.kepalaSekolah.nip}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center">
+                  <div className="text-slate-600">
+                    {[schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0] || 'Sekolah'}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </div>
+                  <div className="font-semibold text-slate-800 mt-0.5">Petugas / Penanggung Jawab Sarpras</div>
+                  <div className="h-20 flex items-center justify-center">
+                    {/* Ruang tanda tangan */}
+                  </div>
+                  <div className="font-bold text-slate-900 underline text-xs">
+                    {formatOfficialNameWithDegree(schoolConfig.operatorProfiles?.[effectiveRole]?.nama || 'Petugas Layanan Operasional')}
+                  </div>
+                  <div className="text-[11px] text-slate-600 mt-0.5">
+                    NIP: {schoolConfig.operatorProfiles?.[effectiveRole]?.nip || '-'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sticky Bottom Footer */}
+            <div className="shrink-0 p-3 bg-slate-100 border-t border-slate-300 flex items-center justify-between no-print">
+              <span className="text-xs text-slate-600 font-medium">Buku Inventaris (KIR) Siap Cetak</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Cetak Dokumen</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsKirPrintModalOpen(false)}
+                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Tutup</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

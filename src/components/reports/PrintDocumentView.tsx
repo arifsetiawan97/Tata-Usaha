@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { KopSurat } from '../common/KopSurat';
 import { OfficialApprovalSheet } from '../common/OfficialApprovalSheet';
@@ -28,7 +28,9 @@ import {
   Monitor,
   Archive,
   Target,
-  BookmarkCheck
+  BookmarkCheck,
+  BookOpen,
+  Users
 } from 'lucide-react';
 import { initialSchoolConfig } from '../../data/initialData';
 
@@ -50,7 +52,16 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   onBack,
   autoPrint = false
 }) => {
-  const { schoolConfig, currentRole, tasks, inventories, archiveReport, tupoksiDefinitions } = useApp();
+  const { 
+    schoolConfig, 
+    currentRole, 
+    tasks, 
+    inventories, 
+    archiveReport, 
+    tupoksiDefinitions,
+    libraryBooks,
+    libraryMemberStats
+  } = useApp();
   const printableRef = useRef<HTMLDivElement>(null);
 
   const role: RoleType = reportData.role || currentRole || 'TU';
@@ -109,6 +120,109 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const roleTupoksiList = tupoksiDefinitions[role]?.tupoksiList || OFFICIAL_TUPOKSI_DEFINITIONS[role].tupoksiList;
   const roleTambahanList = tupoksiDefinitions[role]?.tugasTambahanList || OFFICIAL_TUPOKSI_DEFINITIONS[role].tugasTambahanList;
 
+  // Khusus Perpustakaan
+  const isPerpus = role === 'PERPUS';
+  const totalSiswaMember = (libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0);
+  const totalAnggotaPerpus = (libraryMemberStats?.guruPendidik || 0) + (libraryMemberStats?.staffTendik || 0) + totalSiswaMember;
+
+  const monthlyNewBooks = useMemo(() => {
+    if (!isPerpus || !isMonthly || !monthlyData) return [];
+    const targetKey = `${monthlyData.year}-${String(monthlyData.month).padStart(2, '0')}`;
+    return libraryBooks.filter(book => {
+      const rawBulan = String(book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : ''));
+      if (rawBulan.startsWith(targetKey)) return true;
+      if (book.tanggalMasuk && book.tanggalMasuk.startsWith(targetKey)) return true;
+      return false;
+    });
+  }, [libraryBooks, isPerpus, isMonthly, monthlyData]);
+
+  const totalNewCopies = useMemo(() => {
+    return monthlyNewBooks.reduce((sum, b) => sum + (Number(b.jumlah) || 1), 0);
+  }, [monthlyNewBooks]);
+
+  const totalAllBookCopies = useMemo(() => {
+    return libraryBooks.reduce((sum, b) => sum + (Number(b.jumlah) || 1), 0);
+  }, [libraryBooks]);
+
+  const annualYear = annualData?.year || (monthlyData?.year ?? new Date().getFullYear());
+
+  const annualMonthlyBookStats = useMemo(() => {
+    if (!isPerpus) return [];
+    
+    const monthlyList = MONTH_NAMES.map((name, idx) => {
+      const monthNum = idx + 1;
+      const targetMonthKey = `${annualYear}-${String(monthNum).padStart(2, '0')}`;
+      
+      const booksInMonth = libraryBooks.filter(book => {
+        const rawBulan = String(book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : ''));
+        if (rawBulan.startsWith(targetMonthKey)) return true;
+        if (book.tanggalMasuk && book.tanggalMasuk.startsWith(targetMonthKey)) return true;
+        if (typeof book.bulanPengadaan === 'number' && book.bulanPengadaan === monthNum) {
+          const y = book.tahunPengadaan || (book.tanggalMasuk ? parseInt(book.tanggalMasuk.split('-')[0], 10) : annualYear);
+          if (y === annualYear) return true;
+        }
+        return false;
+      });
+
+      const judulCount = booksInMonth.length;
+      const eksemplarCount = booksInMonth.reduce((sum, b) => sum + (Number(b.jumlah) || 1), 0);
+
+      return {
+        monthNum,
+        monthName: name,
+        judulCount,
+        eksemplarCount,
+        books: booksInMonth
+      };
+    });
+
+    const totalYearCopies = monthlyList.reduce((sum, m) => sum + m.eksemplarCount, 0);
+
+    let cumulative = 0;
+    return monthlyList.map((m, idx) => {
+      cumulative += m.eksemplarCount;
+      const prevCopies = idx > 0 ? monthlyList[idx - 1].eksemplarCount : 0;
+      const percentShare = totalYearCopies > 0 ? (m.eksemplarCount / totalYearCopies) * 100 : 0;
+      
+      let growthText = '-';
+      let trend: 'up' | 'down' | 'same' | 'none' = 'none';
+
+      if (idx === 0) {
+        if (m.eksemplarCount > 0) {
+          growthText = '+100%';
+          trend = 'up';
+        } else {
+          growthText = '0%';
+          trend = 'none';
+        }
+      } else {
+        if (prevCopies === 0 && m.eksemplarCount > 0) {
+          growthText = '+100%';
+          trend = 'up';
+        } else if (prevCopies > 0 && m.eksemplarCount > 0) {
+          const diff = ((m.eksemplarCount - prevCopies) / prevCopies) * 100;
+          growthText = diff > 0 ? `+${diff.toFixed(1)}%` : diff < 0 ? `${diff.toFixed(1)}%` : '0%';
+          trend = diff > 0 ? 'up' : diff < 0 ? 'down' : 'same';
+        } else if (prevCopies > 0 && m.eksemplarCount === 0) {
+          growthText = '-100%';
+          trend = 'down';
+        } else {
+          growthText = '0%';
+          trend = 'none';
+        }
+      }
+
+      return {
+        ...m,
+        percentShare,
+        growthText,
+        trend,
+        cumulative,
+        totalYearCopies
+      };
+    });
+  }, [libraryBooks, annualYear, isPerpus]);
+
   // 1. Direct PDF Generation & Download (Supporting OKLCH & Tailwind CSS v4)
   const handleSavePdf = async () => {
     if (!printableRef.current) return;
@@ -155,7 +269,9 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         inventories,
         tupoksiDefinitions,
         manualDate,
-        nomorSurat
+        nomorSurat,
+        libraryBooks,
+        libraryMemberStats
       });
 
       const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
@@ -534,6 +650,40 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                           </div>
                         </div>
                       </div>
+
+                      {/* DATA REKAPITULASI ANGGOTA PERPUSTAKAAN (GURU, STAFF, SISWA) */}
+                      {isPerpus && (
+                        <div className="mt-3 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                          <div className="flex justify-between items-center mb-1">
+                            <h4 className="font-bold text-xs text-slate-900 uppercase">
+                              III. DATA REKAPITULASI ANGGOTA PERPUSTAKAAN (PEMUSTAKA SEKOLAH)
+                            </h4>
+                            <span className="font-mono text-[10px] font-bold text-slate-800">
+                              Total: {totalAnggotaPerpus} Orang
+                            </span>
+                          </div>
+                          <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10.5px]">
+                            <thead>
+                              <tr className="bg-slate-100 font-bold border-b border-slate-400 print:bg-slate-200">
+                                <th className="py-1 px-2 border border-slate-400">Guru (Pendidik)</th>
+                                <th className="py-1 px-2 border border-slate-400">Tenaga Kependidikan (Staff)</th>
+                                <th className="py-1 px-2 border border-slate-400 text-center">Siswa Laki-laki</th>
+                                <th className="py-1 px-2 border border-slate-400 text-center">Siswa Perempuan</th>
+                                <th className="py-1 px-2 border border-slate-400 text-center font-bold">Total Seluruh Anggota</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td className="py-1 px-2 border border-slate-300 font-semibold">{libraryMemberStats?.guruPendidik || 0} orang</td>
+                                <td className="py-1 px-2 border border-slate-300 font-semibold">{libraryMemberStats?.staffTendik || 0} orang</td>
+                                <td className="py-1 px-2 text-center border border-slate-300">{libraryMemberStats?.siswaLaki || 0} orang</td>
+                                <td className="py-1 px-2 text-center border border-slate-300">{libraryMemberStats?.siswaPerempuan || 0} orang</td>
+                                <td className="py-1 px-2 text-center font-bold border border-slate-300 text-blue-900">{totalAnggotaPerpus} orang</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -570,9 +720,12 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                         }}
                       >
                         <div>
-                          {/* HEADER LANJUTAN DOKUMEN */}
-                          <div className="border-b-2 border-slate-900 pb-2 mb-3.5 text-xs flex justify-between items-center font-semibold text-slate-700">
-                            <span>{schoolConfig.namaSekolah} — Lampiran I: Rekapitulasi Tugas {roleTitle}</span>
+                          {/* KOP SURAT RESMI DI SETIAP LEMBAR LAMPIRAN */}
+                          <KopSurat config={schoolConfig} isPrintVersion={true} className="mb-2" />
+
+                          {/* SUB-HEADER IDENTITAS DOKUMEN */}
+                          <div className="border-b border-slate-400 pb-1.5 mb-3 text-xs flex justify-between items-center font-semibold text-slate-700">
+                            <span>{schoolConfig.namaSekolah} — Lampiran I: Rekapitulasi Rincian Tugas Operasional</span>
                             <span className="font-mono text-[10.5px]">No: {nomorSurat}</span>
                           </div>
 
@@ -688,16 +841,137 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                         }}
                       >
                         <div>
-                          {/* HEADER LANJUTAN DOKUMEN */}
-                          <div className="border-b-2 border-slate-900 pb-2 mb-3.5 text-xs flex justify-between items-center font-semibold text-slate-700">
+                          {/* KOP SURAT RESMI DI SETIAP LEMBAR LAMPIRAN */}
+                          <KopSurat config={schoolConfig} isPrintVersion={true} className="mb-2" />
+
+                          {/* SUB-HEADER IDENTITAS DOKUMEN */}
+                          <div className="border-b border-slate-400 pb-1.5 mb-3 text-xs flex justify-between items-center font-semibold text-slate-700">
                             <span>{schoolConfig.namaSekolah} — Lampiran II: Sarana Prasarana & Dokumentasi</span>
                             <span className="font-mono text-[10.5px]">No: {nomorSurat}</span>
                           </div>
 
+                          {/* KHUSUS PERPUSTAKAAN: REKAPITULASI & PERSENTASE PENAMBAHAN BUKU PER BULAN */}
+                          {isPerpus && !isMonthly && (
+                            <div className="my-2.5 text-xs break-inside-avoid">
+                              <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-1.5 print:border-black">
+                                III.A. REKAPITULASI & PERSENTASE PENAMBAHAN BUKU BARU PER BULAN (TAHUN ANGGARAN {annualYear})
+                              </h4>
+                              <p className="text-[10px] text-slate-600 mb-1.5">
+                                Matriks pemantauan pertumbuhan dan persentase penambahan koleksi buku baru per bulan guna mengukur peningkatan secara berkala:
+                              </p>
+
+                              <div className="overflow-x-auto mb-3">
+                                <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
+                                  <thead>
+                                    <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400 print:bg-slate-200">
+                                      <th className="py-1 px-1.5 text-center w-7 border border-slate-400">No</th>
+                                      <th className="py-1 px-2 border border-slate-400">Bulan Pengadaan</th>
+                                      <th className="py-1 px-2 text-center border border-slate-400">Judul Baru</th>
+                                      <th className="py-1 px-2 text-center border border-slate-400">Eksemplar Masuk</th>
+                                      <th className="py-1 px-2 text-center border border-slate-400">% Porsi dari Total Tahun</th>
+                                      <th className="py-1 px-2 text-center border border-slate-400">Peningkatan vs Bln Lalu</th>
+                                      <th className="py-1 px-2 text-center border border-slate-400">Akumulasi Koleksi</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {annualMonthlyBookStats.map((st) => (
+                                      <tr key={st.monthNum} className="border-b border-slate-300">
+                                        <td className="py-1 px-1.5 text-center font-mono border border-slate-300">{st.monthNum}</td>
+                                        <td className="py-1 px-2 font-medium border border-slate-300">{st.monthName}</td>
+                                        <td className="py-1 px-2 text-center font-mono border border-slate-300">{st.judulCount > 0 ? `${st.judulCount} judul` : '-'}</td>
+                                        <td className="py-1 px-2 text-center font-bold font-mono border border-slate-300">{st.eksemplarCount > 0 ? `${st.eksemplarCount} eks` : '-'}</td>
+                                        <td className="py-1 px-2 text-center font-mono font-semibold border border-slate-300">
+                                          {st.percentShare > 0 ? `${st.percentShare.toFixed(1)}%` : '-'}
+                                        </td>
+                                        <td className="py-1 px-2 text-center font-mono text-[9.5px] border border-slate-300">
+                                          <span className={st.trend === 'up' ? 'font-bold text-emerald-800' : st.trend === 'down' ? 'text-rose-700' : 'text-slate-500'}>
+                                            {st.growthText}
+                                          </span>
+                                        </td>
+                                        <td className="py-1 px-2 text-center font-mono border border-slate-300">{st.cumulative} eks</td>
+                                      </tr>
+                                    ))}
+                                    <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400 print:bg-slate-200">
+                                      <td colSpan={2} className="py-1 px-2 text-center font-bold">TOTAL PENAMBAHAN TAHUNAN</td>
+                                      <td className="py-1 px-2 text-center font-mono">{annualMonthlyBookStats.reduce((s, m) => s + m.judulCount, 0)} judul</td>
+                                      <td className="py-1 px-2 text-center font-mono text-blue-900 font-black">{annualMonthlyBookStats.reduce((s, m) => s + m.eksemplarCount, 0)} eks</td>
+                                      <td className="py-1 px-2 text-center font-mono">100.0%</td>
+                                      <td className="py-1 px-2 text-center text-[9px] font-semibold text-emerald-800">Pertumbuhan Tercatat</td>
+                                      <td className="py-1 px-2 text-center font-mono">{annualMonthlyBookStats.reduce((s, m) => s + m.eksemplarCount, 0)} eks</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* KHUSUS PERPUSTAKAAN: LAMPIRAN KOLEKSI BUKU */}
+                          {isPerpus && (
+                            <div className="my-2 text-xs break-inside-avoid">
+                              <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-1.5 print:border-black">
+                                {isMonthly 
+                                  ? `III. LAMPIRAN PENAMBAHAN BUKU BARU & PENGADAAN BULAN ${MONTH_NAMES[(monthlyData?.month || 9) - 1].toUpperCase()} ${monthlyData?.year || 2026}`
+                                  : `III.B. LAMPIRAN KATALOG LENGKAP SELURUH DATA BUKU PERPUSTAKAAN TERDATA`
+                                }
+                              </h4>
+                              <p className="text-[10px] text-slate-600 mb-1.5 flex justify-between items-center">
+                                <span>
+                                  {isMonthly 
+                                    ? `Daftar buku baru yang masuk / dibeli sekolah pada bulan berjalan (${monthlyNewBooks.length} judul / ${totalNewCopies} eks):`
+                                    : `Daftar seluruh judul koleksi buku yang terdata di perpustakaan (${libraryBooks.length} judul / ${totalAllBookCopies} eks):`
+                                  }
+                                </span>
+                              </p>
+
+                              <div className="overflow-x-auto mb-3">
+                                <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
+                                  <thead>
+                                    <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400 print:bg-slate-200">
+                                      <th className="py-1 px-1.5 text-center w-7 border border-slate-400">No</th>
+                                      <th className="py-1 px-2 border border-slate-400">Judul Buku</th>
+                                      <th className="py-1 px-1.5 border border-slate-400">Pengarang / Penerbit</th>
+                                      <th className="py-1 px-1.5 border border-slate-400">Kelas</th>
+                                      <th className="py-1 px-1.5 border border-slate-400">DDC</th>
+                                      <th className="py-1 px-1.5 border border-slate-400">Kategori</th>
+                                      <th className="py-1 px-1.5 border border-slate-400">{isMonthly ? 'Tgl Masuk' : 'Tahun'}</th>
+                                      <th className="py-1 px-1.5 border border-slate-400">Sumber</th>
+                                      <th className="py-1 px-1.5 text-center border border-slate-400">Jml</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(isMonthly ? monthlyNewBooks : libraryBooks).length === 0 ? (
+                                      <tr>
+                                        <td colSpan={9} className="py-3 text-center text-slate-500 italic border border-slate-300">
+                                          {isMonthly 
+                                            ? 'Pada bulan berjalan tidak ada penambahan buku baru yang masuk / dibeli. Seluruh koleksi terpelihara baik.' 
+                                            : 'Belum ada data buku yang terdaftar.'}
+                                        </td>
+                                      </tr>
+                                    ) : (
+                                      (isMonthly ? monthlyNewBooks : libraryBooks).slice(0, isMonthly ? 8 : 12).map((b, idx) => (
+                                        <tr key={b.id} className="border-b border-slate-300">
+                                          <td className="py-1 px-1.5 text-center font-mono border border-slate-300">{idx + 1}</td>
+                                          <td className="py-1 px-2 border border-slate-300 font-semibold">{b.judul}</td>
+                                          <td className="py-1 px-1.5 border border-slate-300 text-[9.5px]">{b.pengarang || '-'}</td>
+                                          <td className="py-1 px-1.5 border border-slate-300">{b.kelas || '-'}</td>
+                                          <td className="py-1 px-1.5 border border-slate-300 font-mono text-[9px]">{b.ddcKlasifikasi || '-'}</td>
+                                          <td className="py-1 px-1.5 border border-slate-300 uppercase text-[9px] font-bold">{b.statusBuku || b.kategori || 'umum'}</td>
+                                          <td className="py-1 px-1.5 border border-slate-300 font-mono text-[9px]">{isMonthly ? (b.tanggalMasuk || '-') : (b.tahunBeli || '-')}</td>
+                                          <td className="py-1 px-1.5 border border-slate-300 text-[9px]">{b.sumberPengadaan || 'BOS'}</td>
+                                          <td className="py-1 px-1.5 text-center font-bold border border-slate-300">{b.jumlah} eks</td>
+                                        </tr>
+                                      ))
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
                           {/* LAMPIRAN INVENTARIS SARANA PRASARANA KERJA */}
                           <div className="my-2 text-xs">
                             <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-1.5 print:border-black break-inside-avoid">
-                              III. LAMPIRAN DAFTAR INVENTARIS SARANA PRASARANA OPERASIONAL KERJA
+                              {isPerpus ? 'IV.' : 'III.'} LAMPIRAN DAFTAR INVENTARIS SARANA PRASARANA OPERASIONAL KERJA
                             </h4>
                             <p className="text-[10.5px] text-slate-600 mb-2">
                               Peralatan dinas pendukung operasional yang dipertanggungjawabkan kepada Operator Layanan Operasional ({roleTitle}):
@@ -751,7 +1025,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                           {/* LAMPIRAN DOKUMENTASI FOTO (JIKA ADA BUKTI FOTO) */}
                           <div className="mt-4 pt-2 border-t border-slate-200 text-xs break-inside-avoid">
                             <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-2 print:border-black">
-                              IV. LAMPIRAN DOKUMENTASI FOTO BUKTI PEKERJAAN LAPANGAN
+                              {isPerpus ? 'V.' : 'IV.'} LAMPIRAN DOKUMENTASI FOTO BUKTI PEKERJAAN LAPANGAN
                             </h4>
                             {tasksWithPhotos.length > 0 ? (
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:grid-cols-2">

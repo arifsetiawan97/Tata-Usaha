@@ -694,71 +694,208 @@ export const TASK_PRESETS: Record<RoleType, TaskPresetItem[]> = {
   ]
 };
 
-// CSV Export and Import Utilities
+// CSV Export and Import Utilities (Full Excel Indonesian & Universal Delimiter Support)
 export function exportTasksToCsv(tasks: TaskLog[]): string {
-  const headers = ['id', 'role', 'date', 'category', 'title', 'description', 'location', 'timeStart', 'timeEnd', 'status', 'volumeUnit', 'petugas', 'notes'];
+  const headers = [
+    'Tanggal Pelaksanaan',
+    'Bidang Layanan',
+    'Kategori Pekerjaan',
+    'Klasifikasi (pokok/tambahan)',
+    'Judul Kegiatan',
+    'Uraian Rincian Pekerjaan',
+    'Lokasi / Titik Pelaksanaan',
+    'Jam Mulai',
+    'Jam Selesai',
+    'Capaian Volume / Satuan Hasil',
+    'Status Pekerjaan',
+    'Nama Petugas',
+    'Catatan / Keterangan'
+  ];
   const rows = tasks.map(t => [
-    t.id,
-    t.role,
     t.date,
+    t.role,
     t.category,
+    t.taskType || 'pokok',
     `"${(t.title || '').replace(/"/g, '""')}"`,
     `"${(t.description || '').replace(/"/g, '""')}"`,
     `"${(t.location || '').replace(/"/g, '""')}"`,
     t.timeStart,
     t.timeEnd,
-    t.status,
     `"${(t.volumeUnit || '').replace(/"/g, '""')}"`,
+    t.status,
     `"${(t.petugas || '').replace(/"/g, '""')}"`,
     `"${(t.notes || '').replace(/"/g, '""')}"`
   ]);
-  return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  return '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
 }
 
 export function parseTasksCsv(csvText: string, defaultRole: RoleType): Omit<TaskLog, 'id'>[] {
-  const lines = csvText.split('\n').filter(line => line.trim().length > 0);
-  if (lines.length < 2) return [];
+  if (!csvText) return [];
+  // Strip BOM if present
+  const clean = csvText.replace(/^\uFEFF/, '').trim();
+  const rawLines = clean.split(/\r?\n/).filter(line => line.trim().length > 0);
+  if (rawLines.length < 2) return [];
+
+  // Detect delimiter from first non-empty line
+  const firstLine = rawLines[0];
+  let delimiter = ',';
+  if ((firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length) {
+    delimiter = ';';
+  } else if ((firstLine.match(/\t/g) || []).length > (firstLine.match(/,/g) || []).length) {
+    delimiter = '\t';
+  }
 
   const results: Omit<TaskLog, 'id'>[] = [];
-  // Skip header line
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    // Split by comma ignoring commas inside quotes
-    const regex = /(?:,|\n|^)("(?:(?:"")*[^"]*)*"|[^",\n]*|(?:\n|$))/g;
-    const matches: string[] = [];
-    let match;
-    while ((match = regex.exec(line)) !== null && matches.length < 13) {
-      let val = match[1] || '';
-      if (val.startsWith('"') && val.endsWith('"')) {
-        val = val.substring(1, val.length - 1).replace(/""/g, '"');
+  // Helper to split row respecting quotes
+  const parseRow = (line: string): string[] => {
+    const cols: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      if (char === '"') {
+        if (inQuotes && line[j + 1] === '"') {
+          cur += '"';
+          j++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === delimiter && !inQuotes) {
+        cols.push(cur.trim());
+        cur = '';
+      } else {
+        cur += char;
       }
-      matches.push(val.trim());
-      if (regex.lastIndex >= line.length) break;
     }
+    cols.push(cur.trim());
+    return cols;
+  };
 
-    if (matches.length >= 5) {
+  const headerCols = parseRow(firstLine).map(c => c.toLowerCase());
+  const isIndoFormat = headerCols.some(c => c.includes('tanggal') || c.includes('judul') || c.includes('uraian'));
+
+  for (let i = 1; i < rawLines.length; i++) {
+    const cols = parseRow(rawLines[i]);
+    if (cols.length < 3) continue;
+
+    if (isIndoFormat) {
+      // Format: Tanggal, Role, Kategori, Klasifikasi, Judul, Uraian, Lokasi, Jam Mulai, Jam Selesai, Volume, Status, Petugas, Catatan
+      const date = cols[0] || new Date().toISOString().split('T')[0];
+      const roleVal = (cols[1]?.toUpperCase() as RoleType) || defaultRole;
+      const catVal = cols[2] || 'keamanan';
+      const taskTypeVal = cols[3]?.toLowerCase() === 'tambahan' ? 'tambahan' : 'pokok';
+      const title = cols[4] || 'Kegiatan Operasional';
+      const description = cols[5] || '';
+      const location = cols[6] || 'Sekolah';
+      const timeStart = cols[7] || '07:30';
+      const timeEnd = cols[8] || '09:00';
+      const volumeUnit = cols[9] || '1 kegiatan';
+      const rawStatus = (cols[10] || 'selesai').toLowerCase().replace(/\s+/g, '_');
+      const status = rawStatus.includes('proses') ? 'dalam_proses' : rawStatus.includes('tindak') ? 'perlu_tindak_lanjut' : 'selesai';
+      const petugas = cols[11] || 'Petugas Operasional';
+      const notes = cols[12] || '';
+
       results.push({
-        role: (matches[1] as RoleType) || defaultRole,
-        date: matches[2] || new Date().toISOString().split('T')[0],
-        category: (matches[3] as any) || 'keamanan',
-        title: matches[4] || 'Kegiatan Operasional',
-        description: matches[5] || '',
-        location: matches[6] || 'Sekolah',
-        timeStart: matches[7] || '08:00',
-        timeEnd: matches[8] || '10:00',
-        status: (matches[9] as any) || 'selesai',
-        volumeUnit: matches[10] || '1 kegiatan',
-        petugas: matches[11] || 'Petugas Operasional',
-        notes: matches[12] || ''
+        role: roleVal,
+        date,
+        category: catVal as any,
+        taskType: taskTypeVal,
+        title,
+        description,
+        location,
+        timeStart,
+        timeEnd,
+        status,
+        volumeUnit,
+        petugas,
+        notes
+      });
+    } else {
+      // Legacy English format: id, role, date, category, title, description, location, timeStart, timeEnd, status, volumeUnit, petugas, notes
+      const roleVal = (cols[1] as RoleType) || defaultRole;
+      const date = cols[2] || new Date().toISOString().split('T')[0];
+      const category = (cols[3] as any) || 'keamanan';
+      const title = cols[4] || 'Kegiatan Operasional';
+      const description = cols[5] || '';
+      const location = cols[6] || 'Sekolah';
+      const timeStart = cols[7] || '08:00';
+      const timeEnd = cols[8] || '10:00';
+      const status = (cols[9] as any) || 'selesai';
+      const volumeUnit = cols[10] || '1 kegiatan';
+      const petugas = cols[11] || 'Petugas Operasional';
+      const notes = cols[12] || '';
+
+      results.push({
+        role: roleVal,
+        date,
+        category,
+        taskType: 'pokok',
+        title,
+        description,
+        location,
+        timeStart,
+        timeEnd,
+        status,
+        volumeUnit,
+        petugas,
+        notes
       });
     }
   }
   return results;
 }
 
-export function exportInventoryToCsv(items: InventoryItem[]): string {
-  const headers = ['kodeBarang', 'namaBarang', 'merkModel', 'kategori', 'jumlah', 'satuan', 'kondisi', 'lokasiPenyimpanan', 'tahunPengadaan', 'keterangan'];
-  const rows = items.map(i => [
+export function exportInventoryToCsv(items: InventoryItem[], role?: RoleType): string {
+  const headers = [
+    'Kode Barang',
+    'Nama Barang',
+    'Merk / Tipe',
+    'Kategori',
+    'Jumlah',
+    'Satuan',
+    'Kondisi',
+    'Lokasi Penyimpanan',
+    'Tahun Pengadaan',
+    'Keterangan'
+  ];
+
+  // If items empty, generate representative sample rows based on role
+  let dataRows: InventoryItem[] = items;
+  if (!dataRows || dataRows.length === 0) {
+    const currentYear = new Date().getFullYear();
+    const effRole = role || 'TU';
+    if (effRole === 'TU') {
+      dataRows = [
+        { id: '1', role: 'TU', kodeBarang: 'INV-TU-01', namaBarang: 'Komputer PC All-in-One Administrasi', merkModel: 'Lenovo IdeaCentre A340 Intel i5', kategori: 'Peralatan TIK & Kantor', jumlah: 2, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Ruang Tata Usaha (Meja Kepegawaian)', tahunPengadaan: currentYear - 1, keterangan: 'Operasional pelayanan administrasi' },
+        { id: '2', role: 'TU', kodeBarang: 'INV-TU-02', namaBarang: 'Printer Multifungsi Print Scan Copy', merkModel: 'Epson EcoTank L3210', kategori: 'Peralatan TIK & Kantor', jumlah: 1, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Ruang Tata Usaha (Meja Kesiswaan)', tahunPengadaan: currentYear, keterangan: 'Pencetakan surat dinas & rapor' },
+        { id: '3', role: 'TU', kodeBarang: 'INV-TU-03', namaBarang: 'Filling Cabinet 4 Laci Arsip Berkas', merkModel: 'Lion Steel 4-Drawers', kategori: 'Mebel / Lemari', jumlah: 2, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Ruang Arsip Surat Tata Usaha', tahunPengadaan: currentYear - 2, keterangan: 'Penyimpanan berkas SKP & ijazah' }
+      ];
+    } else if (effRole === 'PENJAGA') {
+      dataRows = [
+        { id: '1', role: 'PENJAGA', kodeBarang: 'INV-PJ-01', namaBarang: 'Mesin Pemotong Rumput Gendong', merkModel: 'Honda UMR 435N 4-Tak', kategori: 'Alat Kebersihan & Lapangan', jumlah: 1, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Gudang Sarpras Belakang', tahunPengadaan: currentYear - 1, keterangan: 'Pemeliharaan rumput lapangan upacara' },
+        { id: '2', role: 'PENJAGA', kodeBarang: 'INV-PJ-02', namaBarang: 'Genset Cadangan Daya Listrik Sekolah', merkModel: 'Yamaha ET950 1000W', kategori: 'Peralatan Listrik & Mekanik', jumlah: 1, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Ruang Utilitas Listrik Pos Jaga', tahunPengadaan: currentYear - 2, keterangan: 'Sumber listrik cadangan saat padam' },
+        { id: '3', role: 'PENJAGA', kodeBarang: 'INV-PJ-03', namaBarang: 'Kotak Toolkit Perbaikan Kayu & Besi', merkModel: 'Kenmaster Pro Kit 45 Pcs', kategori: 'Perkakas Perbaikan', jumlah: 1, satuan: 'Set', kondisi: 'Baik', lokasiPenyimpanan: 'Pos Penjagaan Depan', tahunPengadaan: currentYear, keterangan: 'Perbaikan sarpras ringan meja/kursi/pintu' }
+      ];
+    } else if (effRole === 'SERVICE') {
+      dataRows = [
+        { id: '1', role: 'SERVICE', kodeBarang: 'INV-SRV-01', namaBarang: 'Mesin Polisher Pengkilap Lantai Keramik', merkModel: 'Krisbow Floor Polisher 17 Inch', kategori: 'Alat Kebersihan Gedung', jumlah: 1, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Gudang Cleaning Service Barat', tahunPengadaan: currentYear - 1, keterangan: 'Perawatan berkala lantai aula & lorong' },
+        { id: '2', role: 'SERVICE', kodeBarang: 'INV-SRV-02', namaBarang: 'Wet & Dry Vacuum Cleaner Industri', merkModel: 'Karcher WD 3 V-17', kategori: 'Alat Kebersihan Gedung', jumlah: 2, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Gudang Cleaning Service', tahunPengadaan: currentYear, keterangan: 'Penyedot debu ruang guru & lab' }
+      ];
+    } else if (effRole === 'PERPUS') {
+      dataRows = [
+        { id: '1', role: 'PERPUS', kodeBarang: 'INV-PST-01', namaBarang: 'Komputer Server Katalog Perpustakaan (OPAC)', merkModel: 'Asus ExpertCenter D5 Intel i5', kategori: 'Peralatan TIK Perpustakaan', jumlah: 1, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Meja Layanan Sirkulasi', tahunPengadaan: currentYear, keterangan: 'Katalogisasi SLiMS & peminjaman' },
+        { id: '2', role: 'PERPUS', kodeBarang: 'INV-PST-02', namaBarang: 'Barcode Scanner Sirkulasi Buku Otomatis', merkModel: 'Honeywell Voyager 1250g', kategori: 'Peralatan TIK Perpustakaan', jumlah: 2, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Meja Sirkulasi Pustakawan', tahunPengadaan: currentYear, keterangan: 'Scan barcode kartu & barcode buku' },
+        { id: '3', role: 'PERPUS', kodeBarang: 'INV-PST-03', namaBarang: 'Rak Buku Dua Muka (Double Sided) Besi', merkModel: 'Indachi Metal Bookrack 5 Tingkat', kategori: 'Mebel Perpustakaan', jumlah: 6, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Ruang Koleksi Teks Utama', tahunPengadaan: currentYear - 1, keterangan: 'Penempatan buku kurikulum merdeka' }
+      ];
+    } else {
+      dataRows = [
+        { id: '1', role: 'LAB_IPA', kodeBarang: 'INV-LAB-01', namaBarang: 'Mikroskop Monokuler Siswa Pembesaran 400x', merkModel: 'Olympus CX23 LED', kategori: 'Alat Optik Praktikum', jumlah: 10, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Lemari Kaca Mikroskop Lab IPA', tahunPengadaan: currentYear - 1, keterangan: 'Praktikum biologi sel & jaringan' },
+        { id: '2', role: 'LAB_IPA', kodeBarang: 'INV-LAB-02', namaBarang: 'Neraca Ohaus 4 Lengan Presisi 0.01g', merkModel: 'Ohaus Triple Beam MB-2610', kategori: 'Alat Ukur Massa', jumlah: 4, satuan: 'Unit', kondisi: 'Baik', lokasiPenyimpanan: 'Meja Preparasi Fisika Lab', tahunPengadaan: currentYear - 2, keterangan: 'Praktikum pengukuran massa IPA' }
+      ];
+    }
+  }
+
+  const rows = dataRows.map(i => [
     `"${(i.kodeBarang || '').replace(/"/g, '""')}"`,
     `"${(i.namaBarang || '').replace(/"/g, '""')}"`,
     `"${(i.merkModel || '').replace(/"/g, '""')}"`,
@@ -767,44 +904,85 @@ export function exportInventoryToCsv(items: InventoryItem[]): string {
     `"${(i.satuan || 'Unit').replace(/"/g, '""')}"`,
     `"${(i.kondisi || 'Baik').replace(/"/g, '""')}"`,
     `"${(i.lokasiPenyimpanan || '').replace(/"/g, '""')}"`,
-    i.tahunPengadaan || 2026,
+    i.tahunPengadaan || new Date().getFullYear(),
     `"${(i.keterangan || '').replace(/"/g, '""')}"`
   ]);
-  return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+
+  return [headers.map(h => `"${h}"`).join(','), ...rows.map(r => r.join(','))].join('\r\n');
 }
 
 export function parseInventoryCsv(csvText: string, role: RoleType): Omit<InventoryItem, 'id'>[] {
-  const lines = csvText.split('\n').filter(line => line.trim().length > 0);
-  if (lines.length < 2) return [];
+  // Normalize line endings and strip BOM if present
+  const cleanText = csvText.replace(/^\uFEFF/, '').trim();
+  const rawLines = cleanText.split(/\r?\n/).filter(line => line.trim().length > 0);
+  if (rawLines.length === 0) return [];
+
+  // Determine delimiter: detect comma, semicolon, or tab from the header
+  const firstLine = rawLines[0];
+  let delimiter = ',';
+  if (firstLine.includes('\t')) delimiter = '\t';
+  else if (firstLine.split(';').length > firstLine.split(',').length) delimiter = ';';
+
+  // Helper parser for a single line with quotes
+  const parseLine = (line: string): string[] => {
+    const tokens: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === delimiter && !inQuotes) {
+        tokens.push(cur.trim());
+        cur = '';
+      } else {
+        cur += char;
+      }
+    }
+    tokens.push(cur.trim());
+    return tokens;
+  };
 
   const results: Omit<InventoryItem, 'id'>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    const regex = /(?:,|\n|^)("(?:(?:"")*[^"]*)*"|[^",\n]*|(?:\n|$))/g;
-    const matches: string[] = [];
-    let match;
-    while ((match = regex.exec(line)) !== null && matches.length < 10) {
-      let val = match[1] || '';
-      if (val.startsWith('"') && val.endsWith('"')) {
-        val = val.substring(1, val.length - 1).replace(/""/g, '"');
-      }
-      matches.push(val.trim());
-      if (regex.lastIndex >= line.length) break;
-    }
+  const startIndex = (firstLine.toLowerCase().includes('kode') || firstLine.toLowerCase().includes('nama') || firstLine.toLowerCase().includes('barang')) ? 1 : 0;
 
-    if (matches.length >= 3) {
+  for (let i = startIndex; i < rawLines.length; i++) {
+    const tokens = parseLine(rawLines[i]);
+    if (tokens.length >= 2 && tokens[0] !== '' && tokens[1] !== '') {
+      const kode = tokens[0] || `INV-${role}-${Date.now().toString().slice(-4)}-${i}`;
+      const nama = tokens[1] || 'Barang Inventaris';
+      const merk = tokens[2] || '';
+      const kategori = tokens[3] || 'Peralatan Operasional';
+      const jumlah = parseInt(tokens[4], 10) || 1;
+      const satuan = tokens[5] || 'Unit';
+      
+      let kondisi: 'Baik' | 'Rusak Ringan' | 'Rusak Berat' = 'Baik';
+      const rawKondisi = (tokens[6] || '').toLowerCase();
+      if (rawKondisi.includes('berat')) kondisi = 'Rusak Berat';
+      else if (rawKondisi.includes('ringan')) kondisi = 'Rusak Ringan';
+      else kondisi = 'Baik';
+
+      const lokasi = tokens[7] || 'Gedung Sekolah';
+      const tahun = parseInt(tokens[8], 10) || new Date().getFullYear();
+      const keterangan = tokens[9] || '';
+
       results.push({
         role,
-        kodeBarang: matches[0] || `INV-${role}-${Date.now()}`,
-        namaBarang: matches[1] || 'Nama Barang',
-        merkModel: matches[2] || '',
-        kategori: matches[3] || 'Peralatan Dinas',
-        jumlah: parseInt(matches[4]) || 1,
-        satuan: matches[5] || 'Unit',
-        kondisi: (matches[6] as any) || 'Baik',
-        lokasiPenyimpanan: matches[7] || 'Gudang Sekolah',
-        tahunPengadaan: parseInt(matches[8]) || new Date().getFullYear(),
-        keterangan: matches[9] || ''
+        kodeBarang: kode,
+        namaBarang: nama,
+        merkModel: merk,
+        kategori,
+        jumlah,
+        satuan,
+        kondisi,
+        lokasiPenyimpanan: lokasi,
+        tahunPengadaan: tahun,
+        keterangan
       });
     }
   }

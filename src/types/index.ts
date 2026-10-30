@@ -1,5 +1,77 @@
 export type RoleType = 'TU' | 'PENJAGA' | 'SERVICE' | 'PERPUS' | 'LAB_IPA';
 
+export type RoleSubTab = 'tasks' | 'tupoksi' | 'monthly' | 'annual' | 'inventory' | 'buku' | 'anggota';
+
+export type LibraryBookCategory = 
+  | 'Buku Teks Utama' 
+  | 'Buku Pengayaan' 
+  | 'Buku Referensi' 
+  | 'Fiksi / Cerita' 
+  | 'Non-Fiksi' 
+  | 'Buku Guru' 
+  | 'Kamus & Ensiklopedia'
+  | 'Agama & Budi Pekerti';
+
+export type LibraryProcurementSource = 
+  | 'BOS Reguler' 
+  | 'BOS Kinerja' 
+  | 'Hibah / Bantuan' 
+  | 'APBD / DAK' 
+  | 'Swadaya / Komite';
+
+export interface LibraryBookItem {
+  id: string;
+  kodeBuku: string;
+  nomorInventaris?: string;
+  judul: string;
+  penulis: string;
+  pengarang?: string;
+  penerbit: string;
+  tahunTerbit: number;
+  tahunBeli?: number | string;
+  isbn?: string;
+  ddcKlasifikasi?: string;
+  ddc?: string;
+  kategoriBuku?: LibraryBookCategory | string;
+  kategori?: string;
+  kelas?: string; // e.g. "Kelas VII", "Kelas VIII", "Kelas IX", "Umum", "Referensi"
+  statusBuku?: 'guru' | 'siswa' | 'referensi' | 'umum' | string;
+  sumberPengadaan: LibraryProcurementSource | string;
+  tanggalMasuk: string; // YYYY-MM-DD
+  bulanPengadaan: number | string; // e.g. 10 or "2026-10"
+  tahunPengadaan?: number;
+  jumlah: number; // Jumlah eksemplar
+  jumlahTersedia?: number;
+  hargaSatuan?: number;
+  totalHarga?: number;
+  kondisi: 'Baik' | 'Rusak Ringan' | 'Rusak Berat' | 'baik' | 'rusak_ringan' | 'rusak_berat';
+  lokasiRak: string;
+  keterangan?: string;
+}
+
+export interface LibraryMemberStats {
+  siswaLaki: number;
+  siswaPerempuan: number;
+  guruPendidik: number;
+  staffTendik: number;
+  lastUpdated: string;
+}
+
+export interface LibraryMemberItem {
+  id: string;
+  nomorAnggota: string;
+  nama: string;
+  tipeAnggota: 'siswa' | 'guru' | 'staff' | 'SISWA' | 'GURU' | 'STAFF';
+  kelasAtauJabatan: string;
+  nomorIdentitas?: string;
+  jenisKelamin: 'L' | 'P';
+  tanggalTerdaftar?: string;
+  tanggalBergabung?: string;
+  status: 'aktif' | 'nonaktif';
+  telepon?: string;
+  keterangan?: string;
+}
+
 export type TaskCategoryPenjaga = 
   | 'keamanan' 
   | 'perbaikan_sapras' 
@@ -8,7 +80,12 @@ export type TaskCategoryPenjaga =
   | 'antar_surat'
   | 'inspeksi_malam'
   | 'tanggap_darurat'
-  | 'protokoler_tamu';
+  | 'protokoler_tamu'
+  | 'pendampingan_kegiatan'
+  | 'pengamanan_ujian'
+  | 'koordinasi_keamanan'
+  | 'penataan_parkir'
+  | 'evakuasi_sarpras';
 
 export type TaskCategoryTU = 
   | 'kepegawaian' 
@@ -19,7 +96,12 @@ export type TaskCategoryTU =
   | 'keuangan_bos'
   | 'kearsipan'
   | 'dapodik'
-  | 'layanan_umum';
+  | 'layanan_umum'
+  | 'pelaporan_bos'
+  | 'pengarsipan_digital'
+  | 'pelayanan_mutasi'
+  | 'fasilitasi_rapat'
+  | 'legalisir_dokumen';
 
 export type TaskCategoryService = 
   | 'kebersihan_kantor' 
@@ -28,7 +110,12 @@ export type TaskCategoryService =
   | 'sanitasi_disinfeksi'
   | 'kebersihan_halaman'
   | 'perawatan_taman'
-  | 'penyediaan_air';
+  | 'penyediaan_air'
+  | 'pemeliharaan_taman'
+  | 'drainase_saluran'
+  | 'persiapan_aula'
+  | 'sterilisasi_ruang'
+  | 'pengecatan_ringan';
 
 export type TaskCategoryPerpus = 
   | 'katalogisasi_buku'
@@ -36,7 +123,12 @@ export type TaskCategoryPerpus =
   | 'layanan_literasi'
   | 'perawatan_buku'
   | 'stock_opname'
-  | 'administrasi_perpus';
+  | 'administrasi_perpus'
+  | 'pengolahan_label'
+  | 'promosi_literasi'
+  | 'layanan_referensi'
+  | 'penyiangan_weeding'
+  | 'kerjasama_perpustakaan';
 
 export type TaskCategoryLabIPA = 
   | 'persiapan_praktikum'
@@ -44,7 +136,12 @@ export type TaskCategoryLabIPA =
   | 'inventaris_bahan'
   | 'k3_laboratorium'
   | 'jadwal_lab'
-  | 'perbaikan_alat';
+  | 'perbaikan_alat'
+  | 'pengelolaan_limbah'
+  | 'kalibrasi_presisi'
+  | 'pembuatan_reagen'
+  | 'peragaan_sains'
+  | 'penataan_spesimen';
 
 export type TaskCategory = 
   | TaskCategoryPenjaga 
@@ -165,6 +262,8 @@ export interface SchoolConfig {
   website: string;
   logoKabupatenUrl: string;
   logoSekolahUrl: string;
+  logoKopKiri?: string; // Uploaded custom left logo for Kop Surat
+  logoKopKanan?: string; // Uploaded custom right logo for Kop Surat
   logoAplikasiUrl?: string;
   stempelEnabled: boolean;
   stempelTextLine1: string;

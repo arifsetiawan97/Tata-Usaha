@@ -19,7 +19,10 @@ import {
   initialAnnualReports, 
   initialArchives, 
   initialSchoolConfig, 
-  initialCustomCategories 
+  initialCustomCategories,
+  initialLibraryBooks,
+  initialLibraryMembers,
+  initialLibraryMemberStats
 } from './src/data/initialData';
 import { OFFICIAL_TUPOKSI_DEFINITIONS } from './src/utils/taskClassification';
 
@@ -42,6 +45,9 @@ if (!fs.existsSync(DB_FILE)) {
       archives: initialArchives,
       tupoksiDefinitions: OFFICIAL_TUPOKSI_DEFINITIONS,
       customCategories: initialCustomCategories,
+      libraryBooks: initialLibraryBooks,
+      libraryMembers: initialLibraryMembers,
+      libraryMemberStats: initialLibraryMemberStats,
       lastUpdated: new Date().toISOString()
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(initialDbData, null, 2), 'utf-8');
@@ -56,7 +62,14 @@ function readDb() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf-8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (parsed && (!parsed.libraryBooks || !parsed.libraryMembers || !parsed.libraryMemberStats)) {
+        parsed.libraryBooks = parsed.libraryBooks || initialLibraryBooks;
+        parsed.libraryMembers = parsed.libraryMembers || initialLibraryMembers;
+        parsed.libraryMemberStats = parsed.libraryMemberStats || initialLibraryMemberStats;
+        fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+      }
+      return parsed;
     }
   } catch (err) {
     console.error('Error reading db.json:', err);
@@ -91,7 +104,19 @@ app.get('/api/state', (req, res) => {
 
 // POST update entire application state
 app.post('/api/state', (req, res) => {
-  const { tasks, inventories, monthlyReports, annualReports, schoolConfig, archives, tupoksiDefinitions, customCategories } = req.body;
+  const { 
+    tasks, 
+    inventories, 
+    monthlyReports, 
+    annualReports, 
+    schoolConfig, 
+    archives, 
+    tupoksiDefinitions, 
+    customCategories,
+    libraryBooks,
+    libraryMembers,
+    libraryMemberStats
+  } = req.body;
   const current = readDb() || {};
   const updated = {
     ...current,
@@ -103,6 +128,9 @@ app.post('/api/state', (req, res) => {
     archives: archives !== undefined ? archives : current.archives,
     tupoksiDefinitions: tupoksiDefinitions !== undefined ? tupoksiDefinitions : current.tupoksiDefinitions,
     customCategories: customCategories !== undefined ? customCategories : current.customCategories,
+    libraryBooks: libraryBooks !== undefined ? libraryBooks : current.libraryBooks,
+    libraryMembers: libraryMembers !== undefined ? libraryMembers : current.libraryMembers,
+    libraryMemberStats: libraryMemberStats !== undefined ? libraryMemberStats : current.libraryMemberStats,
     lastUpdated: new Date().toISOString()
   };
   const success = writeDb(updated);
@@ -117,7 +145,7 @@ app.post('/api/state', (req, res) => {
 // RESTful CRUD API ENDPOINTS (Database Server Logic)
 // Separated storage logic from UI interface
 // ========================================================
-const VALID_COLLECTIONS = ['tasks', 'inventories', 'monthlyReports', 'annualReports', 'archives', 'customCategories'];
+const VALID_COLLECTIONS = ['tasks', 'inventories', 'monthlyReports', 'annualReports', 'archives', 'customCategories', 'libraryBooks', 'libraryMembers'];
 
 // READ Collection
 app.get('/api/crud/:collection', (req, res) => {
@@ -828,6 +856,173 @@ Kembalikan HANYA format JSON valid tanpa blok markdown:
         'Memperbarui penomoran label barcode/KIR pada setiap sarana yang baru diadakan',
         'Mengalokasikan anggaran suku cadang pengganti pada pengajuan RKAS semester berikutnya'
       ]
+    }
+  });
+});
+
+// POST /api/gemini/generate-task-description (Pengisian Otomatis Uraian Rincian Pekerjaan Berbasis AI)
+app.post('/api/gemini/generate-task-description', async (req, res) => {
+  const { title = '', category = '', role = 'TU', location = '', volumeUnit = '' } = req.body;
+  const roleTitle = 
+    role === 'TU' ? 'Tata Usaha (Administrasi Sekolah)' : 
+    role === 'PENJAGA' ? 'Penjaga Sekolah (Keamanan & Sarpras)' : 
+    role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
+    role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
+
+  if (!title.trim()) {
+    return res.status(400).json({ error: 'Judul kegiatan tugas harian wajib diisi.' });
+  }
+
+  try {
+    const ai = await getGeminiClient();
+    if (ai) {
+      const prompt = `Anda adalah Analis Tata Naskah Kinerja Tenaga Kependidikan & Operator Layanan Operasional Sekolah (Permendikbud).
+Tugas Anda adalah membuat uraian rincian pekerjaan dinas yang sangat jelas, terukur, formal, dan komprehensif (3-4 kalimat lugas) berdasarkan:
+- Judul Kegiatan: "${title}"
+- Bidang/Peran: ${roleTitle}
+- Kategori Layanan: ${category || 'Operasional'}
+- Lokasi saat ini: ${location || '(Tentukan lokasi sekolah yang relevan)'}
+- Capaian Volume: ${volumeUnit || '(Tentukan volume terukur)'}
+
+Uraian harus mencakup:
+1. Langkah persiapan dan koordinasi sebelum pelaksanaan.
+2. Tindakan teknis operasional di lapangan secara spesifik sesuai standar SOP sekolah.
+3. Hasil akhir/output yang dicapai (tertib, aman, bersih, terarsip, dll).
+
+Kembalikan HANYA format JSON valid tanpa blok markdown:
+{
+  "description": "Teks lengkap uraian rincian pekerjaan yang profesional dan formal...",
+  "suggestedLocation": "Lokasi spesifik di sekolah jika belum terisi...",
+  "suggestedVolume": "Volume capaian terukur (contoh: 1 berkas dinas, 48 siswa, 1 ruangan bersih)...",
+  "notes": "Catatan singkat kondisi hasil pelaksanaan..."
+}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const text = response.text?.trim() || '';
+      if (text) {
+        const parsed = JSON.parse(text);
+        return res.json({ success: true, isAi: true, data: parsed });
+      }
+    }
+  } catch (err) {
+    console.warn('Gemini generate-task-description fallback:', err);
+  }
+
+  // Dynamic high-fidelity fallback generator based on keywords
+  const tLower = title.toLowerCase();
+  let genDesc = '';
+  let genLoc = location;
+  let genVol = volumeUnit;
+  let genNote = 'Pelaksanaan pekerjaan telah tuntas 100% sesuai SOP kedinasan satuan pendidikan.';
+
+  if (role === 'PENJAGA') {
+    if (tLower.includes('gerbang') || tLower.includes('pintu')) {
+      genDesc = `Melaksanakan SOP pembukaan/penguncian pintu gerbang utama serta pintu gedung sekolah, memeriksa gembok dan rantai pengaman, serta mengawasi ketertiban akses keluar-masuk warga sekolah agar aktivitas pembelajaran terlaksana dengan kondusif dan aman.`;
+      genLoc = genLoc || 'Pintu Gerbang Utama & Gedung Sekolah';
+      genVol = genVol || '1 rangkaian SOP buka-tutup';
+    } else if (tLower.includes('patroli') || tLower.includes('keamanan') || tLower.includes('ronda')) {
+      genDesc = `Melakukan patroli pengawasan keamanan berkala di seluruh area gedung, selasar kelas, ruang perkantoran, dan titik rawan belakang sekolah. Memastikan seluruh jendela berteralis terkunci rapat, instalasi listrik padam sesuai jam operasional, dan lingkungan terpantau aman tanpa gangguan kamtibmas.`;
+      genLoc = genLoc || 'Seluruh Area Gedung & Pagar Batas Sekolah';
+      genVol = genVol || '1 kali putaran patroli keamanan';
+    } else if (tLower.includes('perbaikan') || tLower.includes('sapras') || tLower.includes('kran') || tLower.includes('kunci')) {
+      genDesc = `Melakukan pemeriksaan teknis dan perbaikan mandiri sarana prasarana sekolah skala ringan, mengganti komponen yang rusak/aus, serta menguji fungsi peralatan agar kembali laik pakai menunjang kenyamanan warga sekolah.`;
+      genLoc = genLoc || 'Ruang Gedung / Bengkel Sarpras';
+      genVol = genVol || '1 unit sarana prasarana';
+    } else if (tLower.includes('penyeberangan') || tLower.includes('siswa') || tLower.includes('anak')) {
+      genDesc = `Membantu pengawasan keselamatan dan penyeberangan jalan bagi peserta didik di depan gerbang utama sekolah pada jam kedatangan/kepulangan, serta menertibkan arus penjemputan guna mencegah terjadinya kemacetan lalu lintas.`;
+      genLoc = genLoc || 'Jalan Depan Gerbang Utama Sekolah';
+      genVol = genVol || '1 sesi penyeberangan siswa';
+    } else {
+      genDesc = `Melaksanakan kegiatan ${title} secara disiplin dan cermat sesuai prosedur operasional standar penugasan pengamanan sekolah, memeriksa kelengkapan sarana pendukung, dan memastikan hasil kerja terdokumentasi dengan baik.`;
+      genLoc = genLoc || 'Lingkungan Satuan Pendidikan';
+      genVol = genVol || '1 kegiatan kedinasan';
+    }
+  } else if (role === 'TU') {
+    if (tLower.includes('surat') || tLower.includes('agenda')) {
+      genDesc = `Menerima dan memeriksa kelengkapan naskah dinas, membubuhkan stempel tanda terima, mencatat ke dalam Buku Agenda Persuratan Digital/Fisik, serta meneruskan lembar disposisi kepada Kepala Sekolah untuk tindak lanjut cepat.`;
+      genLoc = genLoc || 'Meja Persuratan Ruang Tata Usaha';
+      genVol = genVol || '2 berkas naskah dinas';
+    } else if (tLower.includes('kepegawaian') || tLower.includes('sk') || tLower.includes('skp') || tLower.includes('gtk')) {
+      genDesc = `Memverifikasi kelengkapan berkas administrasi kepegawaian Guru dan Tenaga Kependidikan, memeriksa masa kerja golongan, menginput pemutakhiran data ke aplikasi kepegawaian, serta mengarsipkan salinan dokumen ke map portofolio pegawai.`;
+      genLoc = genLoc || 'Meja Kepegawaian Ruang Tata Usaha';
+      genVol = genVol || '3 berkas administrasi GTK';
+    } else if (tLower.includes('siswa') || tLower.includes('mutasi') || tLower.includes('pip') || tLower.includes('induk')) {
+      genDesc = `Melayani pemrosesan permohonan administrasi kesiswaan, mencocokkan data identitas siswa dengan Buku Induk dan sistem Dapodik, mencetak formulir pengesahan, dan menyerahkan dokumen legal kepada pemohon secara tertib.`;
+      genLoc = genLoc || 'Loket Pelayanan Kesiswaan TU';
+      genVol = genVol || '1 paket berkas kesiswaan';
+    } else if (tLower.includes('keuangan') || tLower.includes('bos') || tLower.includes('bku') || tLower.includes('spj')) {
+      genDesc = `Menatausahakan dokumen bukti transaksi belanja operasional sekolah, memverifikasi kuitansi dan faktur pajak bersama bendahara, serta merekonsiliasi catatan kas ke dalam buku pembantu kas umum sesuai pedoman juknis BOS.`;
+      genLoc = genLoc || 'Ruang Tata Usaha (Meja Keuangan)';
+      genVol = genVol || '1 set laporan belanja BOS';
+    } else {
+      genDesc = `Melaksanakan penataan administrasi ketatausahaan terkait ${title}, memverifikasi keabsahan data naskah dinas, dan mengarsipkan dokumen secara sistematis guna mendukung akuntabilitas tata pamong satuan pendidikan.`;
+      genLoc = genLoc || 'Ruang Tata Usaha Sekolah';
+      genVol = genVol || '1 kegiatan administrasi';
+    }
+  } else if (role === 'SERVICE') {
+    if (tLower.includes('wc') || tLower.includes('toilet')) {
+      genDesc = `Membersihkan dan menyikat lantai keramik, kloset, wastafel, dan bak penampungan air toilet siswa dan guru. Memberikan cairan disinfektan dan karbol wangi, memastikan kran air berfungsi baik, dan mengeringkan area basah agar higienis dan bebas bau.`;
+      genLoc = genLoc || 'Toilet / WC Guru & Siswa';
+      genVol = genVol || '1 blok toilet higienis';
+    } else if (tLower.includes('sampah') || tLower.includes('tps')) {
+      genDesc = `Mengumpulkan dan mengosongkan tempat sampah dari setiap ruang kelas dan selasar koridor, memilah sampah organik dan anorganik, lalu mengangkutnya menggunakan gerobak sampah menuju Tempat Pembuangan Sampah Sementara (TPS) sekolah.`;
+      genLoc = genLoc || 'Tempat Sampah Gedung & TPS Sekolah';
+      genVol = genVol || '1 trip pengangkutan sampah';
+    } else if (tLower.includes('taman') || tLower.includes('rumput') || tLower.includes('tanaman')) {
+      genDesc = `Melakukan pembersihan gulma rumput liar, penyiraman tanaman hias, pemangkasan dahan ranting kering di area taman sekolah, serta menyapu guguran daun agar lingkungan taman tampak asri, hijau, dan rapi.`;
+      genLoc = genLoc || 'Taman Depan & Halaman Sekolah';
+      genVol = genVol || '1 area taman tertata asri';
+    } else {
+      genDesc = `Melaksanakan pembersihan menyeluruh pada area ${title}, menyapu, mengepel lantai menggunakan cairan pembersih standar, mengelap perabot meja/kursi, serta memastikan ruangan dalam keadaan bersih, harum, dan siap dipergunakan.`;
+      genLoc = genLoc || 'Area Gedung & Lingkungan Sekolah';
+      genVol = genVol || '1 paket layanan kebersihan';
+    }
+  } else if (role === 'PERPUS') {
+    if (tLower.includes('katalog') || tLower.includes('ddc') || tLower.includes('barcode')) {
+      genDesc = `Mengidentifikasi subjek bahan pustaka, menentukan nomor klasifikasi DDC yang tepat, mencetak label barcode dan kartu buku, serta meregister identitas koleksi baru ke dalam buku induk inventaris perpustakaan.`;
+      genLoc = genLoc || 'Meja Pengolahan Koleksi Perpustakaan';
+      genVol = genVol || '20 eksemplar buku katalog';
+    } else if (tLower.includes('sirkulasi') || tLower.includes('pinjam') || tLower.includes('kembali')) {
+      genDesc = `Melayani pemustaka dalam proses peminjaman dan pengembalian buku pelajaran/referensi, memindai barcode kartu anggota dan barcode buku, serta memperbarui data sirkulasi ke sistem administrasi perpustakaan.`;
+      genLoc = genLoc || 'Meja Layanan Sirkulasi Pemustaka';
+      genVol = genVol || '25 transaksi sirkulasi';
+    } else {
+      genDesc = `Melaksanakan pengelolaan operasional perpustakaan terkait ${title}, menata kerapian koleksi pada rak buku sesuai urutan DDC, serta mendampingi kegiatan literasi siswa agar minat baca terpelihara optimal.`;
+      genLoc = genLoc || 'Ruang Koleksi Perpustakaan Sekolah';
+      genVol = genVol || '1 sesi layanan perpustakaan';
+    }
+  } else {
+    // LAB IPA
+    if (tLower.includes('praktikum') || tLower.includes('reagen') || tLower.includes('alat')) {
+      genDesc = `Menyiapkan set alat peraga praktikum sains, memeriksa ketepatan takaran larutan bahan kimia/reagen sesuai modul ajar guru, serta menguji fungsi instrumen praktikum agar kegiatan belajar eksperimen siswa berlangsung aman dan lancar.`;
+      genLoc = genLoc || 'Ruang Laboratorium IPA & Meja Preparasi';
+      genVol = genVol || '1 set praktikum sains';
+    } else if (tLower.includes('limbah') || tLower.includes('k3') || tLower.includes('sterilisasi')) {
+      genDesc = `Melakukan pencucian alat gelas kimia menggunakan larutan netral, menata botol limbah cair B3 pada wadah penampung aman, memeriksa jarum tekanan tabung APAR, dan memastikan ruang laboratorium dalam kondisi steril bebas bahaya.`;
+      genLoc = genLoc || 'Ruang Laboratorium IPA';
+      genVol = genVol || '1 kegiatan sanitasi K3 lab';
+    } else {
+      genDesc = `Melaksanakan penataan dan pemeliharaan sarana laboratorium sains terkait ${title}, mencatat logbook pemakaian alat dan kartu kendali bahan habis pakai agar inventaris laboratorium terkelola secara akuntabel.`;
+      genLoc = genLoc || 'Gedung Laboratorium IPA Sekolah';
+      genVol = genVol || '1 sesi pemeliharaan laboratorium';
+    }
+  }
+
+  res.json({
+    success: true,
+    isAi: false,
+    data: {
+      description: genDesc,
+      suggestedLocation: genLoc,
+      suggestedVolume: genVol,
+      notes: genNote
     }
   });
 });

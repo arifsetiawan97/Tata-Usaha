@@ -8,7 +8,11 @@ import {
   SchoolConfig,
   ArchiveDocument,
   TupoksiDefinitionsMap,
-  CustomCategory
+  CustomCategory,
+  LibraryBookItem,
+  LibraryMemberItem,
+  LibraryMemberStats,
+  RoleSubTab
 } from '../types';
 import { 
   initialSchoolConfig, 
@@ -17,7 +21,10 @@ import {
   initialMonthlyReports, 
   initialAnnualReports,
   initialArchives,
-  initialCustomCategories
+  initialCustomCategories,
+  initialLibraryBooks,
+  initialLibraryMembers,
+  initialLibraryMemberStats
 } from '../data/initialData';
 import { ROLE_OPERATIONAL_SPECS } from '../data/roleOperationalSpecs';
 import { storageService } from '../services/storageService';
@@ -29,7 +36,7 @@ import {
   parseTaskMonthYear 
 } from '../utils/taskClassification';
 
-export type RoleSubTab = 'tasks' | 'tupoksi' | 'monthly' | 'annual' | 'inventory';
+export type { RoleSubTab };
 
 interface AppContextType {
   currentRole: RoleType | null;
@@ -38,12 +45,30 @@ interface AppContextType {
   addTask: (task: Omit<TaskLog, 'id'>) => void;
   updateTask: (id: string, updated: Partial<TaskLog>) => void;
   deleteTask: (id: string) => void;
+  deleteMultipleTasks: (ids: string[]) => void;
   importTasks: (newTasks: Omit<TaskLog, 'id'>[]) => void;
   inventories: InventoryItem[];
   addInventory: (item: Omit<InventoryItem, 'id'>) => void;
   updateInventory: (id: string, updated: Partial<InventoryItem>) => void;
   deleteInventory: (id: string) => void;
+  deleteMultipleInventories: (ids: string[]) => void;
   importInventories: (newItems: Omit<InventoryItem, 'id'>[]) => void;
+  // Koleksi & Inventaris Buku Khusus Perpustakaan
+  libraryBooks: LibraryBookItem[];
+  addLibraryBook: (book: Omit<LibraryBookItem, 'id'>) => void;
+  updateLibraryBook: (id: string, updated: Partial<LibraryBookItem>) => void;
+  deleteLibraryBook: (id: string) => void;
+  deleteMultipleLibraryBooks: (ids: string[]) => void;
+  importLibraryBooks: (books: Omit<LibraryBookItem, 'id'>[]) => void;
+  // Pendataan Anggota Perpustakaan (Guru, Staff, Siswa)
+  libraryMembers: LibraryMemberItem[];
+  addLibraryMember: (member: Omit<LibraryMemberItem, 'id'>) => void;
+  updateLibraryMember: (id: string, updated: Partial<LibraryMemberItem>) => void;
+  deleteLibraryMember: (id: string) => void;
+  deleteMultipleLibraryMembers: (ids: string[]) => void;
+  importLibraryMembers: (newMembers: Omit<LibraryMemberItem, 'id'>[]) => void;
+  libraryMemberStats: LibraryMemberStats;
+  updateLibraryMemberStats: (stats: Partial<LibraryMemberStats>) => void;
   monthlyReports: MonthlyReport[];
   saveMonthlyReport: (report: MonthlyReport) => void;
   annualReports: AnnualReport[];
@@ -89,6 +114,9 @@ const STORAGE_KEYS = {
   ROLE: 'siops_current_role',
   TASKS: 'siops_tasks',
   INVENTORY: 'siops_inventory',
+  LIBRARY_BOOKS: 'siops_library_books',
+  LIBRARY_MEMBERS: 'siops_library_members',
+  LIBRARY_MEMBER_STATS: 'siops_library_member_stats',
   MONTHLY: 'siops_monthly_reports',
   ANNUAL: 'siops_annual_reports',
   ARCHIVES: 'siops_archives',
@@ -210,6 +238,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return initialInventories;
   });
 
+  const [libraryBooks, setLibraryBooks] = useState<LibraryBookItem[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.LIBRARY_BOOKS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return initialLibraryBooks;
+  });
+
+  const [libraryMembers, setLibraryMembers] = useState<LibraryMemberItem[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.LIBRARY_MEMBERS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return initialLibraryMembers;
+  });
+
+  const [libraryMemberStats, setLibraryMemberStats] = useState<LibraryMemberStats>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.LIBRARY_MEMBER_STATS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return initialLibraryMemberStats;
+  });
+
   const [monthlyReports, setMonthlyReports] = useState<MonthlyReport[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.MONTHLY);
     if (saved) {
@@ -294,6 +346,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     kearsipan: 'Kearsipan (Digitalisasi & Odner)',
     dapodik: 'Dapodikdasmen (Validasi Data)',
     layanan_umum: 'Layanan Umum (Tamu Dinas & Humas)',
+    pelaporan_bos: 'Pelaporan BOS & Rekonsiliasi Kas',
+    pengarsipan_digital: 'Digitalisasi Dokumen & e-Arsip',
+    pelayanan_mutasi: 'Pelayanan Mutasi & Surat Rekomendasi',
+    fasilitasi_rapat: 'Fasilitasi Rapat & Notula Dinas',
+    legalisir_dokumen: 'Pelayanan Legalisir Ijazah & Berkas',
     // PENJAGA
     keamanan: 'Keamanan Umum (Patroli, Gerbang)',
     inspeksi_malam: 'Inspeksi & Ronda Malam',
@@ -303,6 +360,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     perbaikan_sapras: 'Perbaikan Sarpras Ringan',
     lingkungan: 'Tambahan Lingkungan & Saluran',
     antar_surat: 'Antar Surat Dinas & Ekspedisi',
+    pendampingan_kegiatan: 'Pendampingan Kegiatan Upacara & Ekskul',
+    pengamanan_ujian: 'Pengamanan Ujian & Asesmen (ANBK/PAS)',
+    koordinasi_keamanan: 'Koordinasi Kamtibmas Polsek/Babinsa',
+    penataan_parkir: 'Penataan Area Parkir Guru & Tamu',
+    evakuasi_sarpras: 'Kesiapsiagaan Evakuasi Bencana/Cuaca',
     // SERVICE
     kebersihan_wc: 'Kebersihan Toilet / WC',
     kebersihan_kantor: 'Kebersihan Ruang Kerja & Kelas',
@@ -311,6 +373,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     perawatan_taman: 'Perawatan & Penyiraman Taman',
     sanitasi_disinfeksi: 'Sanitasi & Disinfeksi (UKS)',
     penyediaan_air: 'Penyediaan Air Bersih & Pompa',
+    pemeliharaan_taman: 'Pemeliharaan Tanaman Pot & Lobi',
+    drainase_saluran: 'Pembersihan Saluran Air & Drainase',
+    persiapan_aula: 'Penataan Meja/Kursi Aula & Rapat',
+    sterilisasi_ruang: 'Sterilisasi Ruang Isolasi/UKS & Musholla',
+    pengecatan_ringan: 'Pengecatan Ringan & Restorasi Dinding',
     // PERPUS
     katalogisasi_buku: 'Katalogisasi DDC & Barcode Buku',
     sirkulasi_peminjaman: 'Sirkulasi Peminjaman Buku',
@@ -318,13 +385,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     perawatan_buku: 'Perawatan & Restorasi Buku',
     stock_opname: 'Stock Opname Koleksi Buku',
     administrasi_perpus: 'Administrasi Perpustakaan',
+    pengolahan_label: 'Pengolahan Label Punggung & Barcode',
+    promosi_literasi: 'Promosi Minat Baca & Display Buku',
+    layanan_referensi: 'Layanan Referensi & Penelusuran Informasi',
+    penyiangan_weeding: 'Penyiangan Buku Rusak (Weeding)',
+    kerjasama_perpustakaan: 'Kerjasama Perpustakaan & Hibah Buku',
     // LAB IPA
     persiapan_praktikum: 'Persiapan Praktikum Sains',
     pemeliharaan_alat: 'Pemeliharaan Alat Gelas Lab',
     inventaris_bahan: 'Inventaris Reagen Kimia',
     k3_laboratorium: 'Keselamatan Kerja K3 Lab',
     jadwal_lab: 'Jadwal & Jurnal Penggunaan Lab',
-    perbaikan_alat: 'Kalibrasi & Perbaikan Alat Lab'
+    perbaikan_alat: 'Kalibrasi & Perbaikan Alat Lab',
+    pengelolaan_limbah: 'Pengelolaan & Netralisasi Limbah Lab',
+    kalibrasi_presisi: 'Kalibrasi Presisi Neraca & Mikroskop',
+    pembuatan_reagen: 'Pembuatan Larutan Reagen Biologi',
+    peragaan_sains: 'Pendampingan Kit Peraga Sains / KIR',
+    penataan_spesimen: 'Penataan Preparat & Spesimen Awetan'
   };
 
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>(() => {
@@ -577,6 +654,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setCustomCategories(json.data.customCategories);
             localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(json.data.customCategories));
           }
+          if (json.data.libraryBooks && Array.isArray(json.data.libraryBooks)) {
+            setLibraryBooks(json.data.libraryBooks);
+            localStorage.setItem(STORAGE_KEYS.LIBRARY_BOOKS, JSON.stringify(json.data.libraryBooks));
+          }
+          if (json.data.libraryMembers && Array.isArray(json.data.libraryMembers)) {
+            setLibraryMembers(json.data.libraryMembers);
+            localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBERS, JSON.stringify(json.data.libraryMembers));
+          }
+          if (json.data.libraryMemberStats && typeof json.data.libraryMemberStats === 'object') {
+            setLibraryMemberStats(json.data.libraryMemberStats);
+            localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBER_STATS, JSON.stringify(json.data.libraryMemberStats));
+          }
           setSyncStatus('synced');
         }
       } catch (err) {
@@ -594,6 +683,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
     localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventories));
+    localStorage.setItem(STORAGE_KEYS.LIBRARY_BOOKS, JSON.stringify(libraryBooks));
+    localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBERS, JSON.stringify(libraryMembers));
+    localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBER_STATS, JSON.stringify(libraryMemberStats));
     localStorage.setItem(STORAGE_KEYS.MONTHLY, JSON.stringify(monthlyReports));
     localStorage.setItem(STORAGE_KEYS.ANNUAL, JSON.stringify(annualReports));
     localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(archives));
@@ -614,7 +706,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             archives,
             schoolConfig,
             tupoksiDefinitions,
-            customCategories
+            customCategories,
+            libraryBooks,
+            libraryMembers,
+            libraryMemberStats
           });
           setSyncStatus(ok ? 'synced' : 'offline');
         } catch (e) {
@@ -623,7 +718,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [tasks, inventories, monthlyReports, annualReports, archives, schoolConfig, tupoksiDefinitions, customCategories]);
+  }, [tasks, inventories, libraryBooks, libraryMembers, libraryMemberStats, monthlyReports, annualReports, archives, schoolConfig, tupoksiDefinitions, customCategories]);
 
   useEffect(() => {
     if (currentRole) {
@@ -935,6 +1030,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const deleteMultipleTasks = (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    const idSet = new Set(ids);
+    setTasks(prev => {
+      const removed = prev.filter(t => idSet.has(t.id));
+      const next = prev.filter(t => !idSet.has(t.id));
+      if (removed.length > 0) {
+        setTimeout(() => {
+          const affectedMonthYears = new Set<string>();
+          removed.forEach(t => {
+            const parsed = parseTaskMonthYear(t.date);
+            if (parsed) affectedMonthYears.add(`${t.role}_${parsed.month}_${parsed.year}`);
+          });
+          affectedMonthYears.forEach(key => {
+            const [roleStr, mStr, yStr] = key.split('_');
+            const m = parseInt(mStr, 10);
+            const y = parseInt(yStr, 10);
+            const fresh = generateMonthlyReportFromTasks(roleStr as RoleType, m, y, true);
+            saveMonthlyReport(fresh);
+          });
+        }, 0);
+      }
+      return next;
+    });
+  };
+
   const addInventory = (newItem: Omit<InventoryItem, 'id'>) => {
     const id = `inv-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     setInventories(prev => [ ...prev, { ...newItem, id } ]);
@@ -954,6 +1075,116 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteInventory = (id: string) => {
     setInventories(prev => prev.filter(i => i.id !== id));
+  };
+
+  const deleteMultipleInventories = (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    const idSet = new Set(ids);
+    setInventories(prev => prev.filter(i => !idSet.has(i.id)));
+  };
+
+  // Handlers Koleksi Buku Perpustakaan
+  const addLibraryBook = (book: Omit<LibraryBookItem, 'id'>) => {
+    const id = `bk-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const newBook: LibraryBookItem = {
+      ...book,
+      id,
+      bulanPengadaan: book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7))
+    };
+    setLibraryBooks(prev => [newBook, ...prev]);
+  };
+
+  const updateLibraryBook = (id: string, updated: Partial<LibraryBookItem>) => {
+    setLibraryBooks(prev => prev.map(b => {
+      if (b.id !== id) return b;
+      const combined = { ...b, ...updated };
+      if (updated.tanggalMasuk && !updated.bulanPengadaan) {
+        combined.bulanPengadaan = updated.tanggalMasuk.substring(0, 7);
+      }
+      return combined;
+    }));
+  };
+
+  const deleteLibraryBook = (id: string) => {
+    setLibraryBooks(prev => prev.filter(b => b.id !== id));
+  };
+
+  const deleteMultipleLibraryBooks = (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    const idSet = new Set(ids);
+    setLibraryBooks(prev => prev.filter(b => !idSet.has(b.id)));
+  };
+
+  const importLibraryBooks = (books: Omit<LibraryBookItem, 'id'>[]) => {
+    const withIds: LibraryBookItem[] = books.map((b, idx) => ({
+      ...b,
+      id: `bk-imp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      bulanPengadaan: b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7))
+    }));
+    setLibraryBooks(prev => [...withIds, ...prev]);
+  };
+
+  // Handlers Anggota Perpustakaan
+  const addLibraryMember = (member: Omit<LibraryMemberItem, 'id'>) => {
+    const id = `mem-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const newMember: LibraryMemberItem = { ...member, id };
+    setLibraryMembers(prev => [newMember, ...prev]);
+  };
+
+  const updateLibraryMember = (id: string, updated: Partial<LibraryMemberItem>) => {
+    setLibraryMembers(prev => prev.map(m => m.id === id ? { ...m, ...updated } : m));
+  };
+
+  const deleteLibraryMember = (id: string) => {
+    setLibraryMembers(prev => prev.filter(m => m.id !== id));
+  };
+
+  const deleteMultipleLibraryMembers = (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    const idSet = new Set(ids);
+    setLibraryMembers(prev => prev.filter(m => !idSet.has(m.id)));
+  };
+
+  const importLibraryMembers = (members: Omit<LibraryMemberItem, 'id'>[]) => {
+    const withIds: LibraryMemberItem[] = members.map((m, idx) => ({
+      ...m,
+      id: `mem-imp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      tanggalBergabung: m.tanggalBergabung || m.tanggalTerdaftar || new Date().toISOString().split('T')[0],
+      tanggalTerdaftar: m.tanggalTerdaftar || m.tanggalBergabung || new Date().toISOString().split('T')[0]
+    }));
+    setLibraryMembers(prev => [...withIds, ...prev]);
+
+    // Sinkronisasi akumulasi statistik anggota secara otomatis
+    let addGuru = 0;
+    let addStaff = 0;
+    let addSiswaL = 0;
+    let addSiswaP = 0;
+    withIds.forEach(m => {
+      const t = String(m.tipeAnggota).toUpperCase();
+      if (t === 'GURU') addGuru++;
+      else if (t === 'STAFF') addStaff++;
+      else {
+        if (m.jenisKelamin === 'P') addSiswaP++;
+        else addSiswaL++;
+      }
+    });
+
+    setLibraryMemberStats(prev => ({
+      ...prev,
+      guruPendidik: (prev.guruPendidik || 0) + addGuru,
+      staffTendik: (prev.staffTendik || 0) + addStaff,
+      siswaLaki: (prev.siswaLaki || 0) + addSiswaL,
+      siswaPerempuan: (prev.siswaPerempuan || 0) + addSiswaP,
+      lastUpdated: new Date().toISOString().split('T')[0]
+    }));
+  };
+
+  const updateLibraryMemberStats = (stats: Partial<LibraryMemberStats>) => {
+    setLibraryMemberStats(prev => ({
+      ...prev,
+      ...stats,
+      lastUpdated: new Date().toISOString().split('T')[0]
+    }));
   };
 
   const saveMonthlyReport = (report: MonthlyReport) => {
@@ -1105,6 +1336,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       schoolConfig,
       tasks,
       inventories,
+      libraryBooks,
+      libraryMembers,
+      libraryMemberStats,
       monthlyReports,
       annualReports,
       archives
@@ -1123,12 +1357,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (jsonData && typeof jsonData === 'object') {
         if (jsonData.tasks && Array.isArray(jsonData.tasks)) setTasks(jsonData.tasks);
         if (jsonData.inventories && Array.isArray(jsonData.inventories)) setInventories(jsonData.inventories);
+        if (jsonData.libraryBooks && Array.isArray(jsonData.libraryBooks)) setLibraryBooks(jsonData.libraryBooks);
+        if (jsonData.libraryMembers && Array.isArray(jsonData.libraryMembers)) setLibraryMembers(jsonData.libraryMembers);
+        if (jsonData.libraryMemberStats && typeof jsonData.libraryMemberStats === 'object') setLibraryMemberStats(jsonData.libraryMemberStats);
         if (jsonData.monthlyReports && Array.isArray(jsonData.monthlyReports)) setMonthlyReports(jsonData.monthlyReports);
         if (jsonData.annualReports && Array.isArray(jsonData.annualReports)) setAnnualReports(jsonData.annualReports);
         if (jsonData.schoolConfig) {
           const mergedConfig = mergeSchoolConfigWithDefaults(jsonData.schoolConfig);
           setSchoolConfig(mergedConfig);
         }
+        return true;
       }
     } catch (e) {
       console.error(e);
@@ -1140,6 +1378,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.clear();
     setTasks(initialTasks);
     setInventories(initialInventories);
+    setLibraryBooks(initialLibraryBooks);
+    setLibraryMembers(initialLibraryMembers);
+    setLibraryMemberStats(initialLibraryMemberStats);
     setMonthlyReports(initialMonthlyReports);
     setAnnualReports(initialAnnualReports);
     setArchives(initialArchives);
@@ -1156,12 +1397,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addTask,
         updateTask,
         deleteTask,
+        deleteMultipleTasks,
         importTasks,
         inventories,
         addInventory,
         updateInventory,
         deleteInventory,
+        deleteMultipleInventories,
         importInventories,
+        libraryBooks,
+        addLibraryBook,
+        updateLibraryBook,
+        deleteLibraryBook,
+        deleteMultipleLibraryBooks,
+        importLibraryBooks,
+        libraryMembers,
+        addLibraryMember,
+        updateLibraryMember,
+        deleteLibraryMember,
+        deleteMultipleLibraryMembers,
+        importLibraryMembers,
+        libraryMemberStats,
+        updateLibraryMemberStats,
         monthlyReports,
         saveMonthlyReport,
         annualReports,

@@ -10,6 +10,8 @@ import { TupoksiManagerView } from './TupoksiManagerView';
 import { MonthlyReportView } from '../reports/MonthlyReportView';
 import { AnnualReportView } from '../reports/AnnualReportView';
 import { InventoryTable } from '../common/InventoryTable';
+import { LibraryBookManager } from '../perpus/LibraryBookManager';
+import { LibraryMemberManager } from '../perpus/LibraryMemberManager';
 import { initialSchoolConfig } from '../../data/initialData';
 import { 
   Shield, 
@@ -24,7 +26,8 @@ import {
   Boxes,
   UserCheck,
   Printer,
-  Bot
+  Bot,
+  Users
 } from 'lucide-react';
 import { AiAssistantModal } from '../common/AiAssistantModal';
 
@@ -42,7 +45,9 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
     tupoksiDefinitions,
     inventories,
     monthlyReports,
-    generateMonthlyReportFromTasks
+    generateMonthlyReportFromTasks,
+    libraryBooks,
+    libraryMemberStats
   } = useApp();
 
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
@@ -145,7 +150,21 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
       label: 'Inventaris Sarpras',
       icon: Boxes,
       badge: `${roleInventories.length} item`
-    }
+    },
+    ...(role === 'PERPUS' ? [
+      {
+        id: 'buku' as RoleSubTab,
+        label: 'Inventaris Buku (Bulanan)',
+        icon: BookOpen,
+        badge: `${libraryBooks?.length || 0} judul`
+      },
+      {
+        id: 'anggota' as RoleSubTab,
+        label: 'Anggota Perpustakaan',
+        icon: Users,
+        badge: `${(libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0) + (libraryMemberStats?.guruPendidik || 0) + (libraryMemberStats?.staffTendik || 0)} orang`
+      }
+    ] : [])
   ];
 
   return (
@@ -290,6 +309,14 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
             </div>
             <InventoryTable role={role} />
           </div>
+        )}
+
+        {currentSubTab === 'buku' && (
+          <LibraryBookManager />
+        )}
+
+        {currentSubTab === 'anggota' && (
+          <LibraryMemberManager />
         )}
       </div>
 

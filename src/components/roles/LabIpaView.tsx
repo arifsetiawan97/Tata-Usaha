@@ -31,8 +31,11 @@ import {
 } from 'lucide-react';
 
 export const LabIpaView: React.FC = () => {
-  const { tasks, deleteTask, inventories } = useApp();
+  const { tasks, deleteTask, deleteMultipleTasks, inventories } = useApp();
   const [activeCategory, setActiveCategory] = useState<string>('semua');
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState<boolean>(false);
+  const [singleDeleteTaskId, setSingleDeleteTaskId] = useState<string | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [modalInitialMode, setModalInitialMode] = useState<'template' | 'manual'>('template');
   const [editingTask, setEditingTask] = useState<TaskLog | null>(null);
@@ -44,6 +47,27 @@ export const LabIpaView: React.FC = () => {
     if (activeCategory === 'semua') return true;
     return t.category === activeCategory;
   });
+
+  const handleToggleSelectAllTasks = () => {
+    if (selectedTaskIds.length === filteredTasks.length) {
+      setSelectedTaskIds([]);
+    } else {
+      setSelectedTaskIds(filteredTasks.map(t => t.id));
+    }
+  };
+
+  const handleToggleSelectTask = (id: string) => {
+    setSelectedTaskIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleConfirmBulkDelete = () => {
+    if (selectedTaskIds.length === 0) return;
+    deleteMultipleTasks(selectedTaskIds);
+    setSelectedTaskIds([]);
+    setIsBulkDeleteModalOpen(false);
+  };
 
   // Calculate Automated Analytics
   const totalTasks = labTasks.length;
@@ -269,8 +293,55 @@ export const LabIpaView: React.FC = () => {
         </button>
       </div>
 
-      {/* TASKS LIST */}
+      {/* TASKS LIST HEADER & CONTROLS */}
       <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {filteredTasks.length > 0 && (
+              <input
+                type="checkbox"
+                checked={selectedTaskIds.length > 0 && selectedTaskIds.length === filteredTasks.length}
+                onChange={handleToggleSelectAllTasks}
+                className="w-4 h-4 rounded text-teal-600 border-slate-300 focus:ring-teal-500 cursor-pointer"
+                title="Pilih semua tugas pada filter ini"
+              />
+            )}
+            <h3 className="text-sm font-bold text-slate-900">
+              Jurnal Tugas Harian Laboratorium IPA ({filteredTasks.length})
+            </h3>
+          </div>
+          <span className="text-xs text-slate-500">
+            {completedTasks} selesai · {inProgressTasks} dalam proses
+          </span>
+        </div>
+
+        {/* Bulk Selection Action Bar */}
+        {selectedTaskIds.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl animate-fadeIn">
+            <div className="flex items-center gap-2 text-xs font-bold text-rose-900">
+              <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+              <span>{selectedTaskIds.length} tugas lab IPA dipilih</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(true)}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Hapus Pilihan ({selectedTaskIds.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTaskIds([])}
+                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        )}
+
         {filteredTasks.length === 0 ? (
           <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
             <FlaskConical className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -288,120 +359,203 @@ export const LabIpaView: React.FC = () => {
             </button>
           </div>
         ) : (
-          filteredTasks.map(task => (
-            <div
-              key={task.id}
-              className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 hover:border-teal-300 transition-all shadow-2xs hover:shadow-xs flex flex-col md:flex-row md:items-start justify-between gap-4"
-            >
-              <div className="space-y-2 flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold ${
-                    task.taskType === 'pokok'
-                      ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                      : 'bg-amber-100 text-amber-800 border border-amber-200'
-                  }`}>
-                    {task.taskType === 'pokok' ? '⭐ Tugas Pokok' : '📌 Tugas Tambahan'}
-                  </span>
+          filteredTasks.map(task => {
+            const isSelected = selectedTaskIds.includes(task.id);
+            return (
+              <div
+                key={task.id}
+                className={`bg-white rounded-xl p-4 sm:p-5 border transition-all shadow-2xs hover:shadow-xs flex flex-col md:flex-row md:items-start justify-between gap-4 ${
+                  isSelected ? 'border-teal-500 bg-teal-50/20 ring-1 ring-teal-500/30' : 'border-slate-200 hover:border-teal-300'
+                }`}
+              >
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleToggleSelectTask(task.id)}
+                    className="w-4 h-4 mt-1 rounded text-teal-600 border-slate-300 focus:ring-teal-500 cursor-pointer shrink-0"
+                    title="Pilih tugas ini"
+                  />
+                  <div className="space-y-2 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold ${
+                        task.taskType === 'pokok'
+                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+                      }`}>
+                        {task.taskType === 'pokok' ? '⭐ Tugas Pokok' : '📌 Tugas Tambahan'}
+                      </span>
 
-                  <span className="px-2 py-0.5 rounded-md text-[10.5px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                    {task.category.replace('_', ' ').toUpperCase()}
-                  </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10.5px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                        {task.category.replace('_', ' ').toUpperCase()}
+                      </span>
 
-                  <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold ${
-                    task.status === 'selesai'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : task.status === 'dalam_proses'
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'bg-rose-100 text-rose-800'
-                  }`}>
-                    {task.status === 'selesai' ? '✓ Selesai 100%' : task.status === 'dalam_proses' ? '⏳ Dalam Proses' : '⚠️ Tindak Lanjut'}
-                  </span>
-                </div>
-
-                <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
-                  {task.title}
-                </h3>
-
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  {task.description}
-                </p>
-
-                <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-[11.5px] text-slate-500 pt-1 border-t border-slate-100">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{task.date}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{task.timeStart} - {task.timeEnd} WIB</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="truncate max-w-[200px]">{task.location}</span>
-                  </div>
-                  <div className="flex items-center gap-1 font-semibold text-teal-700">
-                    <Tag className="w-3.5 h-3.5" />
-                    <span>Vol: {task.volumeUnit}</span>
-                  </div>
-                </div>
-
-                {task.notes && (
-                  <div className="p-2 bg-teal-50/50 rounded-lg text-teal-900 text-[11px] border border-teal-100/80">
-                    <span className="font-semibold">Catatan Praktikum & K3:</span> {task.notes}
-                  </div>
-                )}
-              </div>
-
-              {/* Photo & Actions */}
-              <div className="flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                {task.photoUrl ? (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewPhotoUrl(task.photoUrl || null)}
-                    className="relative group rounded-lg overflow-hidden border border-slate-200 shadow-2xs hover:ring-2 hover:ring-teal-500 cursor-pointer"
-                  >
-                    <img 
-                      src={task.photoUrl} 
-                      alt="Dokumentasi Praktikum Lab" 
-                      className="w-20 h-16 sm:w-24 sm:h-20 object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-bold">
-                      <ZoomIn className="w-4 h-4 mr-1" /> Lihat
+                      <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold ${
+                        task.status === 'selesai'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : task.status === 'dalam_proses'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {task.status === 'selesai' ? '✓ Selesai 100%' : task.status === 'dalam_proses' ? '⏳ Dalam Proses' : '⚠️ Tindak Lanjut'}
+                      </span>
                     </div>
-                  </button>
-                ) : (
-                  <span className="text-[10.5px] text-slate-400 italic bg-slate-50 px-2 py-1 rounded">
-                    Tanpa foto
-                  </span>
-                )}
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleEdit(task)}
-                    className="p-1.5 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors cursor-pointer"
-                    title="Ubah Rincian Tugas"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm('Hapus tugas pekerjaan laboratorium ini?')) {
-                        deleteTask(task.id);
-                      }
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                    title="Hapus Tugas"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
+                      {task.title}
+                    </h3>
+
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      {task.description}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-[11.5px] text-slate-500 pt-1 border-t border-slate-100">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{task.date}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{task.timeStart} - {task.timeEnd} WIB</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="truncate max-w-[200px]">{task.location}</span>
+                      </div>
+                      <div className="flex items-center gap-1 font-semibold text-teal-700">
+                        <Tag className="w-3.5 h-3.5" />
+                        <span>Vol: {task.volumeUnit}</span>
+                      </div>
+                    </div>
+
+                    {task.notes && (
+                      <div className="p-2 bg-teal-50/50 rounded-lg text-teal-900 text-[11px] border border-teal-100/80">
+                        <span className="font-semibold">Catatan Praktikum & K3:</span> {task.notes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Photo & Actions */}
+                <div className="flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                  {task.photoUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPhotoUrl(task.photoUrl || null)}
+                      className="relative group rounded-lg overflow-hidden border border-slate-200 shadow-2xs hover:ring-2 hover:ring-teal-500 cursor-pointer"
+                    >
+                      <img 
+                        src={task.photoUrl} 
+                        alt="Dokumentasi Praktikum Lab" 
+                        className="w-20 h-16 sm:w-24 sm:h-20 object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-bold">
+                        <ZoomIn className="w-4 h-4 mr-1" /> Lihat
+                      </div>
+                    </button>
+                  ) : (
+                    <span className="text-[10.5px] text-slate-400 italic bg-slate-50 px-2 py-1 rounded">
+                      Tanpa foto
+                    </span>
+                  )}
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(task)}
+                      className="p-1.5 text-slate-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors cursor-pointer"
+                      title="Ubah Rincian Tugas"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSingleDeleteTaskId(task.id)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Hapus Tugas"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
+
+      {/* Bulk Delete Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 animate-scaleUp">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-rose-100 text-rose-600 rounded-lg shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-900">
+                  Konfirmasi Hapus {selectedTaskIds.length} Tugas Sekaligus
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Apakah Anda yakin ingin menghapus <strong>{selectedTaskIds.length} tugas operasional laboratorium</strong> yang dipilih? Data yang telah dihapus tidak dapat dipulihkan.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkDelete}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Ya, Hapus Pilihan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Delete Confirmation Modal */}
+      {singleDeleteTaskId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 space-y-3 animate-scaleUp">
+            <div className="flex items-center gap-2.5 text-rose-600">
+              <Trash2 className="w-5 h-5" />
+              <h3 className="text-sm font-bold text-slate-900">Hapus Tugas Laboratorium?</h3>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Tugas laboratorium ini akan dihapus dari jurnal operasional dan laporan bulanan.
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSingleDeleteTaskId(null)}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteTask(singleDeleteTaskId);
+                  setSelectedTaskIds(prev => prev.filter(id => id !== singleDeleteTaskId));
+                  setSingleDeleteTaskId(null);
+                }}
+                className="px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg"
+              >
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Photo Preview Modal */}
       {previewPhotoUrl && (

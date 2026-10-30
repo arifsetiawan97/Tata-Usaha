@@ -5,6 +5,10 @@ import { TASK_PRESETS, parseTasksCsv, exportTasksToCsv, TaskPresetItem } from '.
 import { getLocalTodayStr, getTaskClassification } from '../../utils/taskClassification';
 import { initialSchoolConfig } from '../../data/initialData';
 import { 
+  downloadDailyTaskExcelTemplate, 
+  parseDailyTaskExcelFile 
+} from '../../utils/excelHelper';
+import { 
   X, 
   Upload, 
   Check, 
@@ -17,6 +21,7 @@ import {
   PenTool,
   RotateCcw,
   ZoomIn,
+  AlertCircle,
   CheckCircle2,
   Clock,
   MapPin,
@@ -79,6 +84,7 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
   const [showAiDraftBox, setShowAiDraftBox] = useState(false);
   const [aiPromptInput, setAiPromptInput] = useState('');
   const [isDraftingAi, setIsDraftingAi] = useState(false);
+  const [isGeneratingAiDescription, setIsGeneratingAiDescription] = useState(false);
 
   // Primary tab: form vs import
   const [activeTab, setActiveTab] = useState<'form' | 'import'>(
@@ -190,6 +196,9 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
   const [applyWatermark, setApplyWatermark] = useState<boolean>(true);
   const [isPhotoZoomed, setIsPhotoZoomed] = useState<boolean>(false);
   const [importStatus, setImportStatus] = useState<string>('');
+  const [parsedExcelTasks, setParsedExcelTasks] = useState<Omit<TaskLog, 'id'>[]>([]);
+  const [isParsingExcel, setIsParsingExcel] = useState(false);
+  const [excelFileName, setExcelFileName] = useState('');
 
   // Live Camera state
   const [isLiveCameraOpen, setIsLiveCameraOpen] = useState<boolean>(false);
@@ -469,6 +478,45 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     }
   };
 
+  // AI Auto-generator for Task Description based on Title
+  const handleAiGenerateDescription = async () => {
+    if (!formData.title.trim()) {
+      setCategoryNotice('Silakan ketik atau pilih Judul Kegiatan terlebih dahulu agar AI dapat merumuskan uraian rincian.');
+      setTimeout(() => setCategoryNotice(null), 3500);
+      return;
+    }
+    setIsGeneratingAiDescription(true);
+    try {
+      const res = await fetch('/api/gemini/generate-task-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: formData.title.trim(),
+          category: formData.category,
+          role,
+          location: formData.location,
+          volumeUnit: formData.volumeUnit
+        })
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        const d = json.data;
+        setFormData(prev => ({
+          ...prev,
+          description: d.description || prev.description,
+          location: prev.location || d.suggestedLocation || prev.location,
+          volumeUnit: prev.volumeUnit || d.suggestedVolume || prev.volumeUnit,
+          notes: prev.notes || d.notes || prev.notes
+        }));
+        setAppliedPresetNotice('✨ Uraian rincian pekerjaan dan saran lapangan berhasil diisi otomatis oleh AI!');
+      }
+    } catch (err) {
+      console.error('Failed to generate task description via AI:', err);
+    } finally {
+      setIsGeneratingAiDescription(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim()) return;
@@ -482,6 +530,51 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
       });
     }
     onClose();
+  };
+
+  // Download Native Microsoft Excel (.xlsx) Template with Columns & Guide
+  const handleDownloadExcelTemplate = () => {
+    downloadDailyTaskExcelTemplate(role);
+  };
+
+  // Handle Excel (.xlsx, .xls, .csv) File Upload & Auto-Parsing for Tasks
+  const handleExcelFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsParsingExcel(true);
+      setExcelFileName(file.name);
+      setImportStatus(`Membaca dan memetakan kolom dari ${file.name}...`);
+
+      const parsed = await parseDailyTaskExcelFile(file, role);
+      if (parsed.length > 0) {
+        setParsedExcelTasks(parsed);
+        setImportStatus(`Berhasil membaca ${parsed.length} tugas harian dari berkas "${file.name}". Periksa pratinjau di bawah dan klik "Simpan & Masukkan ke Jurnal Tugas".`);
+      } else {
+        setParsedExcelTasks([]);
+        setImportStatus('Tidak ada data tugas valid yang ditemukan pada berkas Excel.');
+      }
+    } catch (err) {
+      console.error('Error parsing task excel:', err);
+      setImportStatus('Format berkas tidak valid. Pastikan format .xlsx, .xls, atau .csv');
+    } finally {
+      setIsParsingExcel(false);
+      e.target.value = '';
+    }
+  };
+
+  // Commit Parsed Excel Tasks
+  const handleCommitParsedExcelTasks = () => {
+    if (parsedExcelTasks.length === 0) return;
+    importTasks(parsedExcelTasks);
+    setImportStatus(`Sukses mengimpor ${parsedExcelTasks.length} tugas ke jurnal harian!`);
+    setTimeout(() => {
+      onClose();
+      setParsedExcelTasks([]);
+      setExcelFileName('');
+      setImportStatus('');
+    }, 1000);
   };
 
   // CSV Import
@@ -510,13 +603,14 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     }
   };
 
-  // Download Sample Template CSV
+  // Download Sample Template CSV (Full Excel Indonesian Compatibility)
   const handleDownloadSampleCsv = () => {
     const sampleTasks: any[] = rolePresets.map((p, idx) => ({
       id: `sample-${idx + 1}`,
       role,
       date: todayStr,
       category: p.category,
+      taskType: getTaskClassification(role, p.category),
       title: p.title,
       description: p.description,
       location: p.location,
@@ -533,13 +627,12 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `template_tugas_harian_${role.toLowerCase()}.csv`;
+    link.download = `Template_Impor_Tugas_Harian_Excel_${role.toLowerCase()}_${todayStr}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
-  // Render Category Select Options (All expanded categories)
-  // Render Category Select Options (All expanded categories + custom categories)
+  // Render Category Select Options (All expanded categories + ready-to-use additional tasks)
   const renderCategoryOptions = () => {
     const roleCustomCats = customCategories.filter(c => c.role === role);
 
@@ -547,26 +640,23 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
       if (role === 'TU') {
         return (
           <>
-            <optgroup label="Administrasi Kepegawaian & GTK">
+            <optgroup label="⭐ Tugas Pokok (Tupoksi) Administrasi GTK & Siswa">
               <option value="kepegawaian">Kepegawaian (SKP, Pangkat, BKN, Cuti, KGB, Roster)</option>
-            </optgroup>
-            <optgroup label="Administrasi Kesiswaan">
               <option value="siswa">Kesiswaan (Buku Induk, Mutasi, Suket, Legalisir, NISN)</option>
-            </optgroup>
-            <optgroup label="Tata Kelola Persuratan & Disposisi">
               <option value="surat_masuk">Surat Masuk (Buku Agenda & Disposisi Kepsek)</option>
               <option value="surat_keluar">Surat Keluar (Nomor Dinas, SPPD, Edaran & Legalisir)</option>
-            </optgroup>
-            <optgroup label="Keuangan & Anggaran Sekolah">
               <option value="keuangan_bos">Keuangan BOS/BOP (BKU, SPJ, Pajak & ARKAS)</option>
-            </optgroup>
-            <optgroup label="Aset & Sarana Prasarana">
               <option value="sapras">Sarpras & Aset (KIR, KIB, BAST & Verifikasi Aset)</option>
-            </optgroup>
-            <optgroup label="Sistem Informasi & Kearsipan">
               <option value="dapodik">Dapodikdasmen (Validasi Rombel, GTK & Siswa)</option>
               <option value="kearsipan">Kearsipan (Digitalisasi PDF & Penataan Odner)</option>
-              <option value="layanan_umum">Layanan Umum (Notulen Rapat, Tamu Dinas & Humas)</option>
+            </optgroup>
+            <optgroup label="📌 Tugas Tambahan Kedinasan Siap Pakai">
+              <option value="pelaporan_bos">Pelaporan SPJ & Rekonsiliasi Kas BOS Dinas</option>
+              <option value="pengarsipan_digital">Digitalisasi Dokumen & e-Arsip Dokumen Sekolah</option>
+              <option value="pelayanan_mutasi">Pelayanan Mutasi & Surat Rekomendasi Siswa</option>
+              <option value="fasilitasi_rapat">Fasilitasi Rapat Dinas & Notula Pertemuan</option>
+              <option value="legalisir_dokumen">Pelayanan Legalisir Ijazah & Berkas Kedinasan</option>
+              <option value="layanan_umum">Layanan Umum (Penerimaan Tamu Dinas, Humas & Acara)</option>
             </optgroup>
           </>
         );
@@ -574,19 +664,22 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
       if (role === 'PENJAGA') {
         return (
           <>
-            <optgroup label="Pengamanan & Ronda">
+            <optgroup label="⭐ Tugas Pokok (Tupoksi) Keamanan & Ronda">
               <option value="keamanan">Keamanan Umum (Patroli, Pos Jaga, Pengecekan Kunci)</option>
               <option value="inspeksi_malam">Inspeksi & Ronda Malam (Gardu, MCB, Pagar Belakang)</option>
-              <option value="protokoler_tamu">Protokoler Tamu (Penerimaan Tamu Dinas & Parkir)</option>
             </optgroup>
-            <optgroup label="Ketertiban & Kesiapsiagaan">
-              <option value="pengawasan_anak">Mengawasi Siswa (Penyeberangan, Pagi, Istirahat)</option>
-              <option value="tanggap_darurat">Kesiapsiagaan Darurat (APAR, Drainase, Listrik)</option>
-            </optgroup>
-            <optgroup label="Pemeliharaan & Ekspedisi">
-              <option value="perbaikan_sapras">Perbaikan Sarana/Prasarana Ringan Sekolah</option>
-              <option value="lingkungan">Tambahan Lingkungan (Pohon, Rumput, Saluran)</option>
-              <option value="antar_surat">Antar Surat Dinas & Ekspedisi Disdik</option>
+            <optgroup label="📌 Tugas Tambahan Kedinasan Siap Pakai">
+              <option value="pengawasan_anak">Mengawasi Siswa (Zebra Cross, Kedatangan Pagi, Istirahat)</option>
+              <option value="protokoler_tamu">Protokoler Tamu (Penerimaan Tamu Dinas & Penataan Parkir)</option>
+              <option value="perbaikan_sapras">Perbaikan Sarana/Prasarana Ringan (Kran, Pintu, Lampu)</option>
+              <option value="lingkungan">Pembersihan Lingkungan, Selokan & Drainase Sekolah</option>
+              <option value="antar_surat">Antar Surat Dinas & Ekspedisi Dinas Pendidikan</option>
+              <option value="tanggap_darurat">Kesiapsiagaan Tanggap Darurat (APAR, Banjir, Listrik MCB)</option>
+              <option value="pendampingan_kegiatan">Pengamanan Upacara Bendera & Acara Pentas/Ekskul</option>
+              <option value="pengamanan_ujian">Pengamanan & Sterilisasi Ruangan Ujian / ANBK</option>
+              <option value="penataan_parkir">Penataan Area Parkir Kendaraan Guru & Tamu</option>
+              <option value="koordinasi_keamanan">Koordinasi Kamtibmas Polsek / Babinsa / Lingkungan</option>
+              <option value="evakuasi_sarpras">Kesiapsiagaan Evakuasi Aset Saat Cuaca Ekstrem</option>
             </optgroup>
           </>
         );
@@ -594,15 +687,20 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
       if (role === 'PERPUS') {
         return (
           <>
-            <optgroup label="Pengolahan & Bahan Pustaka">
+            <optgroup label="⭐ Tugas Pokok (Tupoksi) Pengolahan & Sirkulasi">
               <option value="katalogisasi_buku">Katalogisasi & DDC (Buku Induk, Barcode, Label Punggung)</option>
-              <option value="perawatan_buku">Perawatan & Restorasi (Penjilidan, Lem, Laminasi Buku)</option>
+              <option value="sirkulasi_peminjaman">Sirkulasi Peminjaman & Pengembalian Buku</option>
               <option value="stock_opname">Stock Opname Koleksi (Inventarisasi & Pencocokan Rak)</option>
+              <option value="perawatan_buku">Perawatan & Restorasi (Penjilidan, Lem, Laminasi Cover)</option>
             </optgroup>
-            <optgroup label="Sirkulasi & Layanan Pemustaka">
-              <option value="sirkulasi_peminjaman">Sirkulasi Peminjaman (Pinjam, Kembali & Denda)</option>
+            <optgroup label="📌 Tugas Tambahan Kedinasan Siap Pakai">
               <option value="layanan_literasi">Layanan Literasi (15 Mnt GLS, Pojok Baca & Bimbingan)</option>
-              <option value="administrasi_perpus">Administrasi Perpustakaan (Kartu Anggota & Suket Bebas Perpus)</option>
+              <option value="administrasi_perpus">Administrasi Perpustakaan (Kartu Anggota & Bebas Pustaka)</option>
+              <option value="pengolahan_label">Pengolahan Label Barcode & Label Punggung Buku</option>
+              <option value="promosi_literasi">Display Rekomendasi Buku Mingguan di Lobi Sekolah</option>
+              <option value="layanan_referensi">Layanan Referensi & Penelusuran Informasi Ilmiah</option>
+              <option value="penyiangan_weeding">Penyiangan Koleksi Rusak Berat (Weeding)</option>
+              <option value="kerjasama_perpustakaan">Penerimaan & Registrasi Sumbangan/Hibah Buku</option>
             </optgroup>
           </>
         );
@@ -610,33 +708,41 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
       if (role === 'LAB_IPA') {
         return (
           <>
-            <optgroup label="Praktikum & Eksperimen Siswa">
+            <optgroup label="⭐ Tugas Pokok (Tupoksi) Praktikum & K3 Lab">
               <option value="persiapan_praktikum">Persiapan Praktikum (Mikroskop, Preparat & Kit Fisika)</option>
-              <option value="jadwal_lab">Jadwal & Jurnal (Penjadwalan Ruang & Presensi Praktikum)</option>
-            </optgroup>
-            <optgroup label="Pemeliharaan & Keselamatan Lab">
               <option value="pemeliharaan_alat">Pemeliharaan Alat Gelas (Pencucian, Sterilisasi & Oven)</option>
-              <option value="perbaikan_alat">Kalibrasi & Perbaikan (Neraca Ohaus, Catu Daya & Optik)</option>
               <option value="inventaris_bahan">Inventaris Reagen Kimia (Kartu Stok & Lemari B3)</option>
               <option value="k3_laboratorium">Keselamatan Kerja K3 (APAR, P3K, Netralisasi Limbah)</option>
+            </optgroup>
+            <optgroup label="📌 Tugas Tambahan Kedinasan Siap Pakai">
+              <option value="jadwal_lab">Jadwal & Jurnal Penggunaan Ruang Laboratorium IPA</option>
+              <option value="perbaikan_alat">Kalibrasi Titik Nol Neraca Ohaus & Pegas</option>
+              <option value="pengelolaan_limbah">Pengelolaan & Netralisasi Limbah Praktikum Asam-Basa</option>
+              <option value="kalibrasi_presisi">Kalibrasi Presisi Neraca & Pengecekan Lensa Mikroskop</option>
+              <option value="pembuatan_reagen">Pembuatan Larutan Reagen Biologi (Benedict, Biuret, Lugol)</option>
+              <option value="peragaan_sains">Pendampingan Kit Peraga Sains / Ekstrakurikuler KIR</option>
+              <option value="penataan_spesimen">Penataan Preparat Sel & Awetan Spesimen Biologi</option>
             </optgroup>
           </>
         );
       }
       return (
         <>
-          <optgroup label="Sanitasi Ruang & Toilet">
-            <option value="kebersihan_wc">Kebersihan Toilet / WC (Siswa, Guru, Sanitasi)</option>
-            <option value="kebersihan_kantor">Kebersihan Ruang Kerja (Kepsek, Guru, TU, Debu, Pel)</option>
-          </optgroup>
-          <optgroup label="Pengelolaan Lingkungan & Sampah">
+          <optgroup label="⭐ Tugas Pokok (Tupoksi) Kebersihan & Sanitasi">
+            <option value="kebersihan_wc">Kebersihan Toilet / WC (Siswa, Guru, Sanitasi Harian)</option>
+            <option value="kebersihan_kantor">Kebersihan Ruang Kerja & Kelas (Kepsek, Guru, TU, Pel)</option>
             <option value="kebersihan_sampah">Kebersihan Sampah (Pilah Organik/Anorganik & TPS)</option>
-            <option value="kebersihan_halaman">Pembersihan Halaman, Lapangan & Selasar</option>
-            <option value="perawatan_taman">Perawatan & Penyiraman Tanaman / Taman</option>
+            <option value="kebersihan_halaman">Pembersihan Halaman Upacara, Lapangan & Selasar</option>
           </optgroup>
-          <optgroup label="Fasilitas Khusus & Sanitasi">
-            <option value="sanitasi_disinfeksi">Sanitasi & Disinfeksi (UKS, Musholla, Koridor)</option>
-            <option value="penyediaan_air">Penyediaan Air Bersih (Tandon, Radar Pompa, Kran)</option>
+          <optgroup label="📌 Tugas Tambahan Kedinasan Siap Pakai">
+            <option value="perawatan_taman">Perawatan Taman Pot, Bunga & Penyiraman Lobi</option>
+            <option value="pemeliharaan_taman">Pemangkasan Rumput & Perapian Area Hijau Sekolah</option>
+            <option value="penyediaan_air">Pemeriksaan Radar Pompa Air, Tandon & Kran Air</option>
+            <option value="sanitasi_disinfeksi">Sanitasi & Disinfeksi (Ruang UKS, Musholla & Isolasi)</option>
+            <option value="drainase_saluran">Pembersihan Saluran Air & Drainase Sekolah</option>
+            <option value="persiapan_aula">Penataan Meja/Kursi Ruang Aula & Fasilitasi Acara</option>
+            <option value="sterilisasi_ruang">Sterilisasi Ruang Isolasi/UKS & Penyedotan Karpet</option>
+            <option value="pengecatan_ringan">Pengecatan Ringan & Restorasi Noda Dinding Ruang</option>
           </optgroup>
         </>
       );
@@ -658,21 +764,131 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
     );
   };
 
-  // Helper chip presets for Manual Mode
-  const tuLocationChips = ['Ruang TU', 'Meja Kepegawaian', 'Meja Kesiswaan', 'Meja BOS/SPJ', 'Ruang Kepsek', 'Lab Komputer', 'Dinas Pendidikan', 'Ruang Arsip'];
-  const tuVolumeChips = ['4 berkas ASN', '12 lembar suket', '1 draf SK dinas', '1 bundel SPJ', '18 kuitansi', '1 kegiatan', '24 siswa'];
+  // Helper chip presets for Manual Mode (Comprehensive Field Locations)
+  const tuLocationChips = [
+    'Ruang TU (Meja Kepegawaian)',
+    'Ruang TU (Meja Kesiswaan)',
+    'Ruang TU (Meja BOS/SPJ)',
+    'Ruang Kepala Sekolah',
+    'Ruang Arsip Surat',
+    'Lab Komputer (ANBK)',
+    'Lobi Pelayanan Utama',
+    'Dinas Pendidikan Kota/Kab',
+    'Kantor BKN / BKPSDM',
+    'Gudang Berkas Ijazah'
+  ];
+  const tuVolumeChips = [
+    '1 berkas dinas',
+    '4 berkas ASN',
+    '12 lembar suket',
+    '1 draf SK dinas',
+    '1 bundel SPJ BOS',
+    '18 lembar kuitansi',
+    '1 kegiatan dinas',
+    '32 siswa mutasi/PIP',
+    '1 buku agenda surat',
+    '24 arsip digital PDF'
+  ];
 
-  const penjagaLocationChips = ['Pintu Gerbang Utama', 'Zebra Cross Depan', 'Blok Gedung A-B-C', 'Pos Keamanan', 'Kantin & Lapangan', 'Gudang Sapras', 'Dinas Pendidikan'];
-  const penjagaVolumeChips = ['24 ruang kelas', '± 450 siswa', '1 sesi ronda malam', '2 kran wastafel', '4 unit lampu LED', '1 berkas dinas'];
+  const penjagaLocationChips = [
+    'Pintu Gerbang Utama Depan',
+    'Zebra Cross Penyeberangan Jalan',
+    'Pos Keamanan Gerbang',
+    'Selasar Gedung Kelas A-B-C',
+    'Halaman & Lapangan Upacara',
+    'Gardu MCB & Panel Listrik',
+    'Area Parkir Kendaraan Guru/Tamu',
+    'Pagar Keliling Belakang',
+    'Gudang Sarpras Sekolah',
+    'Kantin & Selasar Barat'
+  ];
+  const penjagaVolumeChips = [
+    '1 sesi buka/tutup gerbang',
+    '24 ruang kelas aman terkunci',
+    '± 450 siswa terawasi',
+    '1 putaran ronda malam',
+    '4 unit lampu penerangan',
+    '2 kran wastafel diperbaiki',
+    '1 berkas dinas ekspedisi',
+    '50 meter saluran air lancar',
+    '1 unit gembok rantai terpasang',
+    '2 sesi penataan parkir rapi'
+  ];
 
-  const serviceLocationChips = ['Toilet Siswa Putra', 'Toilet Siswa Putri', 'Toilet Guru', 'Ruang Kepala Sekolah', 'Ruang Guru & TU', 'Lapangan Upacara', 'Ruang UKS & Musholla'];
-  const serviceVolumeChips = ['8 bilik toilet', '3 ruangan besar', '6 gerobak sampah', '± 800 m² halaman', '45 pot tanaman', '2 unit tandon air'];
+  const serviceLocationChips = [
+    'Toilet Siswa Putra Blok A',
+    'Toilet Siswa Putri Blok B',
+    'Toilet Guru & Tenaga Kependidikan',
+    'Ruang Kepala Sekolah & Tamu',
+    'Ruang Guru & Tata Usaha',
+    'Selasar Koridor Kelas',
+    'Lapangan Upacara & Olahraga',
+    'Ruang UKS & Musholla',
+    'Tempat Pembuangan Sampah (TPS)',
+    'Area Tandon Puncak & Pompa Air'
+  ];
+  const serviceVolumeChips = [
+    '8 bilik toilet higienis',
+    '4 ruang kerja pimpinan & staf',
+    '6 gerobak sampah terangkut ke TPS',
+    '± 800 m² lantai bersih dipel',
+    '45 pot tanaman tersiram rapi',
+    '2 unit tandon air terkontrol',
+    '1 paket disinfeksi ruangan UKS',
+    '1 paket penataan kursi aula',
+    '12 tempat sampah kelas dikosongkan',
+    '40 meter saluran selokan dibersihkan'
+  ];
 
-  const perpusLocationChips = ['Meja Sirkulasi', 'Ruang Pengolahan', 'Rak Buku Fiksi', 'Rak Buku Teks Pelajaran', 'Ruang Baca Utama', 'Pojok Baca Lobi', 'Ruang Restorasi'];
-  const perpusVolumeChips = ['80 eksemplar buku', '45 transaksi pinjam', '64 siswa (2 rombel)', '15 buku referensi', '120 kartu perpustakaan', '1 laporan statistik'];
+  const perpusLocationChips = [
+    'Meja Layanan Sirkulasi',
+    'Ruang Pengolahan Koleksi Baru',
+    'Lorong Rak Buku Teks Pelajaran',
+    'Lorong Rak Koleksi Fiksi & Sastra',
+    'Area Baca Lesehan & Pojok GLS',
+    'Display Rekomendasi Buku Lobi',
+    'Ruang Restorasi & Preservasi',
+    'Meja Komputer Katalog OPAC',
+    'Lemari Buku Referensi & Ensiklopedia',
+    'Pojok Literasi Tematik'
+  ];
+  const perpusVolumeChips = [
+    '80 eksemplar buku teks pelajaran',
+    '45 transaksi peminjaman & kembali',
+    '2 rombel kelas (64 siswa GLS)',
+    '15 buku referensi direstorasi',
+    '120 kartu anggota perpustakaan',
+    '1 laporan statistik sirkulasi',
+    '50 buku diberi label barcode',
+    '1 paket display tema literasi',
+    '25 buku pengayaan diklasifikasi',
+    '6 lembar suket bebas pustaka'
+  ];
 
-  const labIpaLocationChips = ['Meja Praktikum Siswa 1-6', 'Meja Demonstrasi Guru', 'Ruang Preparasi Laboran', 'Lemari Alat Optik / Mikroskop', 'Lemari Bahan Kimia B3', 'Wastafel & Rak Gelas'];
-  const labIpaVolumeChips = ['12 unit mikroskop', '8 set kit mekanika', '48 tabung reaksi', '24 botol reagen', '6 neraca presisi', '1 unit APAR & P3K'];
+  const labIpaLocationChips = [
+    'Meja Praktikum Siswa 1-6',
+    'Meja Demonstrasi Guru',
+    'Ruang Preparasi Laboran',
+    'Lemari Alat Optik & Mikroskop',
+    'Lemari Khusus Bahan Kimia B3',
+    'Wastafel & Rak Pengering Alat Gelas',
+    'Dinding APAR & Kotak P3K',
+    'Area Bak Filtrasi Netralisasi Limbah',
+    'Lemari Kit Mekanika & Listrik',
+    'Meja Kalibrasi Neraca Ohaus'
+  ];
+  const labIpaVolumeChips = [
+    '16 unit mikroskop disterilkan',
+    '8 set kit mekanika/optik siap pakai',
+    '48 tabung reaksi & gelas beaker bersih',
+    '24 botol reagen terinventarisasi',
+    '6 unit neraca Ohaus terkalibrasi',
+    '1 unit APAR & kotak P3K siap siaga',
+    '5 liter limbah ternetralisasi aman',
+    '18 jadwal praktikum tersusun',
+    '3 botol larutan reagen segar',
+    '12 preparat biologi tersimpan rapi'
+  ];
 
   const currentLocationChips = 
     role === 'TU' ? tuLocationChips : 
@@ -739,42 +955,144 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
 
         {/* CONTENT CONTAINER */}
         <div className="overflow-y-auto p-4 sm:p-6 space-y-4">
-          {/* CSV Import Tab */}
+          {/* Excel / CSV Import Tab */}
           {activeTab === 'import' && !editingTask ? (
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-                <div className="flex items-center gap-2 text-blue-900 font-bold text-xs sm:text-sm">
-                  <FileSpreadsheet className="w-4 h-4 text-blue-600" />
-                  <span>Format Template Impor Tugas Harian (CSV)</span>
+            <div className="space-y-4 text-xs">
+              {/* Template Download Box */}
+              <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 text-emerald-950 font-bold text-xs sm:text-sm">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+                    <span>Format Templat Excel Resmi Tugas Harian ({role})</span>
+                  </div>
+                  <p className="text-emerald-800 text-[11px] leading-relaxed">
+                    Unduh format Microsoft Excel resmi yang sudah dilengkapi kolom-kolom: Tanggal, Waktu, Judul Kegiatan, Uraian Rincian Pekerjaan, Lokasi, Volume Satuan, Kategori, dan Petunjuk.
+                  </p>
                 </div>
-                <p className="text-slate-600 text-[11px] leading-relaxed">
-                  Anda dapat mengunduh format template CSV standar yang telah terisi contoh kegiatan sesuai peran operasional ({role}), lalu mengunggahnya untuk mengimpor seluruh tugas sekaligus.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleDownloadSampleCsv}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-blue-100 text-blue-700 border border-blue-300 rounded-lg text-xs font-semibold transition-colors shadow-2xs"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Unduh Format Template CSV ({role})</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleDownloadExcelTemplate}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer whitespace-nowrap"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Unduh Templat Excel (.xlsx)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadSampleCsv}
+                    className="flex items-center gap-1 px-3 py-2 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>CSV</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                <Upload className="w-8 h-8 text-blue-600 mx-auto mb-2 opacity-80" />
-                <p className="text-xs font-semibold text-slate-800">Unggah Berkas CSV Tugas Harian</p>
-                <p className="text-[11px] text-slate-500 mt-1 mb-4">Pilih file .csv hasil export atau template yang telah diisi</p>
+              {/* Upload Dropzone */}
+              <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-6 text-center bg-slate-50/60 transition-colors">
+                <FileSpreadsheet className="w-9 h-9 text-blue-600 mx-auto mb-2 opacity-90" />
+                <p className="text-sm font-bold text-slate-800">Unggah Berkas Excel Tugas Harian (.xlsx / .xls / .csv)</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 mb-3">Kolom otomatis dipetakan ke formulir jurnal tugas operasional</p>
                 
-                <label className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs">
-                  <span>Pilih Berkas CSV</span>
-                  <input type="file" accept=".csv,text/csv" onChange={handleCsvImport} className="hidden" />
+                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs">
+                  <Upload className="w-4 h-4" />
+                  <span>{isParsingExcel ? 'Membaca Berkas Excel...' : 'Pilih Berkas Excel / CSV'}</span>
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                    onChange={handleExcelFileUpload} 
+                    className="hidden" 
+                  />
                 </label>
+                {excelFileName && (
+                  <p className="text-[11px] text-slate-600 mt-2 font-mono">
+                    Berkas aktif: <strong>{excelFileName}</strong>
+                  </p>
+                )}
               </div>
 
+              {/* Status Message */}
               {importStatus && (
-                <p className="text-xs font-semibold text-center text-blue-700 bg-blue-50 p-2.5 rounded-lg border border-blue-200">
-                  {importStatus}
-                </p>
+                <div className={`p-3 rounded-lg text-xs font-semibold border flex items-center gap-2 ${
+                  importStatus.includes('Sukses') || importStatus.includes('Berhasil')
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : 'bg-blue-50 border-blue-200 text-blue-900'
+                }`}>
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{importStatus}</span>
+                </div>
+              )}
+
+              {/* Parsed Excel Tasks Preview */}
+              {parsedExcelTasks.length > 0 && (
+                <div className="space-y-2 border border-blue-200 rounded-xl p-3 bg-blue-50/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                      <Check className="w-4 h-4 text-blue-700" />
+                      Pratinjau Data ({parsedExcelTasks.length} tugas terbaca dari Excel):
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Tugas Pokok: {parsedExcelTasks.filter(t => t.taskType === 'pokok').length} · 
+                      Tugas Tambahan: {parsedExcelTasks.filter(t => t.taskType === 'tambahan').length}
+                    </span>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg bg-white shadow-2xs">
+                    <table className="w-full text-left text-[11px] divide-y divide-slate-100">
+                      <thead className="bg-slate-50 sticky top-0 text-slate-700 font-bold">
+                        <tr>
+                          <th className="py-2 px-2.5 text-center w-8">No</th>
+                          <th className="py-2 px-2.5">Tanggal & Waktu</th>
+                          <th className="py-2 px-2.5">Judul Kegiatan</th>
+                          <th className="py-2 px-2.5">Lokasi</th>
+                          <th className="py-2 px-2.5">Volume</th>
+                          <th className="py-2 px-2.5 text-center">Jenis</th>
+                          <th className="py-2 px-2.5 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {parsedExcelTasks.map((t, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/70">
+                            <td className="py-1.5 px-2.5 text-center text-slate-400">{idx + 1}</td>
+                            <td className="py-1.5 px-2.5 whitespace-nowrap text-slate-600 font-mono text-[10px]">
+                              {t.date}<br/>{t.timeStart} - {t.timeEnd}
+                            </td>
+                            <td className="py-1.5 px-2.5 font-bold text-slate-900">
+                              {t.title}
+                              <div className="text-[10px] text-slate-500 font-normal line-clamp-1">{t.description}</div>
+                            </td>
+                            <td className="py-1.5 px-2.5 text-slate-600">{t.location}</td>
+                            <td className="py-1.5 px-2.5 text-slate-700 font-semibold">{t.volumeUnit}</td>
+                            <td className="py-1.5 px-2.5 text-center">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                t.taskType === 'pokok' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {t.taskType === 'pokok' ? 'Pokok' : 'Tambahan'}
+                              </span>
+                            </td>
+                            <td className="py-1.5 px-2.5 text-center">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                {t.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCommitParsedExcelTasks}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Simpan & Masukkan ke Jurnal Tugas ({parsedExcelTasks.length} Kegiatan)</span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           ) : (
@@ -1385,13 +1703,34 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
 
               {/* Uraian Rincian Pekerjaan */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Uraian Rincian Pekerjaan / Langkah Pelaksanaan:
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Uraian Rincian Pekerjaan / Langkah Pelaksanaan:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAiGenerateDescription}
+                    disabled={isGeneratingAiDescription}
+                    className="text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
+                    title="Uraian rincian pekerjaan diisi otomatis oleh kecerdasan AI menyesuaikan judul kegiatan tugas harian"
+                  >
+                    {isGeneratingAiDescription ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                        <span>Menuliskan rincian...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>✨ Tulis Rincian Otomatis (AI)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
                 <textarea
                   rows={3}
                   required
-                  placeholder="Jelaskan langkah kerja, alat/sistem yang digunakan, dan hasil kerja yang dicapai..."
+                  placeholder="Jelaskan langkah kerja, alat/sistem yang digunakan, dan hasil kerja yang dicapai (atau klik '✨ Tulis Rincian Otomatis (AI)' untuk dirumuskan langsung)..."
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   className="w-full p-2.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 leading-relaxed text-slate-800"
@@ -1401,25 +1740,56 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
               {/* Lokasi & Volume Unit */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Lokasi / Titik Pelaksanaan:
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-slate-700">
+                      Lokasi / Titik Pelaksanaan:
+                    </label>
+                    <span className="text-[10px] text-slate-400">Pilihan / Ketik</span>
+                  </div>
                   <input
                     type="text"
+                    list="location-preset-options"
                     required
-                    placeholder="Ruang TU, Meja Kesiswaan, Lab, dsb"
+                    placeholder="Ketik atau pilih lokasi di lapangan..."
                     value={formData.location}
                     onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
                     className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
                   />
+                  <datalist id="location-preset-options">
+                    {currentLocationChips.map((chip, idx) => (
+                      <option key={idx} value={chip} />
+                    ))}
+                  </datalist>
+
+                  {/* Dropdown selector for 1-click option */}
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setFormData(prev => ({ ...prev, location: e.target.value }));
+                        e.target.value = '';
+                      }
+                    }}
+                    defaultValue=""
+                    className="w-full mt-1.5 px-2 py-1 text-[11px] bg-white border border-slate-200 rounded-md text-slate-600 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="" disabled>-- Pilihan Cepat Titik Lokasi Lapangan --</option>
+                    {currentLocationChips.map((chip, idx) => (
+                      <option key={idx} value={chip}>📍 {chip}</option>
+                    ))}
+                  </select>
+
                   {/* Quick location chips */}
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {currentLocationChips.slice(0, 4).map((chip, idx) => (
+                    {currentLocationChips.slice(0, 6).map((chip, idx) => (
                       <button
                         key={idx}
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, location: chip }))}
-                        className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded cursor-pointer"
+                        className={`text-[10px] px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                          formData.location === chip 
+                            ? 'bg-blue-600 text-white font-semibold' 
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
                       >
                         + {chip}
                       </button>
@@ -1428,25 +1798,56 @@ export const DailyTaskModal: React.FC<DailyTaskModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Capaian Volume / Satuan Hasil:
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-slate-700">
+                      Capaian Volume / Satuan Hasil:
+                    </label>
+                    <span className="text-[10px] text-slate-400">Pilihan / Ketik</span>
+                  </div>
                   <input
                     type="text"
+                    list="volume-preset-options"
                     required
-                    placeholder="Misal: 4 berkas ASN, 12 lembar suket"
+                    placeholder="Misal: 1 berkas dinas, 4 berkas ASN, 8 bilik toilet"
                     value={formData.volumeUnit}
                     onChange={(e) => setFormData(prev => ({ ...prev, volumeUnit: e.target.value }))}
                     className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
                   />
+                  <datalist id="volume-preset-options">
+                    {currentVolumeChips.map((chip, idx) => (
+                      <option key={idx} value={chip} />
+                    ))}
+                  </datalist>
+
+                  {/* Dropdown selector for 1-click option */}
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setFormData(prev => ({ ...prev, volumeUnit: e.target.value }));
+                        e.target.value = '';
+                      }
+                    }}
+                    defaultValue=""
+                    className="w-full mt-1.5 px-2 py-1 text-[11px] bg-white border border-slate-200 rounded-md text-slate-600 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="" disabled>-- Pilihan Cepat Volume / Satuan Hasil --</option>
+                    {currentVolumeChips.map((chip, idx) => (
+                      <option key={idx} value={chip}>📦 {chip}</option>
+                    ))}
+                  </select>
+
                   {/* Quick volume chips */}
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {currentVolumeChips.slice(0, 4).map((chip, idx) => (
+                    {currentVolumeChips.slice(0, 6).map((chip, idx) => (
                       <button
                         key={idx}
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, volumeUnit: chip }))}
-                        className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded cursor-pointer"
+                        className={`text-[10px] px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                          formData.volumeUnit === chip 
+                            ? 'bg-blue-600 text-white font-semibold' 
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
                       >
                         + {chip}
                       </button>

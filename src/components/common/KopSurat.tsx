@@ -142,12 +142,12 @@ export const KopSurat: React.FC<KopSuratProps> = ({ config, className = "", isPr
     <div className={`w-full ${className}`}>
       {/* 3 Columns Layout: Kolom 1 (Kiri), Kolom 2 (Tengah), Kolom 3 (Kanan) */}
       <div className="grid grid-cols-[100px_1fr_100px] items-center gap-3 sm:gap-6 py-2 px-1 text-center">
-        {/* Kolom 1: Logo Pemda / Kabupaten */}
+        {/* Kolom 1: Logo Pemda / Kabupaten / Kiri */}
         <div className="flex justify-center items-center">
-          {config.logoKabupatenUrl ? (
+          {(config.logoKopKiri || config.logoKabupatenUrl) ? (
             <img 
-              src={config.logoKabupatenUrl} 
-              alt="Logo Kabupaten" 
+              src={config.logoKopKiri || config.logoKabupatenUrl} 
+              alt="Logo Kiri" 
               className="max-h-24 max-w-[90px] object-contain drop-shadow-sm" 
             />
           ) : (
@@ -201,12 +201,12 @@ export const KopSurat: React.FC<KopSuratProps> = ({ config, className = "", isPr
           )}
         </div>
 
-        {/* Kolom 3: Logo Tut Wuri Handayani / Sekolah */}
+        {/* Kolom 3: Logo Tut Wuri Handayani / Sekolah / Kanan */}
         <div className="flex justify-center items-center">
-          {config.logoSekolahUrl ? (
+          {(config.logoKopKanan || config.logoSekolahUrl) ? (
             <img 
-              src={config.logoSekolahUrl} 
-              alt="Logo Sekolah" 
+              src={config.logoKopKanan || config.logoSekolahUrl} 
+              alt="Logo Kanan" 
               className="max-h-24 max-w-[90px] object-contain drop-shadow-sm" 
             />
           ) : (

@@ -31,8 +31,10 @@ import {
 } from 'lucide-react';
 
 export const PenjagaView: React.FC = () => {
-  const { tasks, deleteTask, inventories } = useApp();
+  const { tasks, deleteTask, deleteMultipleTasks, inventories } = useApp();
   const [activeCategory, setActiveCategory] = useState<string>('semua');
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState<boolean>(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [modalInitialMode, setModalInitialMode] = useState<'template' | 'manual'>('template');
   const [selectedPreset, setSelectedPreset] = useState<TaskPresetItem | null>(null);
@@ -45,6 +47,27 @@ export const PenjagaView: React.FC = () => {
     if (activeCategory === 'semua') return true;
     return t.category === activeCategory;
   });
+
+  const handleToggleSelectAllTasks = () => {
+    if (selectedTaskIds.length === filteredTasks.length) {
+      setSelectedTaskIds([]);
+    } else {
+      setSelectedTaskIds(filteredTasks.map(t => t.id));
+    }
+  };
+
+  const handleToggleSelectTask = (id: string) => {
+    setSelectedTaskIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleConfirmBulkDelete = () => {
+    if (selectedTaskIds.length === 0) return;
+    deleteMultipleTasks(selectedTaskIds);
+    setSelectedTaskIds([]);
+    setIsBulkDeleteModalOpen(false);
+  };
 
   const handleApplyPresetDirectly = (presetKeyword: string) => {
     const penjagaPresets = TASK_PRESETS['PENJAGA'] || [];
@@ -376,13 +399,51 @@ export const PenjagaView: React.FC = () => {
       {/* Task List */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-900">
-            Jurnal Tugas Harian Penjaga Sekolah ({filteredTasks.length})
-          </h3>
+          <div className="flex items-center gap-2">
+            {filteredTasks.length > 0 && (
+              <input
+                type="checkbox"
+                checked={selectedTaskIds.length > 0 && selectedTaskIds.length === filteredTasks.length}
+                onChange={handleToggleSelectAllTasks}
+                className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
+                title="Pilih semua tugas pada filter ini"
+              />
+            )}
+            <h3 className="text-sm font-bold text-slate-900">
+              Jurnal Tugas Harian Penjaga Sekolah ({filteredTasks.length})
+            </h3>
+          </div>
           <span className="text-xs text-slate-500">
             {completedTasks} selesai · {inProgressTasks} dalam proses
           </span>
         </div>
+
+        {/* Bulk Selection Action Bar */}
+        {selectedTaskIds.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl animate-fadeIn">
+            <div className="flex items-center gap-2 text-xs font-bold text-rose-900">
+              <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+              <span>{selectedTaskIds.length} tugas harian dipilih</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(true)}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Hapus Pilihan ({selectedTaskIds.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTaskIds([])}
+                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Batal Pilihan
+              </button>
+            </div>
+          </div>
+        )}
 
         {filteredTasks.length === 0 ? (
           <div className="text-center py-10 bg-white rounded-xl border border-dashed border-slate-300">
@@ -409,106 +470,154 @@ export const PenjagaView: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3">
-            {filteredTasks.map(task => (
-              <div
-                key={task.id}
-                className="bg-white p-4 rounded-xl border border-slate-200 hover:border-slate-300 transition-all shadow-xs flex flex-col sm:flex-row sm:items-start justify-between gap-4"
-              >
-                <div className="space-y-1.5 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                    <span className="font-semibold text-blue-900 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {task.date}
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {task.timeStart} - {task.timeEnd} WIB
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {task.location}
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span className="font-medium text-slate-700 uppercase text-[10px] bg-slate-100 px-1.5 py-0.5 rounded">
-                      {task.category.replace('_', ' ')}
-                    </span>
+            {filteredTasks.map(task => {
+              const isSelected = selectedTaskIds.includes(task.id);
+              return (
+                <div
+                  key={task.id}
+                  className={`p-4 rounded-xl border transition-all shadow-xs flex flex-col sm:flex-row sm:items-start justify-between gap-4 ${
+                    isSelected ? 'bg-blue-50/60 border-blue-400 ring-1 ring-blue-400' : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-3 flex-1">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleToggleSelectTask(task.id)}
+                      className="mt-1 w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0"
+                      title="Pilih tugas ini"
+                    />
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                        <span className="font-semibold text-blue-900 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {task.date}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {task.timeStart} - {task.timeEnd} WIB
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {task.location}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span className="font-medium text-slate-700 uppercase text-[10px] bg-slate-100 px-1.5 py-0.5 rounded">
+                          {task.category.replace('_', ' ')}
+                        </span>
+                      </div>
+
+                      <h4 className="text-sm font-bold text-slate-900">
+                        {task.title}
+                      </h4>
+
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {task.description}
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">
+                          Volume: {task.volumeUnit}
+                        </span>
+                        <span className="text-slate-500">
+                          Petugas: {task.petugas}
+                        </span>
+                        {task.notes && (
+                          <span className="italic text-slate-500">
+                            ({task.notes})
+                          </span>
+                        )}
+
+                        {/* Photo Attached Indicator */}
+                        {task.photoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPhotoUrl(task.photoUrl || null)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded font-semibold text-[10.5px] hover:bg-emerald-100 cursor-pointer transition-colors"
+                          >
+                            <Camera className="w-3 h-3 text-emerald-600" />
+                            <span>Foto Dokumentasi HP ✓</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <h4 className="text-sm font-bold text-slate-900">
-                    {task.title}
-                  </h4>
-
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {task.description}
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
-                    <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">
-                      Volume: {task.volumeUnit}
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold ${
+                      task.status === 'selesai'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                        : task.status === 'dalam_proses'
+                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                        : 'bg-rose-50 text-rose-800 border border-rose-200'
+                    }`}>
+                      {task.status === 'selesai' && <CheckCircle2 className="w-3 h-3" />}
+                      {task.status === 'dalam_proses' && <Clock className="w-3 h-3" />}
+                      {task.status === 'perlu_tindak_lanjut' && <AlertCircle className="w-3 h-3" />}
+                      {task.status === 'selesai' ? 'Selesai' : task.status === 'dalam_proses' ? 'Proses' : 'Tindak Lanjut'}
                     </span>
-                    <span className="text-slate-500">
-                      Petugas: {task.petugas}
-                    </span>
-                    {task.notes && (
-                      <span className="italic text-slate-500">
-                        ({task.notes})
-                      </span>
-                    )}
 
-                    {/* Photo Attached Indicator */}
-                    {task.photoUrl && (
+                    <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => setPreviewPhotoUrl(task.photoUrl || null)}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded font-semibold text-[10.5px] hover:bg-emerald-100 cursor-pointer transition-colors"
+                        onClick={() => handleEdit(task)}
+                        className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        title="Edit Tugas"
                       >
-                        <Camera className="w-3 h-3 text-emerald-600" />
-                        <span>Foto Dokumentasi HP ✓</span>
+                        <Edit className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => deleteTask(task.id)}
+                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        title="Hapus Tugas"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0">
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold ${
-                    task.status === 'selesai'
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                      : task.status === 'dalam_proses'
-                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                      : 'bg-rose-50 text-rose-800 border border-rose-200'
-                  }`}>
-                    {task.status === 'selesai' && <CheckCircle2 className="w-3 h-3" />}
-                    {task.status === 'dalam_proses' && <Clock className="w-3 h-3" />}
-                    {task.status === 'perlu_tindak_lanjut' && <AlertCircle className="w-3 h-3" />}
-                    {task.status === 'selesai' ? 'Selesai' : task.status === 'dalam_proses' ? 'Proses' : 'Tindak Lanjut'}
-                  </span>
-
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(task)}
-                      className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                      title="Edit Tugas"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteTask(task.id)}
-                      className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                      title="Hapus Tugas"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* Bulk Delete Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-2">
+              Hapus {selectedTaskIds.length} Tugas Harian Terpilih?
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed mb-6">
+              Data tugas harian yang dihapus akan dikeluarkan dari rekapitulasi laporan bulanan dan tahunan secara permanen.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkDelete}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Ya, Hapus {selectedTaskIds.length} Tugas</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Inventory Section */}
       <div className="mt-8 pt-6 border-t border-slate-200">
