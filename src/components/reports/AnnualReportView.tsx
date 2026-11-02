@@ -161,23 +161,52 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
     return libraryBooks.reduce((sum, b) => sum + (Number(b.jumlah) || 1), 0);
   }, [libraryBooks]);
 
+  // View mode for the library book catalog in the annual report
+  const [catalogViewMode, setCatalogViewMode] = useState<'per_kelas' | 'detail'>('per_kelas');
+
+  // Helper to extract year and month from book date fields
+  const parseBookDateParts = (book: any, defaultYear: number) => {
+    if (book.tanggalMasuk) {
+      const raw = String(book.tanggalMasuk).trim();
+      const isoMatch = raw.match(/^(\d{4})[-/.](\d{1,2})/);
+      if (isoMatch) {
+        return { year: parseInt(isoMatch[1], 10), month: parseInt(isoMatch[2], 10) };
+      }
+      const dmyMatch = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+      if (dmyMatch) {
+        return { year: parseInt(dmyMatch[3], 10), month: parseInt(dmyMatch[2], 10) };
+      }
+    }
+    if (book.bulanPengadaan) {
+      const rawBp = String(book.bulanPengadaan).trim();
+      const bpMatch = rawBp.match(/^(\d{4})[-/.](\d{1,2})/);
+      if (bpMatch) {
+        return { year: parseInt(bpMatch[1], 10), month: parseInt(bpMatch[2], 10) };
+      }
+      const num = parseInt(rawBp, 10);
+      if (!isNaN(num) && num >= 1 && num <= 12) {
+        const yr = parseInt(String(book.tahunPengadaan || book.tahunBeli || book.tahunTerbit), 10) || defaultYear;
+        return { year: yr, month: num };
+      }
+    }
+    const y = parseInt(String(book.tahunPengadaan || book.tahunBeli || book.tahunTerbit), 10);
+    if (!isNaN(y)) {
+      return { year: y, month: 1 };
+    }
+    return null;
+  };
+
   // Statistik Penambahan Buku per Bulan Beserta Persentase
   const monthlyBookAdditionStats = useMemo(() => {
     if (!isPerpus) return [];
 
     const monthlyList = MONTH_NAMES.map((name, idx) => {
       const monthNum = idx + 1;
-      const targetMonthKey = `${selectedYear}-${String(monthNum).padStart(2, '0')}`;
 
       const booksInMonth = libraryBooks.filter(book => {
-        const rawBulan = String(book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : ''));
-        if (rawBulan.startsWith(targetMonthKey)) return true;
-        if (book.tanggalMasuk && book.tanggalMasuk.startsWith(targetMonthKey)) return true;
-        if (typeof book.bulanPengadaan === 'number' && book.bulanPengadaan === monthNum) {
-          const y = book.tahunPengadaan || (book.tanggalMasuk ? parseInt(book.tanggalMasuk.split('-')[0], 10) : selectedYear);
-          if (y === selectedYear) return true;
-        }
-        return false;
+        const parts = parseBookDateParts(book, selectedYear);
+        if (!parts) return false;
+        return parts.year === selectedYear && parts.month === monthNum;
       });
 
       const judulCount = booksInMonth.length;
@@ -217,21 +246,13 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         }
       } else {
         if (prevCopies === 0 && m.eksemplarCount > 0) {
-          growthRate = 100;
           growthText = '+100%';
           trend = 'up';
         } else if (prevCopies > 0 && m.eksemplarCount > 0) {
-          growthRate = ((m.eksemplarCount - prevCopies) / prevCopies) * 100;
-          if (growthRate > 0) {
-            growthText = `+${growthRate.toFixed(1)}%`;
-            trend = 'up';
-          } else if (growthRate < 0) {
-            growthText = `${growthRate.toFixed(1)}%`;
-            trend = 'down';
-          } else {
-            growthText = '0%';
-            trend = 'same';
-          }
+          const diff = ((m.eksemplarCount - prevCopies) / prevCopies) * 100;
+          growthRate = diff;
+          growthText = diff > 0 ? `+${diff.toFixed(1)}%` : diff < 0 ? `${diff.toFixed(1)}%` : '0%';
+          trend = diff > 0 ? 'up' : diff < 0 ? 'down' : 'same';
         } else if (prevCopies > 0 && m.eksemplarCount === 0) {
           growthRate = -100;
           growthText = '-100%';
@@ -244,16 +265,101 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
 
       return {
         ...m,
+        cumulative,
         percentShare,
         growthRate,
         growthText,
         trend,
-        cumulative,
         totalYearCopies,
         totalYearJudul
       };
     });
   }, [libraryBooks, selectedYear, isPerpus]);
+
+  // Group books by Class and aggregate copies per subject for the Annual Report
+  const annualClassGroupedBooks = useMemo(() => {
+    if (!isPerpus) return [];
+
+    const classBuckets = [
+      { id: 'Kelas VII', label: 'Kelas VII' },
+      { id: 'Kelas VIII', label: 'Kelas VIII' },
+      { id: 'Kelas IX', label: 'Kelas IX' },
+      { id: 'Kelas VII-IX (Umum)', label: 'Kelas VII - IX (Umum / Bersama)' },
+      { id: 'Guru / Pendidik', label: 'Pegangan Guru / Pendidik' },
+      { id: 'Umum / Referensi', label: 'Referensi, Kamus & Fiksi / Umum' },
+    ];
+
+    const results = classBuckets.map(bucket => {
+      const booksInClass = libraryBooks.filter(book => {
+        const rawKelas = (book.kelas || '').trim().toLowerCase();
+        const rawJudul = (book.judul || '').trim().toLowerCase();
+
+        if (bucket.id === 'Kelas VII') {
+          return rawKelas === 'kelas vii' || rawKelas === 'vii' || rawKelas === '7' ||
+            (/\b(kelas\s*vii|kelas\s*7)\b/i.test(rawJudul) && !/viii|8|ix|9/i.test(rawJudul));
+        }
+        if (bucket.id === 'Kelas VIII') {
+          return rawKelas === 'kelas viii' || rawKelas === 'viii' || rawKelas === '8' ||
+            (/\b(kelas\s*viii|kelas\s*8)\b/i.test(rawJudul) && !/vii\b|7\b|ix|9/i.test(rawJudul));
+        }
+        if (bucket.id === 'Kelas IX') {
+          return rawKelas === 'kelas ix' || rawKelas === 'ix' || rawKelas === '9' ||
+            (/\b(kelas\s*ix|kelas\s*9)\b/i.test(rawJudul) && !/vii\b|7\b|viii|8/i.test(rawJudul));
+        }
+        if (bucket.id === 'Kelas VII-IX (Umum)') {
+          return rawKelas.includes('vii-ix') || rawKelas.includes('7-9') || rawKelas.includes('semua kelas') ||
+            rawJudul.includes('vii-ix') || rawJudul.includes('kelas vii, viii, ix');
+        }
+        if (bucket.id === 'Guru / Pendidik') {
+          return rawKelas.includes('guru') || rawKelas.includes('pendidik') || rawJudul.includes('guru');
+        }
+        // Umum / Referensi
+        const is7 = rawKelas === 'kelas vii' || rawKelas === 'vii' || rawKelas === '7' || /\b(kelas\s*vii|kelas\s*7)\b/i.test(rawJudul);
+        const is8 = rawKelas === 'kelas viii' || rawKelas === 'viii' || rawKelas === '8' || /\b(kelas\s*viii|kelas\s*8)\b/i.test(rawJudul);
+        const is9 = rawKelas === 'kelas ix' || rawKelas === 'ix' || rawKelas === '9' || /\b(kelas\s*ix|kelas\s*9)\b/i.test(rawJudul);
+        const is79 = rawKelas.includes('vii-ix') || rawKelas.includes('7-9');
+        const isGuru = rawKelas.includes('guru') || rawKelas.includes('pendidik');
+        return !is7 && !is8 && !is9 && !is79 && !isGuru;
+      });
+
+      const subjectMap = new Map<string, {
+        judul: string;
+        pengarang: string;
+        kategori: string;
+        ddc: string;
+        totalEksemplar: number;
+      }>();
+
+      booksInClass.forEach(b => {
+        const key = b.judul.trim().toLowerCase();
+        const existing = subjectMap.get(key);
+        const qty = Number(b.jumlah) || 1;
+        if (existing) {
+          existing.totalEksemplar += qty;
+        } else {
+          subjectMap.set(key, {
+            judul: b.judul,
+            pengarang: b.pengarang || b.penulis || '-',
+            kategori: b.statusBuku || b.kategoriBuku || b.kategori || 'Buku Teks',
+            ddc: b.ddcKlasifikasi || b.ddc || '-',
+            totalEksemplar: qty
+          });
+        }
+      });
+
+      const subjects = Array.from(subjectMap.values());
+      const classCopies = subjects.reduce((sum, s) => sum + s.totalEksemplar, 0);
+
+      return {
+        ...bucket,
+        subjects,
+        totalJudul: subjects.length,
+        totalCopies: classCopies
+      };
+    }).filter(bucket => bucket.subjects.length > 0);
+
+    return results;
+  }, [libraryBooks, isPerpus]);
 
   const totalYearAddedCopies = useMemo(() => {
     return monthlyBookAdditionStats.reduce((s, m) => s + m.eksemplarCount, 0);
@@ -688,9 +794,14 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <div className="text-[11px] text-blue-200 font-medium flex items-center gap-1.5">
-                <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Guru (Pendidik)</span>
+              <div className="text-[11px] text-blue-200 font-medium flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Guru (Pendidik)</span>
+                </span>
+                <span className="text-[10px] text-emerald-300 font-mono font-semibold">
+                  L: {libraryMemberStats.guruLaki ?? 10} · P: {libraryMemberStats.guruPerempuan ?? 14}
+                </span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
                 {libraryMemberStats.guruPendidik || 0} <span className="text-xs font-normal text-blue-200">orang</span>
@@ -698,9 +809,14 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             </div>
 
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <div className="text-[11px] text-blue-200 font-medium flex items-center gap-1.5">
-                <Briefcase className="w-3.5 h-3.5 text-amber-400" />
-                <span>Staff (Tendik / TU)</span>
+              <div className="text-[11px] text-blue-200 font-medium flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Staff (Tendik / TU)</span>
+                </span>
+                <span className="text-[10px] text-amber-300 font-mono font-semibold">
+                  L: {libraryMemberStats.staffLaki ?? 5} · P: {libraryMemberStats.staffPerempuan ?? 3}
+                </span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
                 {libraryMemberStats.staffTendik || 0} <span className="text-xs font-normal text-blue-200">orang</span>
@@ -1368,20 +1484,46 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
               </div>
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                  Katalog Lengkap Seluruh Data Buku & Koleksi Perpustakaan Terdata
+                  Katalog Koleksi Buku Perpustakaan Terdata (Tahun Anggaran {selectedYear})
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Laporan inventarisasi tahunan seluruh koleksi bahan pustaka yang tercatat dalam pangkalan data perpustakaan
+                  Laporan inventarisasi tahunan seluruh koleksi bahan pustaka yang tercatat dalam pangkalan data
                 </p>
               </div>
             </div>
 
+            {/* Toggle View & Quick Counts */}
             <div className="flex items-center gap-2 flex-wrap">
+              <div className="bg-slate-100 p-0.5 rounded-lg border border-slate-200 flex items-center text-xs">
+                <button
+                  type="button"
+                  onClick={() => setCatalogViewMode('per_kelas')}
+                  className={`px-3 py-1 rounded-md font-bold transition cursor-pointer ${
+                    catalogViewMode === 'per_kelas'
+                      ? 'bg-white text-blue-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📚 Per Kelas & Mapel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCatalogViewMode('detail')}
+                  className={`px-3 py-1 rounded-md font-bold transition cursor-pointer ${
+                    catalogViewMode === 'detail'
+                      ? 'bg-white text-blue-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📋 Rincian Seluruh Judul
+                </button>
+              </div>
+
               <span className="px-3 py-1 bg-blue-50 text-blue-800 border border-blue-200 text-xs font-bold rounded-lg">
-                {libraryBooks.length} Judul Buku Terdaftar
+                {libraryBooks.length} Judul Terdata
               </span>
               <span className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-lg">
-                {totalAllBookCopies} Total Eksemplar Fisik
+                {totalAllBookCopies} Eksemplar
               </span>
             </div>
           </div>
@@ -1396,7 +1538,71 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
                 Silakan lakukan pendaftaran buku atau gunakan templat impor data otomatis pada menu Buku Perpustakaan.
               </p>
             </div>
+          ) : catalogViewMode === 'per_kelas' ? (
+            /* TAMPILAN PER KELAS & MATA PELAJARAN (SESUAI PERMINTAAN USER) */
+            <div className="space-y-3">
+              <p className="text-xs text-slate-600">
+                Rekapitulasi jumlah buku keseluruhan per kelas sesuai judul mata pelajaran (misal Kelas VII Buku IPA 40 eks, Buku MTK 80 eks, dst):
+              </p>
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3 text-center w-12 border-r border-slate-200">No</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200">Mata Pelajaran / Judul Koleksi Buku</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200">DDC & Kategori</th>
+                      <th className="py-2.5 px-3 text-center font-bold">Jumlah Eksemplar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {annualClassGroupedBooks.map((clsGroup) => (
+                      <React.Fragment key={clsGroup.id}>
+                        {/* Header Per Kelas */}
+                        <tr className="bg-slate-50 border-t-2 border-b border-slate-200 font-bold">
+                          <td colSpan={3} className="py-2 px-3 text-slate-900 border-r border-slate-200">
+                            <span className="text-indigo-900 font-black uppercase text-xs">📚 {clsGroup.label}</span>
+                            <span className="text-slate-500 text-[11px] font-normal ml-2">({clsGroup.totalJudul} Judul Mata Pelajaran)</span>
+                          </td>
+                          <td className="py-2 px-3 text-center font-mono font-black text-blue-900 bg-blue-50/60">
+                            Subtotal: {clsGroup.totalCopies} eks
+                          </td>
+                        </tr>
+
+                        {/* List Judul Buku Dalam Kelas Ini */}
+                        {clsGroup.subjects.map((sub, sIdx) => (
+                          <tr key={sIdx} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-2 px-3 text-center font-mono text-slate-400 text-[11px] border-r border-slate-100">
+                              {sIdx + 1}
+                            </td>
+                            <td className="py-2 px-3 font-semibold text-slate-900 border-r border-slate-100">
+                              {sub.judul}
+                            </td>
+                            <td className="py-2 px-3 text-slate-600 border-r border-slate-100">
+                              <span className="font-mono text-xs text-blue-800">{sub.ddc}</span> · <span className="text-[11px] uppercase font-medium">{sub.kategori}</span>
+                            </td>
+                            <td className="py-2 px-3 text-center font-bold font-mono text-slate-900">
+                              {sub.totalEksemplar} eks
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
+                    <tr>
+                      <td colSpan={3} className="py-3 px-4 text-right uppercase text-xs border-r border-slate-200">
+                        TOTAL SELURUH KOLEKSI BUKU PERPUSTAKAAN:
+                      </td>
+                      <td className="py-3 px-3 text-center font-mono text-emerald-900 font-black text-sm">
+                        {totalAllBookCopies} eks
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
           ) : (
+            /* TABEL DETAIL SEMUA JUDUL */
             <div className="overflow-x-auto border border-slate-200 rounded-xl">
               <table className="w-full text-left border-collapse text-xs">
                 <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
@@ -1424,11 +1630,11 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-slate-700">
-                        <span>{b.pengarang || '-'}</span>
+                        <span>{b.pengarang || b.penulis || '-'}</span>
                         {b.penerbit && <span className="block text-[10.5px] text-slate-500">{b.penerbit}</span>}
                       </td>
                       <td className="py-2.5 px-3 text-slate-800 font-semibold">{b.kelas || '-'}</td>
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-blue-700 font-medium">{b.ddcKlasifikasi || '-'}</td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-blue-700 font-medium">{b.ddcKlasifikasi || b.ddc || '-'}</td>
                       <td className="py-2.5 px-3">
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-800 border border-slate-200">
                           {b.statusBuku || b.kategori || 'umum'}
@@ -1454,7 +1660,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
                     <td colSpan={8} className="py-2.5 px-3 text-right text-xs uppercase">
                       Total Seluruh Koleksi Buku Terdata:
                     </td>
-                    <td className="py-2.5 px-3 text-center text-xs font-mono text-blue-900">
+                    <td className="py-2.5 px-3 text-center text-xs font-mono text-blue-900 font-black">
                       {totalAllBookCopies} eks
                     </td>
                     <td></td>

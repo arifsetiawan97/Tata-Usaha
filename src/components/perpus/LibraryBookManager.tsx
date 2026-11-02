@@ -81,6 +81,52 @@ export const detectDdcFromTitle = (title: string): string => {
   return '000 - Karya Umum, Komputer & Informasi';
 };
 
+// Helper to reliably match book classes across variations (Kelas VII, Kelas VIII, Kelas IX, etc.)
+export const matchBookClass = (book: LibraryBookItem, selectedClass: string): boolean => {
+  if (!selectedClass || selectedClass === 'all') return true;
+
+  const rawKelas = (book.kelas || '').trim();
+  const rawJudul = (book.judul || '').trim();
+  const rawStatus = (book.statusBuku || '').trim();
+  const rawKategori = (book.kategoriBuku || book.kategori || '').trim();
+  const combined = `${rawKelas} ${rawJudul} ${rawStatus} ${rawKategori}`.toLowerCase();
+
+  if (selectedClass === 'Kelas VII') {
+    if (combined.includes('vii-ix') || combined.includes('7-9') || combined.includes('7 - 9')) {
+      return false;
+    }
+    return /\b(kelas\s*vii|kelas\s*7|\bvii\b|\b7\b)\b/i.test(rawKelas) ||
+           /\b(kelas\s*vii|kelas\s*7)\b/i.test(rawJudul);
+  }
+
+  if (selectedClass === 'Kelas VIII') {
+    return /\b(kelas\s*viii|kelas\s*8|\bviii\b|\b8\b)\b/i.test(rawKelas) ||
+           /\b(kelas\s*viii|kelas\s*8)\b/i.test(rawJudul);
+  }
+
+  if (selectedClass === 'Kelas IX') {
+    if (combined.includes('vii-ix') || combined.includes('7-9') || combined.includes('7 - 9')) {
+      return false;
+    }
+    return /\b(kelas\s*ix|kelas\s*9|\bix\b|\b9\b)\b/i.test(rawKelas) ||
+           /\b(kelas\s*ix|kelas\s*9)\b/i.test(rawJudul);
+  }
+
+  if (selectedClass === 'Kelas VII-IX (Umum)') {
+    return combined.includes('vii-ix') || combined.includes('7-9') || combined.includes('7 - 9') || combined.includes('semua kelas');
+  }
+
+  if (selectedClass === 'Guru / Pendidik') {
+    return combined.includes('guru') || combined.includes('pendidik') || combined.includes('panduan guru') || rawStatus === 'guru';
+  }
+
+  if (selectedClass === 'Umum / Referensi') {
+    return combined.includes('referensi') || combined.includes('kamus') || combined.includes('ensiklopedia') || combined.includes('umum') || rawStatus === 'referensi' || rawStatus === 'umum';
+  }
+
+  return rawKelas.toLowerCase() === selectedClass.toLowerCase();
+};
+
 export const LibraryBookManager: React.FC = () => {
   const { 
     libraryBooks, 
@@ -99,6 +145,11 @@ export const LibraryBookManager: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [classFilter, setClassFilter] = useState<string>('all');
+
+  // Print Document Options States (Tahun Beli, Tanggal Masuk, Berita Acara, Katalog Lengkap)
+  const [printDocType, setPrintDocType] = useState<'berita_acara' | 'tahun_beli' | 'tanggal_masuk' | 'katalog_lengkap'>('berita_acara');
+  const [printYearFilter, setPrintYearFilter] = useState<string>('all');
+  const [printDateFilter, setPrintDateFilter] = useState<string>('');
 
   // Bulk Selection States
   const [selectedBookIds, setSelectedBookIds] = useState<string[]>([]);
@@ -235,14 +286,60 @@ export const LibraryBookManager: React.FC = () => {
         if (book.sumberPengadaan !== sourceFilter) return false;
       }
 
-      // Class filter
+      // Class filter with robust intelligent matching (Kelas VII, VIII, IX, VII-IX, Guru, Umum)
       if (classFilter !== 'all') {
-        if (book.kelas !== classFilter) return false;
+        if (!matchBookClass(book, classFilter)) return false;
       }
 
       return true;
     });
   }, [libraryBooks, selectedMonth, searchQuery, categoryFilter, sourceFilter, classFilter]);
+
+  // Available Purchase Years in Books
+  const availablePurchaseYears = useMemo(() => {
+    const years = new Set<string>();
+    libraryBooks.forEach(b => {
+      const y = b.tahunPengadaan || b.tahunBeli || (b.tanggalMasuk ? b.tanggalMasuk.split('-')[0] : b.tahunTerbit);
+      if (y) years.add(String(y));
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [libraryBooks]);
+
+  // Filtered Books specifically for the Print Document Options Modal
+  const printBooks = useMemo(() => {
+    return libraryBooks.filter(book => {
+      // 1. Tahun Beli Filter
+      if (printDocType === 'tahun_beli' && printYearFilter !== 'all') {
+        const y = String(book.tahunPengadaan || book.tahunBeli || (book.tanggalMasuk ? book.tanggalMasuk.split('-')[0] : book.tahunTerbit));
+        if (y !== printYearFilter) return false;
+      }
+
+      // 2. Tanggal Masuk Filter
+      if (printDocType === 'tanggal_masuk' && printDateFilter.trim()) {
+        const tm = book.tanggalMasuk || '';
+        if (!tm.startsWith(printDateFilter.trim())) return false;
+      }
+
+      // 3. Berita Acara (Month Filter)
+      if (printDocType === 'berita_acara' && selectedMonth !== 'all') {
+        const bookMonth = getBookMonthKey(book);
+        if (bookMonth !== selectedMonth) return false;
+      }
+
+      return true;
+    });
+  }, [libraryBooks, printDocType, printYearFilter, printDateFilter, selectedMonth]);
+
+  const printViewStats = useMemo(() => {
+    const totalTitles = printBooks.length;
+    const totalCopies = printBooks.reduce((sum, b) => sum + (Number(b.jumlah) || 0), 0);
+    const totalValue = printBooks.reduce((sum, b) => {
+      const price = Number(b.hargaSatuan) || 0;
+      const qty = Number(b.jumlah) || 0;
+      return sum + (price * qty);
+    }, 0);
+    return { totalTitles, totalCopies, totalValue };
+  }, [printBooks]);
 
   // Statistics for Current View
   const currentViewStats = useMemo(() => {
@@ -278,6 +375,7 @@ export const LibraryBookManager: React.FC = () => {
       penulis: '',
       penerbit: '',
       tahunTerbit: currentYear,
+      tahunBeli: currentYear,
       isbn: '',
       kelas: 'Kelas VII',
       statusBuku: 'siswa',
@@ -285,12 +383,12 @@ export const LibraryBookManager: React.FC = () => {
       kategoriBuku: 'Buku Teks Utama',
       sumberPengadaan: 'BOS Reguler',
       tanggalMasuk: currentMonth,
-      jumlah: 1,
-      jumlahTersedia: 1,
+      jumlah: 30,
+      jumlahTersedia: 30,
       hargaSatuan: 0,
-      lokasiRak: 'Rak Teks Utama A-01',
+      lokasiRak: 'Ruang Perpustakaan',
       kondisi: 'Baik',
-      keterangan: 'Pengadaan baru buku perpustakaan'
+      keterangan: ''
     });
     setIsAddModalOpen(true);
   };
@@ -310,7 +408,8 @@ export const LibraryBookManager: React.FC = () => {
       penulis: formData.penulis?.trim() || 'Tim Penyusun',
       penerbit: formData.penerbit?.trim() || 'Kemendikbudristek',
       tahunTerbit: Number(formData.tahunTerbit) || yearNum,
-      isbn: formData.isbn?.trim() || '',
+      tahunBeli: yearNum,
+      isbn: '',
       kelas: formData.kelas || 'Umum',
       statusBuku: formData.statusBuku || 'siswa',
       ddcKlasifikasi: formData.ddcKlasifikasi || '000 - Karya Umum, Komputer & Informasi',
@@ -323,9 +422,9 @@ export const LibraryBookManager: React.FC = () => {
       jumlahTersedia: Number(formData.jumlahTersedia) || Number(formData.jumlah) || 1,
       hargaSatuan: Number(formData.hargaSatuan) || 0,
       totalHarga: (Number(formData.hargaSatuan) || 0) * (Number(formData.jumlah) || 1),
-      lokasiRak: formData.lokasiRak || 'Rak Koleksi',
+      lokasiRak: 'Ruang Perpustakaan',
       kondisi: formData.kondisi || 'Baik',
-      keterangan: formData.keterangan || ''
+      keterangan: ''
     });
 
     setIsAddModalOpen(false);
@@ -358,6 +457,7 @@ export const LibraryBookManager: React.FC = () => {
       tanggalMasuk: tgl,
       bulanPengadaan: monthKey,
       tahunPengadaan: yearNum,
+      tahunBeli: yearNum,
       jumlah: Number(formData.jumlah) || 1,
       jumlahTersedia: Number(formData.jumlahTersedia) || Number(formData.jumlah) || 1,
       hargaSatuan: Number(formData.hargaSatuan) || 0,
@@ -427,20 +527,20 @@ export const LibraryBookManager: React.FC = () => {
   const handleDownloadCsvTemplate = () => {
     const headers = [
       'Kode Buku',
-      'Judul Buku',
+      'Judul Buku *',
       'Kelas',
       'Penulis / Pengarang',
       'Penerbit',
       'Tahun Terbit',
-      'ISBN',
+      'Tahun Pembelian',
+      'Tanggal Masuk (YYYY-MM-DD)',
       'DDC Klasifikasi',
       'Kategori Buku',
       'Status Buku (siswa/guru/referensi/umum)',
       'Sumber Pengadaan',
-      'Jumlah Eksemplar',
+      'Jumlah Eksemplar *',
       'Harga Satuan (Rp)',
-      'Lokasi Rak',
-      'Keterangan'
+      'Kondisi'
     ];
     const sampleRows = [
       [
@@ -450,15 +550,15 @@ export const LibraryBookManager: React.FC = () => {
         'Maresha Caroline Wijanto, dkk.',
         'Pusat Perbukuan Kemdikbudristek',
         '2024',
-        '978-602-244-428-2',
+        '2026',
+        '2026-08-10',
         '000 - Karya Umum, Komputer & Informasi',
         'Buku Teks Utama',
         'siswa',
         'BOS Reguler',
         '60',
         '32000',
-        'Rak Teks Utama A-01',
-        'Pengadaan Semester 1 Kurikulum Merdeka'
+        'Baik'
       ],
       [
         'BK-2026-002',
@@ -467,15 +567,15 @@ export const LibraryBookManager: React.FC = () => {
         'Rakhma Subarna, dkk.',
         'Pusat Perbukuan Kemdikbudristek',
         '2024',
-        '978-602-244-300-1',
+        '2026',
+        '2026-08-10',
         '400 - Bahasa (Indonesia, Inggris, Arab, Daerah)',
         'Buku Teks Utama',
         'siswa',
         'BOS Reguler',
         '60',
         '28500',
-        'Rak Teks Utama A-02',
-        'Pengadaan Pelajaran Bahasa'
+        'Baik'
       ],
       [
         'BK-2026-003',
@@ -484,15 +584,15 @@ export const LibraryBookManager: React.FC = () => {
         'Tim Gakko Tosho',
         'Pusat Perbukuan Kemdikbudristek',
         '2024',
-        '978-602-244-515-9',
+        '2026',
+        '2026-09-05',
         '500 - Sains Murni, IPA, Matematika & Biologi',
         'Buku Teks Utama',
         'siswa',
         'BOS Reguler',
         '60',
         '33000',
-        'Rak Teks Utama A-03',
-        'Pengadaan Buku Pembelajaran Sains'
+        'Baik'
       ],
       [
         'BK-2026-004',
@@ -501,15 +601,15 @@ export const LibraryBookManager: React.FC = () => {
         'Zaim Uchrowi, dkk.',
         'Pusat Perbukuan Kemdikbudristek',
         '2024',
-        '978-602-244-312-4',
+        '2026',
+        '2026-09-12',
         '300 - Ilmu Sosial, Kebijakan, Hukum & Pendidikan',
         'Buku Guru',
         'guru',
         'BOS Kinerja',
         '5',
         '45000',
-        'Rak Referensi Guru G-01',
-        'Pegangan Guru Pengampu'
+        'Baik'
       ],
       [
         'BK-2026-005',
@@ -518,15 +618,15 @@ export const LibraryBookManager: React.FC = () => {
         'Tere Liye',
         'Gramedia Pustaka Utama',
         '2023',
-        '978-602-065-214-3',
+        '2026',
+        '2026-10-02',
         '800 - Sastra, Puisi, Prosa, Fiksi & Cerita',
         'Fiksi / Cerita',
         'umum',
         'BOS Kinerja',
         '15',
         '65000',
-        'Rak Fiksi Novel B-01',
-        'Koleksi Pengayaan Literasi Siswa'
+        'Baik'
       ],
       [
         'BK-2026-006',
@@ -535,15 +635,15 @@ export const LibraryBookManager: React.FC = () => {
         'Tim Peneliti LIPI',
         'Balai Pustaka',
         '2023',
-        '978-979-083-441-2',
+        '2026',
+        '2026-10-18',
         '500 - Sains Murni, IPA, Matematika & Biologi',
         'Kamus & Ensiklopedia',
         'referensi',
         'Hibah / Bantuan',
         '8',
         '125000',
-        'Rak Referensi C-01',
-        'Koleksi Rujukan Perpustakaan'
+        'Baik'
       ]
     ];
 
@@ -772,14 +872,32 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
     }
   };
 
-  // Download Standalone Berita Acara File (.doc / HTML document)
+  // Download Standalone Document File (.doc / HTML document)
   const handleDownloadBeritaAcaraDoc = () => {
     const monthLabel = formatMonthLabel(selectedMonth);
+    const docTitle = 
+      printDocType === 'berita_acara'
+        ? `BERITA ACARA PENERIMAAN & PENGADAAN BUKU PERPUSTAKAAN`
+        : printDocType === 'tahun_beli'
+        ? `LAPORAN INVENTARIS BUKU BERDASARKAN TAHUN PEMBELIAN ${printYearFilter !== 'all' ? printYearFilter : 'KESELURUHAN'}`
+        : printDocType === 'tanggal_masuk'
+        ? `LAPORAN PENERIMAAN BUKU PERPUSTAKAAN TANGGAL ${printDateFilter || 'SEMUA TANGGAL'}`
+        : `KATALOG LENGKAP BUKU INVENTARIS PERPUSTAKAAN SEKOLAH`;
+
+    const docSubTitle = 
+      printDocType === 'berita_acara'
+        ? `Nomor: 421.2/BA-BUKU/${selectedMonth !== 'all' ? selectedMonth.replace('-', '/') : new Date().getFullYear()}/PERPUS<br>Periode Pengadaan: <b>${monthLabel}</b>`
+        : printDocType === 'tahun_beli'
+        ? `Tahun Anggaran / Pembelian: <b>${printYearFilter !== 'all' ? printYearFilter : 'Semua Tahun'}</b> · Total: <b>${printBooks.length} Judul (${printViewStats.totalCopies} Eks)</b>`
+        : printDocType === 'tanggal_masuk'
+        ? `Tanggal Masuk Tercatat: <b>${printDateFilter || 'Semua Tanggal'}</b> · Total: <b>${printBooks.length} Judul (${printViewStats.totalCopies} Eks)</b>`
+        : `Koleksi Terdata Keseluruhan · Total: <b>${printBooks.length} Judul (${printViewStats.totalCopies} Eks)</b>`;
+
     const docHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
         <meta charset='utf-8'>
-        <title>Berita Acara Pengadaan Buku - ${monthLabel}</title>
+        <title>${docTitle}</title>
         <style>
           body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 20mm; }
           .header-table { width: 100%; border-bottom: 3px double #000; padding-bottom: 8px; margin-bottom: 16px; text-align: center; }
@@ -811,13 +929,13 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
           </tr>
         </table>
 
-        <div class="title">BERITA ACARA PENERIMAAN & PENGADAAN BUKU PERPUSTAKAAN</div>
-        <div class="subtitle">Nomor: 421.2/BA-BUKU/${selectedMonth !== 'all' ? selectedMonth.replace('-', '/') : new Date().getFullYear()}/PERPUS<br>Periode Pengadaan: <b>${monthLabel}</b></div>
+        <div class="title">${docTitle}</div>
+        <div class="subtitle">${docSubTitle}</div>
 
         <p style="text-align: justify;">
           Pada hari ini, bertempat di Ruang Perpustakaan <b>${schoolConfig.namaSekolah}</b>, 
-          telah dilaksanakan penerimaan, verifikasi fisik, klasifikasi DDC, dan inventarisasi buku-buku baru 
-          hasil belanja pengadaan sekolah dengan rincian sebagai berikut:
+          telah dilaksanakan verifikasi fisik, penatausahaan nomor inventaris, klasifikasi DDC, dan pemeriksaan koleksi buku 
+          hasil pengadaan sekolah dengan rincian sebagai berikut:
         </p>
 
         <table class="data">
@@ -829,13 +947,14 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
               <th>Kelas</th>
               <th>DDC</th>
               <th>Kategori</th>
+              <th>Tahun/Tgl Beli</th>
               <th>Sumber Dana</th>
               <th style="width: 60px;">Eksemplar</th>
               <th>Total Nilai</th>
             </tr>
           </thead>
           <tbody>
-            ${filteredBooks.map((b, i) => `
+            ${printBooks.map((b, i) => `
               <tr>
                 <td style="text-align: center;">${i + 1}</td>
                 <td><b>${b.kodeBuku}</b></td>
@@ -843,6 +962,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                 <td>${b.kelas || '-'}</td>
                 <td>${b.ddcKlasifikasi || b.ddc || '-'}</td>
                 <td>${b.kategoriBuku || b.kategori || 'Buku Teks'}</td>
+                <td>${b.tahunPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 4) : b.tahunTerbit)}</td>
                 <td>${b.sumberPengadaan || 'BOS Reguler'}</td>
                 <td style="text-align: center; font-weight: bold;">${b.jumlah}</td>
                 <td style="text-align: right;">${(Number(b.hargaSatuan) || 0) * (Number(b.jumlah) || 1) > 0 ? `Rp ${((Number(b.hargaSatuan) || 0) * (Number(b.jumlah) || 1)).toLocaleString('id-ID')}` : '-'}</td>
@@ -851,23 +971,23 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
           </tbody>
           <tfoot>
             <tr style="font-weight: bold; background-color: #f2f2f2;">
-              <td colspan="7" style="text-align: right;">TOTAL KESELURUHAN PENGADAAN:</td>
-              <td style="text-align: center;">${currentViewStats.totalCopies} eks</td>
-              <td style="text-align: right;">Rp ${currentViewStats.totalValue.toLocaleString('id-ID')}</td>
+              <td colspan="8" style="text-align: right;">TOTAL KESELURUHAN:</td>
+              <td style="text-align: center;">${printViewStats.totalCopies} eks</td>
+              <td style="text-align: right;">Rp ${printViewStats.totalValue.toLocaleString('id-ID')}</td>
             </tr>
           </tfoot>
         </table>
 
         <p style="text-align: justify;">
           Seluruh koleksi buku sebagaimana tercantum di atas telah diperiksa dalam kondisi <b>Baik</b>, 
-          telah dicatat dalam Buku Induk Inventaris Perpustakaan, serta siap dipergunakan untuk menunjang kegiatan pembelajaran siswa dan pendidik.
+          telah dicatat dalam Buku Induk Inventaris Perpustakaan, distempel resmi kepemilikan sekolah, serta siap dipergunakan untuk menunjang kegiatan pembelajaran siswa dan pendidik.
         </p>
 
         <!-- Lembar Pengesahan: Kepala Sekolah di Kiri, Pengelola di Kanan Sesuai Permintaan User -->
         <table class="signatures">
           <tr>
             <td>
-              <div>Mengetahui,</div>
+              <div>Mengetahui / Mengesahkan,</div>
               <div style="font-weight: bold; margin-top: 2px;">Kepala Sekolah</div>
               <div style="height: 65px;"></div>
               <div style="font-weight: bold; text-decoration: underline;">${kepalaSekolahName}</div>
@@ -890,7 +1010,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Berita_Acara_Pengadaan_Buku_${selectedMonth !== 'all' ? selectedMonth : 'Semua'}_${new Date().toISOString().split('T')[0]}.doc`;
+    link.download = `Dokumen_Perpustakaan_${printDocType}_${new Date().toISOString().split('T')[0]}.doc`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -937,7 +1057,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
             <p className="text-emerald-100/80 text-sm max-w-2xl">
               Pemisah buku masuk per bulan untuk memonitor buku baru yang dibeli sekolah, 
               dilengkapi template impor otomatis, klasifikasi DDC cerdas, revisi edit/hapus, 
-              serta cetak Berita Acara resmi dengan upload logo kop kiri & kanan.
+              serta pilihan cetak berdasarkan tahun beli, tanggal masuk, dan Berita Acara resmi.
             </p>
           </div>
 
@@ -976,13 +1096,14 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
               <span>Tambah Buku</span>
             </button>
 
-            {/* Cetak Berita Acara */}
+            {/* Pilihan Cetak Dokumen & Berita Acara */}
             <button
               onClick={() => setIsReportModalOpen(true)}
               className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white font-medium rounded-xl text-xs sm:text-sm flex items-center gap-2 backdrop-blur-sm border border-white/20 transition cursor-pointer"
+              title="Pilihan cetak dokumen perpustakaan: Berdasarkan Tahun Beli, Tanggal Masuk, Dokumen Berita Acara, & Katalog Lengkap"
             >
-              <Printer className="w-4 h-4" />
-              <span>Berita Acara Pengadaan</span>
+              <Printer className="w-4 h-4 text-emerald-300" />
+              <span>Pilihan Cetak Dokumen</span>
             </button>
           </div>
         </div>
@@ -1247,7 +1368,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                     />
                   </th>
                   <th className="py-3 px-2 w-8 text-center">No</th>
-                  <th className="py-3 px-3">Kode & ISBN</th>
+                  <th className="py-3 px-3">Kode Buku</th>
                   <th className="py-3 px-4 min-w-[220px]">Judul Buku & Penulis</th>
                   <th className="py-3 px-3 text-center">Kelas</th>
                   <th className="py-3 px-3">Kategori & DDC</th>
@@ -1255,7 +1376,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                   <th className="py-3 px-3">Sumber Dana</th>
                   <th className="py-3 px-3 text-center">Eksemplar</th>
                   <th className="py-3 px-3 text-right">Harga Satuan</th>
-                  <th className="py-3 px-3">Rak</th>
+                  <th className="py-3 px-3 text-center">Peruntukan</th>
                   <th className="py-3 px-3 text-center w-24">Aksi</th>
                 </tr>
               </thead>
@@ -1276,11 +1397,6 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                       <span className="font-mono font-semibold text-emerald-800 block text-[11px]">
                         {book.kodeBuku}
                       </span>
-                      {book.isbn && (
-                        <span className="text-[10px] text-slate-400 block font-mono">
-                          {book.isbn}
-                        </span>
-                      )}
                     </td>
                     <td className="py-3 px-4">
                       <span className="font-semibold text-slate-800 block text-xs leading-snug">
@@ -1336,9 +1452,9 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                         <span className="text-slate-400 italic text-[11px]">-</span>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-slate-600">
-                      <span className="text-[11px] bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
-                        {book.lokasiRak || 'Rak Perpustakaan'}
+                    <td className="py-3 px-3 text-center">
+                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                        {book.statusBuku || 'siswa'}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-center">
@@ -1486,9 +1602,9 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                           <th className="py-2 px-2.5">Judul Buku</th>
                           <th className="py-2 px-2.5">Kelas</th>
                           <th className="py-2 px-2.5">DDC</th>
-                          <th className="py-2 px-2.5">Kategori</th>
+                          <th className="py-2 px-2.5 text-center">Tahun Beli / Masuk</th>
+                          <th className="py-2 px-2.5">Sumber Dana</th>
                           <th className="py-2 px-2.5 text-center">Eks</th>
-                          <th className="py-2 px-2.5">Lokasi Rak</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1501,9 +1617,12 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                             </td>
                             <td className="py-1.5 px-2.5 text-slate-600">{b.kelas}</td>
                             <td className="py-1.5 px-2.5 text-teal-800 font-mono text-[10px]">{b.ddcKlasifikasi}</td>
-                            <td className="py-1.5 px-2.5 text-slate-600">{b.kategoriBuku}</td>
+                            <td className="py-1.5 px-2.5 text-center text-slate-700 font-mono text-[11px]">
+                              <span className="font-bold">{b.tahunPengadaan || b.tahunBeli || '-'}</span>
+                              <span className="block text-[10px] text-slate-400">{b.tanggalMasuk || '-'}</span>
+                            </td>
+                            <td className="py-1.5 px-2.5 text-slate-600">{b.sumberPengadaan}</td>
                             <td className="py-1.5 px-2.5 text-center font-bold text-slate-800">{b.jumlah}</td>
-                            <td className="py-1.5 px-2.5 text-slate-500">{b.lokasiRak}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1618,29 +1737,16 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
             </div>
 
             <form onSubmit={handleSaveNewBook} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Kode Buku / Inventaris *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.kodeBuku || ''}
-                    onChange={e => setFormData({ ...formData, kodeBuku: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
-                    placeholder="Contoh: BK-2026-009"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Nomor ISBN (Opsional)</label>
-                  <input
-                    type="text"
-                    value={formData.isbn || ''}
-                    onChange={e => setFormData({ ...formData, isbn: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
-                    placeholder="Contoh: 978-602-244-301-8"
-                  />
-                </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Kode Buku / Inventaris *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.kodeBuku || ''}
+                  onChange={e => setFormData({ ...formData, kodeBuku: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
+                  placeholder="Contoh: BK-2026-009"
+                />
               </div>
 
               {/* Judul Buku + Auto DDC */}
@@ -1787,7 +1893,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Tahun / Tgl Beli *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Tahun Pembelian / Tanggal Masuk *</label>
                   <input
                     type="date"
                     required
@@ -1828,39 +1934,15 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Harga Satuan (Rp)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.hargaSatuan || 0}
-                    onChange={e => setFormData({ ...formData, hargaSatuan: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Contoh: 35000"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Lokasi Rak Simpan</label>
-                  <input
-                    type="text"
-                    value={formData.lokasiRak || ''}
-                    onChange={e => setFormData({ ...formData, lokasiRak: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Contoh: Rak Teks Utama A-01"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Keterangan Pengadaan</label>
-                <textarea
-                  rows={2}
-                  value={formData.keterangan || ''}
-                  onChange={e => setFormData({ ...formData, keterangan: e.target.value })}
+                <label className="block font-semibold text-slate-700 mb-1">Harga Satuan (Rp)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.hargaSatuan || 0}
+                  onChange={e => setFormData({ ...formData, hargaSatuan: parseInt(e.target.value, 10) || 0 })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Keterangan peruntukan, kondisi, atau nomor nota belanja..."
+                  placeholder="Contoh: 35000"
                 />
               </div>
 
@@ -1905,27 +1987,15 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
             </div>
 
             <form onSubmit={handleSaveEditBook} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Kode Buku / Inventaris *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.kodeBuku || ''}
-                    onChange={e => setFormData({ ...formData, kodeBuku: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Nomor ISBN</label>
-                  <input
-                    type="text"
-                    value={formData.isbn || ''}
-                    onChange={e => setFormData({ ...formData, isbn: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
-                  />
-                </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Kode Buku / Inventaris *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.kodeBuku || ''}
+                  onChange={e => setFormData({ ...formData, kodeBuku: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
               </div>
 
               <div>
@@ -2052,7 +2122,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Tahun / Tgl Beli *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Tahun Pembelian / Tanggal Masuk *</label>
                   <input
                     type="date"
                     required
@@ -2093,35 +2163,13 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Harga Satuan (Rp)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.hargaSatuan || 0}
-                    onChange={e => setFormData({ ...formData, hargaSatuan: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Lokasi Rak Simpan</label>
-                  <input
-                    type="text"
-                    value={formData.lokasiRak || ''}
-                    onChange={e => setFormData({ ...formData, lokasiRak: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Catatan Revisi / Keterangan</label>
-                <textarea
-                  rows={2}
-                  value={formData.keterangan || ''}
-                  onChange={e => setFormData({ ...formData, keterangan: e.target.value })}
+                <label className="block font-semibold text-slate-700 mb-1">Harga Satuan (Rp)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.hargaSatuan || 0}
+                  onChange={e => setFormData({ ...formData, hargaSatuan: parseInt(e.target.value, 10) || 0 })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
@@ -2189,7 +2237,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
         </div>
       )}
 
-      {/* MODAL: BERITA ACARA PENGADAAN BUKU DENGAN UPLOAD LOGO KIRI & KANAN, LEMBAR PENGESAHAN DITUKAR (KEPSEK KIRI, PENGELOLA KANAN), CETAK LANGSUNG & DOWNLOAD FILE */}
+      {/* MODAL: PILIHAN CETAK DOKUMEN BUKU PERPUSTAKAAN (BERITA ACARA, TAHUN BELI, TANGGAL MASUK, KATALOG LENGKAP) */}
       {isReportModalOpen && (
         <div 
           className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4"
@@ -2197,84 +2245,211 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
             if (e.target === e.currentTarget) setIsReportModalOpen(false);
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden relative animate-scaleIn">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[94vh] flex flex-col overflow-hidden relative animate-scaleIn">
             {/* Floating Top-Right Close Button (Always visible on any scroll) */}
             <button
               type="button"
               onClick={() => setIsReportModalOpen(false)}
               className="absolute top-3 right-3 z-40 p-2 bg-slate-800 hover:bg-rose-600 text-white rounded-full transition-colors shadow-lg no-print cursor-pointer"
-              title="Tutup Berita Acara (Esc)"
-              aria-label="Tutup Berita Acara"
+              title="Tutup (Esc)"
+              aria-label="Tutup Pratinjau Dokumen"
             >
               <X className="w-4 h-4" />
             </button>
 
-            {/* Modal Controls Top Bar (Pinned Sticky) */}
-            <div className="shrink-0 p-3 sm:p-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2.5 no-print pr-14 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-emerald-400" />
-                <div>
-                  <h3 className="font-bold text-sm">Berita Acara Penerimaan & Pengadaan Buku</h3>
-                  <span className="text-xs text-slate-400">Periode: {formatMonthLabel(selectedMonth)}</span>
+            {/* Modal Header & Controls Bar (Sticky No-Print) */}
+            <div className="shrink-0 p-3 sm:p-4 bg-slate-900 text-white border-b border-slate-800 no-print pr-14 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-emerald-400" />
+                  <div>
+                    <h3 className="font-bold text-sm">Pilihan Cetak Dokumen Buku Perpustakaan</h3>
+                    <p className="text-[11px] text-slate-400">
+                      Pilih format dokumen resmi, sesuaikan filter tanggal/tahun, cetak langsung atau unduh berkas (.doc)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Main Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Upload Logo Kiri */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputKiriRef.current?.click()}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition border border-slate-700 cursor-pointer"
+                    title="Upload logo instansi / Pemda di sebelah kiri kop surat"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Logo Kiri</span>
+                  </button>
+
+                  {/* Upload Logo Kanan */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputKananRef.current?.click()}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition border border-slate-700 cursor-pointer"
+                    title="Upload logo sekolah / Tut Wuri di sebelah kanan kop surat"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-sky-300" />
+                    <span>Logo Kanan</span>
+                  </button>
+
+                  {/* Download Doc */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadBeritaAcaraDoc}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
+                    title="Download berkas sebagai dokumen (.doc)"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download (.doc)</span>
+                  </button>
+
+                  {/* Cetak Langsung */}
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
+                    title="Cetak langsung dokumen ke printer atau PDF"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Langsung</span>
+                  </button>
+
+                  {/* Tutup */}
+                  <button
+                    type="button"
+                    onClick={() => setIsReportModalOpen(false)}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Tutup</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Upload Logo Kiri, Upload Logo Kanan, Download File, Cetak Langsung, Tutup */}
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Upload Logo Kiri */}
-                <button
-                  type="button"
-                  onClick={() => fileInputKiriRef.current?.click()}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition border border-slate-700 cursor-pointer"
-                  title="Upload logo instansi / Pemda di sebelah kiri surat"
-                >
-                  <Upload className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Logo Kiri</span>
-                </button>
+              {/* Document Selection Tabs & Filter Controls */}
+              <div className="bg-slate-800/80 p-2.5 rounded-xl flex flex-wrap items-center justify-between gap-3 border border-slate-700">
+                {/* 4 Pilihan Cetak Dokumen */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPrintDocType('berita_acara')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                      printDocType === 'berita_acara'
+                        ? 'bg-emerald-600 text-white shadow'
+                        : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Berita Acara Pengadaan</span>
+                  </button>
 
-                {/* Upload Logo Kanan */}
-                <button
-                  type="button"
-                  onClick={() => fileInputKananRef.current?.click()}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition border border-slate-700 cursor-pointer"
-                  title="Upload logo sekolah / Tut Wuri di sebelah kanan surat"
-                >
-                  <Upload className="w-3.5 h-3.5 text-sky-300" />
-                  <span>Logo Kanan</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintDocType('tahun_beli')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                      printDocType === 'tahun_beli'
+                        ? 'bg-blue-600 text-white shadow'
+                        : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Berdasarkan Tahun Beli</span>
+                  </button>
 
-                {/* Download File */}
-                <button
-                  type="button"
-                  onClick={handleDownloadBeritaAcaraDoc}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
-                  title="Download berkas Berita Acara sebagai dokumen (.doc)"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download (.doc)</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintDocType('tanggal_masuk')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                      printDocType === 'tanggal_masuk'
+                        ? 'bg-purple-600 text-white shadow'
+                        : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Berdasarkan Tanggal Masuk</span>
+                  </button>
 
-                {/* Cetak Langsung */}
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
-                  title="Cetak langsung dokumen ke printer atau simpan PDF"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak Langsung</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintDocType('katalog_lengkap')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                      printDocType === 'katalog_lengkap'
+                        ? 'bg-amber-600 text-white shadow'
+                        : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Katalog Lengkap Seluruh Koleksi</span>
+                  </button>
+                </div>
 
-                {/* Prominent Red Tutup Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsReportModalOpen(false)}
-                  className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
-                  title="Tutup Berita Acara (Esc)"
-                >
-                  <X className="w-4 h-4" />
-                  <span>Tutup</span>
-                </button>
+                {/* Sub-filter based on selected document type */}
+                <div className="flex items-center gap-2 text-xs">
+                  {printDocType === 'berita_acara' && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-300 font-medium">Bulan:</span>
+                      <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500 font-medium"
+                      >
+                        <option value="all">Semua Periode Pengadaan</option>
+                        {availableMonths.map(([mKey, count]) => (
+                          <option key={mKey} value={mKey}>
+                            {formatMonthLabel(mKey)} ({count} judul)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {printDocType === 'tahun_beli' && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-300 font-medium">Tahun Beli:</span>
+                      <select
+                        value={printYearFilter}
+                        onChange={(e) => setPrintYearFilter(e.target.value)}
+                        className="bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 focus:outline-none focus:border-blue-500 font-medium"
+                      >
+                        <option value="all">Semua Tahun Pembelian</option>
+                        {availablePurchaseYears.map(year => (
+                          <option key={year} value={year}>
+                            Tahun {year}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {printDocType === 'tanggal_masuk' && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-300 font-medium">Tanggal / Bulan:</span>
+                      <input
+                        type="text"
+                        placeholder="Contoh: 2026-03 atau 2026-03-15"
+                        value={printDateFilter}
+                        onChange={(e) => setPrintDateFilter(e.target.value)}
+                        className="bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 focus:outline-none focus:border-purple-500 font-mono w-44"
+                      />
+                      {printDateFilter && (
+                        <button
+                          type="button"
+                          onClick={() => setPrintDateFilter('')}
+                          className="text-slate-400 hover:text-white text-xs px-1"
+                          title="Reset filter tanggal"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="px-2.5 py-1 bg-slate-900/90 rounded-lg text-emerald-400 font-bold border border-slate-700">
+                    {printBooks.length} Judul ({printViewStats.totalCopies} Eks)
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2283,29 +2458,79 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
               {/* Kop Surat Sekolah Resmi dengan Logo Kiri & Kanan */}
               <KopSurat config={schoolConfig} isPrintVersion={true} className="mb-4" />
 
-              {/* Document Title & Number */}
+              {/* Document Title & Number based on chosen document type */}
               <div className="text-center mb-6 space-y-1">
-                <h4 className="font-bold text-sm sm:text-base uppercase tracking-wider underline">
-                  BERITA ACARA PENERIMAAN & PENGADAAN BUKU PERPUSTAKAAN
-                </h4>
-                <div className="text-xs font-mono">
-                  Nomor: 421.2/BA-BUKU/{selectedMonth !== 'all' ? selectedMonth.replace('-', '/') : new Date().getFullYear()}/PERPUS
-                </div>
-                <div className="text-xs font-medium text-slate-600">
-                  Periode Pengadaan: <strong>{formatMonthLabel(selectedMonth)}</strong>
-                </div>
+                {printDocType === 'berita_acara' && (
+                  <>
+                    <h4 className="font-bold text-sm sm:text-base uppercase tracking-wider underline">
+                      BERITA ACARA PENERIMAAN & PENGADAAN BUKU PERPUSTAKAAN
+                    </h4>
+                    <div className="text-xs font-mono">
+                      Nomor: 421.2/BA-BUKU/{selectedMonth !== 'all' ? selectedMonth.replace('-', '/') : new Date().getFullYear()}/PERPUS
+                    </div>
+                    <div className="text-xs font-medium text-slate-600">
+                      Periode Pengadaan: <strong>{formatMonthLabel(selectedMonth)}</strong>
+                    </div>
+                  </>
+                )}
+
+                {printDocType === 'tahun_beli' && (
+                  <>
+                    <h4 className="font-bold text-sm sm:text-base uppercase tracking-wider underline">
+                      DAFTAR INVENTARIS BUKU BERDASARKAN TAHUN PEMBELIAN {printYearFilter === 'all' ? 'SEMUA TAHUN' : printYearFilter}
+                    </h4>
+                    <div className="text-xs font-mono">
+                      Nomor: 421.2/DAF-BUKU/TH-{printYearFilter}/PERPUS
+                    </div>
+                    <div className="text-xs font-medium text-slate-600">
+                      Filter Tahun Pembelian: <strong>{printYearFilter === 'all' ? 'Semua Tahun Pembelian' : `Tahun ${printYearFilter}`}</strong>
+                    </div>
+                  </>
+                )}
+
+                {printDocType === 'tanggal_masuk' && (
+                  <>
+                    <h4 className="font-bold text-sm sm:text-base uppercase tracking-wider underline">
+                      DAFTAR PENERIMAAN BUKU PERPUSTAKAAN BERDASARKAN TANGGAL MASUK
+                    </h4>
+                    <div className="text-xs font-mono">
+                      Nomor: 421.2/TGL-MASUK/{new Date().getFullYear()}/PERPUS
+                    </div>
+                    <div className="text-xs font-medium text-slate-600">
+                      Tanggal / Bulan Masuk: <strong>{printDateFilter || 'Semua Tanggal Masuk'}</strong>
+                    </div>
+                  </>
+                )}
+
+                {printDocType === 'katalog_lengkap' && (
+                  <>
+                    <h4 className="font-bold text-sm sm:text-base uppercase tracking-wider underline">
+                      KATALOG LENGKAP KOLEKSI BUKU INVENTARIS PERPUSTAKAAN
+                    </h4>
+                    <div className="text-xs font-mono">
+                      Nomor: 421.2/KATALOG-LENGKAP/{new Date().getFullYear()}/PERPUS
+                    </div>
+                    <div className="text-xs font-medium text-slate-600">
+                      Klasifikasi Seluruh Koleksi Buku Bahan Ajar, Pengayaan, Referensi & Fiksi
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Narrative Statement */}
               <div className="space-y-2 mb-4 text-justify font-sans text-xs">
                 <p>
                   Pada hari ini, bertempat di Ruang Perpustakaan <strong>{schoolConfig.namaSekolah}</strong>, 
-                  telah dilaksanakan pemeriksaan fisik, verifikasi jumlah, klasifikasi DDC, dan pencatatan buku inventaris baru 
-                  yang diperoleh dari belanja pengadaan satuan pendidikan dengan rincian sebagai berikut:
+                  telah dilakukan pendataan fisik, verifikasi jumlah, klasifikasi DDC, dan pencatatan buku inventaris perpustakaan 
+                  {printDocType === 'berita_acara' && ' yang diperoleh dari pengadaan berkala '}
+                  {printDocType === 'tahun_beli' && ` dengan filter tahun pembelian ${printYearFilter === 'all' ? 'seluruh periode' : printYearFilter} `}
+                  {printDocType === 'tanggal_masuk' && ` dengan filter tanggal masuk ${printDateFilter || 'seluruh tanggal'} `}
+                  {printDocType === 'katalog_lengkap' && ' yang mencakup seluruh koleksi aktif perpustakaan '}
+                  dengan rincian sebagai berikut:
                 </p>
               </div>
 
-              {/* Acquired Books Table */}
+              {/* Books Table */}
               <div className="border border-slate-300 rounded-lg overflow-hidden mb-5">
                 <table className="w-full text-left text-[11px] font-sans">
                   <thead className="bg-slate-100 text-slate-800 border-b border-slate-300 font-bold">
@@ -2322,7 +2547,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {filteredBooks.map((b, i) => {
+                    {printBooks.map((b, i) => {
                       const totalItemPrice = (Number(b.hargaSatuan) || 0) * (Number(b.jumlah) || 1);
                       return (
                         <tr key={b.id}>
@@ -2351,6 +2576,13 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                         </tr>
                       );
                     })}
+                    {printBooks.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="p-6 text-center text-slate-500 italic">
+                          Tidak ada data buku yang sesuai dengan filter dokumen yang dipilih.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                   <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-300 text-slate-900">
                     <tr>
@@ -2358,10 +2590,10 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                         Total Keseluruhan:
                       </td>
                       <td className="p-2 text-center border-r border-slate-300 text-emerald-800">
-                        {currentViewStats.totalCopies} eks
+                        {printViewStats.totalCopies} eks
                       </td>
                       <td className="p-2 text-right text-emerald-800">
-                        Rp {currentViewStats.totalValue.toLocaleString('id-ID')}
+                        Rp {printViewStats.totalValue.toLocaleString('id-ID')}
                       </td>
                     </tr>
                   </tfoot>
@@ -2376,12 +2608,12 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                   kepada seluruh pemustaka warga sekolah.
                 </p>
                 <p>
-                  Demikian Berita Acara Penerimaan dan Pengadaan Buku ini dibuat dengan sebenarnya dalam rangkap secukupnya 
+                  Demikian dokumen daftar penerimaan dan inventaris buku perpustakaan ini dibuat dengan sebenarnya dalam rangkap secukupnya 
                   untuk dapat dipergunakan sebagaimana mestinya.
                 </p>
               </div>
 
-              {/* Lembar Pengesahan: SUSUNAN DIGANTI SESUAI PERMINTAAN USER: KEPALA SEKOLAH DI KIRI, PENGELOLA PERPUSTAKAAN DI KANAN */}
+              {/* Lembar Pengesahan: KEPALA SEKOLAH DI KIRI, PENGELOLA PERPUSTAKAAN DI KANAN */}
               <div className="pt-4 grid grid-cols-2 gap-8 text-center font-sans text-xs">
                 {/* Sisi KIRI: Kepala Sekolah */}
                 <div className="flex flex-col items-center">
@@ -2420,7 +2652,10 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
             {/* Sticky Bottom Action Footer (no-print) */}
             <div className="shrink-0 p-3 bg-slate-100 border-t border-slate-300 flex flex-wrap items-center justify-between gap-2 no-print">
               <div className="text-xs text-slate-700 font-medium">
-                Berita Acara Pengadaan: <strong className="text-slate-900">{filteredBooks.length} Judul / {currentViewStats.totalCopies} Eksemplar</strong>
+                Koleksi Terpilih: <strong className="text-slate-900">{printBooks.length} Judul / {printViewStats.totalCopies} Eksemplar</strong>
+                {printDocType === 'berita_acara' && ` (Bulan: ${formatMonthLabel(selectedMonth)})`}
+                {printDocType === 'tahun_beli' && ` (Tahun Beli: ${printYearFilter})`}
+                {printDocType === 'tanggal_masuk' && ` (Tanggal Masuk: ${printDateFilter || 'Semua'})`}
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -2444,8 +2679,8 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                   onClick={() => setIsReportModalOpen(false)}
                   className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow transition cursor-pointer"
                 >
-                  <X className="w-3.5 h-3.5" />
-                  <span>Tutup Berita Acara</span>
+                  <X className="w-4 h-4" />
+                  <span>Tutup</span>
                 </button>
               </div>
             </div>

@@ -47,6 +47,7 @@ export const LibraryMemberManager: React.FC = () => {
 
   // Filter States
   const [activeTab, setActiveTab] = useState<'all' | 'GURU' | 'STAFF' | 'SISWA'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'aktif' | 'tamat' | 'nonaktif'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Bulk Selection States
@@ -84,12 +85,16 @@ export const LibraryMemberManager: React.FC = () => {
     keterangan: ''
   });
 
-  // State for Quick Aggregate Stats Modal
+  // State for Quick Aggregate Stats Modal with Gender Breakdown
   const [statsForm, setStatsForm] = useState<LibraryMemberStats>({
     siswaLaki: libraryMemberStats.siswaLaki || 0,
     siswaPerempuan: libraryMemberStats.siswaPerempuan || 0,
-    guruPendidik: libraryMemberStats.guruPendidik || 0,
-    staffTendik: libraryMemberStats.staffTendik || 0,
+    guruLaki: libraryMemberStats.guruLaki ?? 10,
+    guruPerempuan: libraryMemberStats.guruPerempuan ?? 14,
+    guruPendidik: libraryMemberStats.guruPendidik || 24,
+    staffLaki: libraryMemberStats.staffLaki ?? 5,
+    staffPerempuan: libraryMemberStats.staffPerempuan ?? 3,
+    staffTendik: libraryMemberStats.staffTendik || 8,
     lastUpdated: libraryMemberStats.lastUpdated || new Date().toISOString().split('T')[0]
   });
 
@@ -109,29 +114,55 @@ export const LibraryMemberManager: React.FC = () => {
         return false;
       }
 
+      // Status filter
+      if (statusFilter !== 'all') {
+        const s = (m.status || 'aktif').toLowerCase();
+        if (statusFilter === 'tamat') {
+          if (s !== 'tamat' && s !== 'alumni') return false;
+        } else if (statusFilter === 'aktif') {
+          if (s !== 'aktif') return false;
+        } else if (statusFilter === 'nonaktif') {
+          if (s !== 'nonaktif') return false;
+        }
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = (m.nama || '').toLowerCase().includes(q);
         const matchNo = (m.nomorAnggota || '').toLowerCase().includes(q);
         const matchId = (m.nomorIdentitas || '').toLowerCase().includes(q);
         const matchRole = (m.kelasAtauJabatan || '').toLowerCase().includes(q);
-        if (!matchName && !matchNo && !matchId && !matchRole) return false;
+        const matchStatus = (m.status || '').toLowerCase().includes(q);
+        if (!matchName && !matchNo && !matchId && !matchRole && !matchStatus) return false;
       }
 
       return true;
     });
-  }, [libraryMembers, activeTab, searchQuery]);
+  }, [libraryMembers, activeTab, statusFilter, searchQuery]);
 
-  // Aggregate stats calculations
-  const totalSiswa = (libraryMemberStats.siswaLaki || 0) + (libraryMemberStats.siswaPerempuan || 0);
-  const totalGuru = libraryMemberStats.guruPendidik || 0;
-  const totalStaff = libraryMemberStats.staffTendik || 0;
+  // Aggregate stats calculations with gender breakdown for Guru and Staff
+  const guruLakiCount = libraryMemberStats.guruLaki ?? (libraryMembers.filter(m => getMemberTypeUpper(m) === 'GURU' && m.jenisKelamin === 'L').length || 10);
+  const guruPerempuanCount = libraryMemberStats.guruPerempuan ?? (libraryMembers.filter(m => getMemberTypeUpper(m) === 'GURU' && m.jenisKelamin === 'P').length || 14);
+  const totalGuru = (libraryMemberStats.guruPendidik && libraryMemberStats.guruPendidik > 0)
+    ? libraryMemberStats.guruPendidik
+    : (guruLakiCount + guruPerempuanCount);
+
+  const staffLakiCount = libraryMemberStats.staffLaki ?? (libraryMembers.filter(m => getMemberTypeUpper(m) === 'STAFF' && m.jenisKelamin === 'L').length || 5);
+  const staffPerempuanCount = libraryMemberStats.staffPerempuan ?? (libraryMembers.filter(m => getMemberTypeUpper(m) === 'STAFF' && m.jenisKelamin === 'P').length || 3);
+  const totalStaff = (libraryMemberStats.staffTendik && libraryMemberStats.staffTendik > 0)
+    ? libraryMemberStats.staffTendik
+    : (staffLakiCount + staffPerempuanCount);
+
+  const siswaLakiCount = libraryMemberStats.siswaLaki || 0;
+  const siswaPerempuanCount = libraryMemberStats.siswaPerempuan || 0;
+  const totalSiswa = siswaLakiCount + siswaPerempuanCount;
   const grandTotal = totalSiswa + totalGuru + totalStaff;
 
   // Registered members count in directory
   const registeredGuruCount = libraryMembers.filter(m => getMemberTypeUpper(m) === 'GURU').length;
   const registeredStaffCount = libraryMembers.filter(m => getMemberTypeUpper(m) === 'STAFF').length;
   const registeredSiswaCount = libraryMembers.filter(m => getMemberTypeUpper(m) === 'SISWA').length;
+  const registeredTamatCount = libraryMembers.filter(m => m.status === 'tamat' || m.status === 'alumni').length;
 
   // Open Add Modal
   const handleOpenAdd = (typeDefault: 'GURU' | 'STAFF' | 'SISWA' = 'SISWA') => {
@@ -509,8 +540,12 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                 setStatsForm({
                   siswaLaki: libraryMemberStats.siswaLaki || 0,
                   siswaPerempuan: libraryMemberStats.siswaPerempuan || 0,
-                  guruPendidik: libraryMemberStats.guruPendidik || 0,
-                  staffTendik: libraryMemberStats.staffTendik || 0,
+                  guruLaki: libraryMemberStats.guruLaki ?? 10,
+                  guruPerempuan: libraryMemberStats.guruPerempuan ?? 14,
+                  guruPendidik: libraryMemberStats.guruPendidik || 24,
+                  staffLaki: libraryMemberStats.staffLaki ?? 5,
+                  staffPerempuan: libraryMemberStats.staffPerempuan ?? 3,
+                  staffTendik: libraryMemberStats.staffTendik || 8,
                   lastUpdated: new Date().toISOString().split('T')[0]
                 });
                 setIsStatsModalOpen(true);
@@ -540,7 +575,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
         </div>
       </div>
 
-      {/* METRIC CARDS 3 KATEGORI: GURU, STAFF, SISWA */}
+      {/* METRIC CARDS 4 KATEGORI: TOTAL, GURU, STAFF, SISWA (LENGKAP RINCIAN GENDER L/P & STATUS TAMAT) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* TOTAL ANGGOTA */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3 relative overflow-hidden">
@@ -566,7 +601,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
           </div>
         </div>
 
-        {/* ANGGOTA GURU (PENDIDIK) */}
+        {/* ANGGOTA GURU (PENDIDIK) DENGAN RINCIAN GENDER L & P */}
         <div className="bg-white rounded-2xl border border-emerald-100 p-5 shadow-sm space-y-3 hover:border-emerald-300 transition">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
@@ -581,9 +616,11 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
               {totalGuru}
               <span className="text-xs font-semibold text-emerald-700 ml-1">orang</span>
             </div>
-            <p className="text-xs text-emerald-700/80 mt-1">
-              {grandTotal > 0 ? ((totalGuru / grandTotal) * 100).toFixed(1) : 0}% dari seluruh pemustaka
-            </p>
+            <div className="text-xs text-emerald-700 font-medium mt-1 flex items-center gap-2">
+              <span>L: <strong>{guruLakiCount}</strong></span>
+              <span>•</span>
+              <span>P: <strong>{guruPerempuanCount}</strong></span>
+            </div>
           </div>
           <div className="pt-2 border-t border-emerald-50 flex items-center justify-between text-[11px]">
             <span className="text-slate-500">Direktori terdaftar:</span>
@@ -591,7 +628,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
           </div>
         </div>
 
-        {/* ANGGOTA STAFF (TENAGA KEPENDIDIKAN) */}
+        {/* ANGGOTA STAFF (TENAGA KEPENDIDIKAN) DENGAN RINCIAN GENDER L & P */}
         <div className="bg-white rounded-2xl border border-amber-100 p-5 shadow-sm space-y-3 hover:border-amber-300 transition">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
@@ -606,9 +643,11 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
               {totalStaff}
               <span className="text-xs font-semibold text-amber-700 ml-1">orang</span>
             </div>
-            <p className="text-xs text-amber-700/80 mt-1">
-              {grandTotal > 0 ? ((totalStaff / grandTotal) * 100).toFixed(1) : 0}% dari seluruh pemustaka
-            </p>
+            <div className="text-xs text-amber-700 font-medium mt-1 flex items-center gap-2">
+              <span>L: <strong>{staffLakiCount}</strong></span>
+              <span>•</span>
+              <span>P: <strong>{staffPerempuanCount}</strong></span>
+            </div>
           </div>
           <div className="pt-2 border-t border-amber-50 flex items-center justify-between text-[11px]">
             <span className="text-slate-500">Direktori terdaftar:</span>
@@ -616,7 +655,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
           </div>
         </div>
 
-        {/* ANGGOTA SISWA (PESERTA DIDIK) */}
+        {/* ANGGOTA SISWA (PESERTA DIDIK) DENGAN RINCIAN L, P & STATUS TAMAT */}
         <div className="bg-white rounded-2xl border border-indigo-100 p-5 shadow-sm space-y-3 hover:border-indigo-300 transition">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider">
@@ -632,63 +671,110 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
               <span className="text-xs font-semibold text-indigo-700 ml-1">siswa</span>
             </div>
             <div className="text-xs text-indigo-700 mt-1 flex items-center gap-2">
-              <span>L: <strong>{libraryMemberStats.siswaLaki}</strong></span>
+              <span>L: <strong>{siswaLakiCount}</strong></span>
               <span>•</span>
-              <span>P: <strong>{libraryMemberStats.siswaPerempuan}</strong></span>
+              <span>P: <strong>{siswaPerempuanCount}</strong></span>
             </div>
           </div>
           <div className="pt-2 border-t border-indigo-50 flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">Direktori terdaftar:</span>
-            <span className="font-bold text-indigo-700">{registeredSiswaCount} siswa</span>
+            <span className="text-slate-500">Alumni / Tamat:</span>
+            <span className="font-bold text-purple-700">{registeredTamatCount} tamat</span>
           </div>
         </div>
       </div>
 
       {/* FILTER TABS & DIRECTORY TABLE */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
-            <button
-              onClick={() => setActiveTab('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                activeTab === 'all'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Semua ({libraryMembers.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('GURU')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                activeTab === 'GURU'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Guru ({registeredGuruCount})
-            </button>
-            <button
-              onClick={() => setActiveTab('STAFF')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                activeTab === 'STAFF'
-                  ? 'bg-amber-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Staff ({registeredStaffCount})
-            </button>
-            <button
-              onClick={() => setActiveTab('SISWA')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                activeTab === 'SISWA'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Siswa ({registeredSiswaCount})
-            </button>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Category Tabs */}
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'all'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Semua ({libraryMembers.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('GURU')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'GURU'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Guru ({registeredGuruCount})
+              </button>
+              <button
+                onClick={() => setActiveTab('STAFF')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'STAFF'
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Staff ({registeredStaffCount})
+              </button>
+              <button
+                onClick={() => setActiveTab('SISWA')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  activeTab === 'SISWA'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Siswa ({registeredSiswaCount})
+              </button>
+            </div>
+
+            {/* Status Filter Tabs (Semua, Aktif, Tamat / Alumni, Nonaktif) */}
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'all'
+                    ? 'bg-white text-slate-900 shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Semua Status
+              </button>
+              <button
+                onClick={() => setStatusFilter('aktif')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'aktif'
+                    ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Aktif
+              </button>
+              <button
+                onClick={() => setStatusFilter('tamat')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'tamat'
+                    ? 'bg-purple-600 text-white shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Siswa yang sudah tamat belajar / lulus sekolah"
+              >
+                🎓 Tamat / Alumni ({registeredTamatCount})
+              </button>
+              <button
+                onClick={() => setStatusFilter('nonaktif')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'nonaktif'
+                    ? 'bg-slate-700 text-white shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Nonaktif
+              </button>
+            </div>
           </div>
 
           {/* Search Input */}
@@ -696,7 +782,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Cari nama, nomor anggota, NIP, atau NISN..."
+              placeholder="Cari nama, nomor anggota, NIP, NISN, atau status tamat..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -820,10 +906,14 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                           {m.tanggalBergabung || m.tanggalTerdaftar || '-'}
                         </td>
                         <td className="py-3 px-3 text-center">
-                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
-                            m.status === 'aktif' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                          <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold ${
+                            (m.status === 'tamat' || m.status === 'alumni')
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : m.status === 'aktif'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-500 border border-slate-200'
                           }`}>
-                            {m.status === 'aktif' ? 'Aktif' : 'Nonaktif'}
+                            {(m.status === 'tamat' || m.status === 'alumni') ? '🎓 Tamat / Alumni' : m.status === 'aktif' ? 'Aktif' : 'Nonaktif'}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-center">
@@ -920,34 +1010,104 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                   </div>
                 </div>
 
-                <div className="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-100 space-y-1">
-                  <div className="font-bold text-emerald-900 flex items-center gap-1.5">
-                    <GraduationCap className="w-4 h-4 text-emerald-700" />
-                    <span>Anggota Guru (Pendidik)</span>
+                <div className="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-100 space-y-2">
+                  <div className="font-bold text-emerald-900 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <GraduationCap className="w-4 h-4 text-emerald-700" />
+                      <span>Anggota Guru (Pendidik)</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-emerald-800">
+                      Total: {(statsForm.guruLaki || 0) + (statsForm.guruPerempuan || 0)} orang
+                    </span>
                   </div>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={statsForm.guruPendidik}
-                    onChange={e => setStatsForm({ ...statsForm, guruPendidik: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Guru Laki-laki</label>
+                      <input
+                        type="number"
+                        min="0"
+                        required
+                        value={statsForm.guruLaki ?? 0}
+                        onChange={e => {
+                          const val = parseInt(e.target.value, 10) || 0;
+                          setStatsForm(prev => ({
+                            ...prev,
+                            guruLaki: val,
+                            guruPendidik: val + (prev.guruPerempuan || 0)
+                          }));
+                        }}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Guru Perempuan</label>
+                      <input
+                        type="number"
+                        min="0"
+                        required
+                        value={statsForm.guruPerempuan ?? 0}
+                        onChange={e => {
+                          const val = parseInt(e.target.value, 10) || 0;
+                          setStatsForm(prev => ({
+                            ...prev,
+                            guruPerempuan: val,
+                            guruPendidik: (prev.guruLaki || 0) + val
+                          }));
+                        }}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-100 space-y-1">
-                  <div className="font-bold text-amber-900 flex items-center gap-1.5">
-                    <Briefcase className="w-4 h-4 text-amber-700" />
-                    <span>Anggota Staff (Tendik / TU)</span>
+                <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-100 space-y-2">
+                  <div className="font-bold text-amber-900 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Briefcase className="w-4 h-4 text-amber-700" />
+                      <span>Anggota Staff (Tendik / TU)</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-amber-800">
+                      Total: {(statsForm.staffLaki || 0) + (statsForm.staffPerempuan || 0)} orang
+                    </span>
                   </div>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={statsForm.staffTendik}
-                    onChange={e => setStatsForm({ ...statsForm, staffTendik: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Staff Laki-laki</label>
+                      <input
+                        type="number"
+                        min="0"
+                        required
+                        value={statsForm.staffLaki ?? 0}
+                        onChange={e => {
+                          const val = parseInt(e.target.value, 10) || 0;
+                          setStatsForm(prev => ({
+                            ...prev,
+                            staffLaki: val,
+                            staffTendik: val + (prev.staffPerempuan || 0)
+                          }));
+                        }}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Staff Perempuan</label>
+                      <input
+                        type="number"
+                        min="0"
+                        required
+                        value={statsForm.staffPerempuan ?? 0}
+                        onChange={e => {
+                          const val = parseInt(e.target.value, 10) || 0;
+                          setStatsForm(prev => ({
+                            ...prev,
+                            staffPerempuan: val,
+                            staffTendik: (prev.staffLaki || 0) + val
+                          }));
+                        }}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1051,7 +1211,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Jenis Kelamin</label>
                   <select
@@ -1061,6 +1221,19 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                   >
                     <option value="L">Laki-laki (L)</option>
                     <option value="P">Perempuan (P)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Status Keanggotaan</label>
+                  <select
+                    value={formData.status || 'aktif'}
+                    onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
+                  >
+                    <option value="aktif">Aktif</option>
+                    <option value="tamat">Tamat / Lulus (Alumni)</option>
+                    <option value="nonaktif">Nonaktif</option>
                   </select>
                 </div>
 
@@ -1203,10 +1376,11 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                   <label className="block font-semibold text-slate-700 mb-1">Status Keanggotaan</label>
                   <select
                     value={formData.status || 'aktif'}
-                    onChange={e => setFormData({ ...formData, status: e.target.value as 'aktif' | 'nonaktif' })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
                   >
                     <option value="aktif">Aktif</option>
+                    <option value="tamat">Tamat / Lulus (Alumni Siswa)</option>
                     <option value="nonaktif">Nonaktif</option>
                   </select>
                 </div>
@@ -1430,22 +1604,22 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                     <tr>
                       <td className="p-2 text-center border-r border-slate-200">1</td>
                       <td className="p-2 font-semibold border-r border-slate-200">Guru (Pendidik)</td>
-                      <td className="p-2 text-center border-r border-slate-200">-</td>
-                      <td className="p-2 text-center border-r border-slate-200">-</td>
+                      <td className="p-2 text-center border-r border-slate-200 font-medium">{guruLakiCount} orang</td>
+                      <td className="p-2 text-center border-r border-slate-200 font-medium">{guruPerempuanCount} orang</td>
                       <td className="p-2 text-center font-bold">{totalGuru} orang</td>
                     </tr>
                     <tr>
                       <td className="p-2 text-center border-r border-slate-200">2</td>
                       <td className="p-2 font-semibold border-r border-slate-200">Tenaga Kependidikan (Staff / TU)</td>
-                      <td className="p-2 text-center border-r border-slate-200">-</td>
-                      <td className="p-2 text-center border-r border-slate-200">-</td>
+                      <td className="p-2 text-center border-r border-slate-200 font-medium">{staffLakiCount} orang</td>
+                      <td className="p-2 text-center border-r border-slate-200 font-medium">{staffPerempuanCount} orang</td>
                       <td className="p-2 text-center font-bold">{totalStaff} orang</td>
                     </tr>
                     <tr>
                       <td className="p-2 text-center border-r border-slate-200">3</td>
                       <td className="p-2 font-semibold border-r border-slate-200">Peserta Didik (Siswa)</td>
-                      <td className="p-2 text-center border-r border-slate-200 font-medium">{libraryMemberStats.siswaLaki} orang</td>
-                      <td className="p-2 text-center border-r border-slate-200 font-medium">{libraryMemberStats.siswaPerempuan} orang</td>
+                      <td className="p-2 text-center border-r border-slate-200 font-medium">{siswaLakiCount} orang</td>
+                      <td className="p-2 text-center border-r border-slate-200 font-medium">{siswaPerempuanCount} orang</td>
                       <td className="p-2 text-center font-bold">{totalSiswa} orang</td>
                     </tr>
                   </tbody>
@@ -1462,28 +1636,11 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                 </table>
               </div>
 
-              {/* Signatures Sejajar Kiri dan Kanan Rapi Tanpa Titik-Titik Sesuai Permintaan */}
+              {/* Signatures Sejajar Sesuai Permintaan User: KEPALA SEKOLAH DI KIRI, PENGELOLA PERPUSTAKAAN DI KANAN */}
               <div className="pt-6 grid grid-cols-2 gap-8 text-center font-sans text-xs">
-                {/* Kiri: Pengelola Perpustakaan */}
+                {/* Sisi KIRI: Kepala Sekolah */}
                 <div className="flex flex-col items-center">
-                  <div className="text-slate-600">Mengetahui / Memeriksa,</div>
-                  <div className="font-semibold text-slate-800 mt-0.5">Pengelola Perpustakaan</div>
-                  <div className="h-20 flex items-center justify-center">
-                    {/* Ruang tanda tangan rapi */}
-                  </div>
-                  <div className="font-bold text-slate-900 underline text-xs">
-                    {pengelolaName}
-                  </div>
-                  <div className="text-[11px] text-slate-600 mt-0.5">
-                    NIP: {pengelolaPerpus?.nip || '19880415 201502 2 001'}
-                  </div>
-                </div>
-
-                {/* Kanan: Kepala Sekolah */}
-                <div className="flex flex-col items-center">
-                  <div className="text-slate-600">
-                    {schoolConfig.kabupatenKota || 'Sekolah'}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </div>
+                  <div className="text-slate-600">Mengetahui / Mengesahkan,</div>
                   <div className="font-semibold text-slate-800 mt-0.5">Kepala Sekolah</div>
                   <div className="h-20 flex items-center justify-center">
                     {/* Ruang tanda tangan rapi */}
@@ -1493,6 +1650,23 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                   </div>
                   <div className="text-[11px] text-slate-600 mt-0.5">
                     NIP: {schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001'}
+                  </div>
+                </div>
+
+                {/* Sisi KANAN: Pengelola Perpustakaan */}
+                <div className="flex flex-col items-center">
+                  <div className="text-slate-600">
+                    {schoolConfig.kabupatenKota || 'Sekolah'}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </div>
+                  <div className="font-semibold text-slate-800 mt-0.5">Pengelola Perpustakaan</div>
+                  <div className="h-20 flex items-center justify-center">
+                    {/* Ruang tanda tangan rapi */}
+                  </div>
+                  <div className="font-bold text-slate-900 underline text-xs">
+                    {pengelolaName}
+                  </div>
+                  <div className="text-[11px] text-slate-600 mt-0.5">
+                    NIP: {pengelolaPerpus?.nip || '19880415 201502 2 001'}
                   </div>
                 </div>
               </div>

@@ -70,6 +70,49 @@ const saveWorkbook = (workbook: XLSX.WorkBook, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
+/**
+ * Format date values extracted from Excel (serial numbers, DD/MM/YYYY, YYYY-MM-DD, etc.)
+ */
+export const formatExcelDate = (val: any, fallback: string): string => {
+  if (val === undefined || val === null || val === '') return fallback;
+  if (typeof val === 'number') {
+    // Excel serial date to JS Date (base: 1899-12-30)
+    const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  }
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmy) {
+    const day = dmy[1].padStart(2, '0');
+    const month = dmy[2].padStart(2, '0');
+    const year = dmy[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // YYYY/MM/DD
+  const ymd = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (ymd) {
+    const year = ymd[1];
+    const month = ymd[2].padStart(2, '0');
+    const day = ymd[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Pure 4-digit year e.g. "2026"
+  if (/^\d{4}$/.test(s)) {
+    const fallbackMonth = fallback.substring(5, 7) || '01';
+    const fallbackDay = fallback.substring(8, 10) || '01';
+    return `${s}-${fallbackMonth}-${fallbackDay}`;
+  }
+
+  return fallback;
+};
+
 // ==========================================
 // 1. BUKU PERPUSTAKAAN (LIBRARY BOOKS)
 // ==========================================
@@ -85,16 +128,15 @@ export const downloadBookExcelTemplate = () => {
     'Penulis / Pengarang',
     'Penerbit',
     'Tahun Terbit',
-    'ISBN',
+    'Tahun Pembelian',
+    'Tanggal Masuk (YYYY-MM-DD)',
     'DDC Klasifikasi',
     'Kategori Buku',
     'Status Buku (siswa/guru/referensi/umum)',
     'Sumber Pengadaan',
     'Jumlah Eksemplar *',
     'Harga Satuan (Rp)',
-    'Lokasi Rak Simpan',
-    'Kondisi (Baik/Rusak Ringan/Rusak Berat)',
-    'Keterangan Pengadaan'
+    'Kondisi (Baik/Rusak Ringan/Rusak Berat)'
   ];
 
   const sampleRows = [
@@ -105,16 +147,15 @@ export const downloadBookExcelTemplate = () => {
       'Maresha Caroline Wijanto, dkk.',
       'Pusat Perbukuan Kemdikbudristek',
       2024,
-      '978-602-244-428-2',
+      2026,
+      '2026-08-10',
       '000 - Karya Umum, Komputer & Informasi',
       'Buku Teks Utama',
       'siswa',
       'BOS Reguler',
       60,
       32000,
-      'Rak Teks Utama A-01',
-      'Baik',
-      'Pengadaan Semester 1 Kurikulum Merdeka'
+      'Baik'
     ],
     [
       'BK-2026-002',
@@ -123,16 +164,15 @@ export const downloadBookExcelTemplate = () => {
       'Rakhma Subarna, dkk.',
       'Pusat Perbukuan Kemdikbudristek',
       2024,
-      '978-602-244-300-1',
+      2026,
+      '2026-08-10',
       '400 - Bahasa (Indonesia, Inggris, Arab, Daerah)',
       'Buku Teks Utama',
       'siswa',
       'BOS Reguler',
       60,
       28500,
-      'Rak Teks Utama A-02',
-      'Baik',
-      'Pengadaan Pelajaran Bahasa'
+      'Baik'
     ],
     [
       'BK-2026-003',
@@ -141,16 +181,15 @@ export const downloadBookExcelTemplate = () => {
       'Tim Gakko Tosho',
       'Pusat Perbukuan Kemdikbudristek',
       2024,
-      '978-602-244-515-9',
+      2026,
+      '2026-09-05',
       '500 - Sains Murni, IPA, Matematika & Biologi',
       'Buku Teks Utama',
       'siswa',
       'BOS Reguler',
       60,
       33000,
-      'Rak Teks Utama A-03',
-      'Baik',
-      'Pengadaan Buku Pembelajaran Sains'
+      'Baik'
     ],
     [
       'BK-2026-004',
@@ -159,16 +198,15 @@ export const downloadBookExcelTemplate = () => {
       'Zaim Uchrowi, dkk.',
       'Pusat Perbukuan Kemdikbudristek',
       2024,
-      '978-602-244-312-4',
+      2026,
+      '2026-09-12',
       '300 - Ilmu Sosial, Kebijakan, Hukum & Pendidikan',
       'Buku Guru',
       'guru',
       'BOS Kinerja',
       5,
       45000,
-      'Rak Referensi Guru G-01',
-      'Baik',
-      'Pegangan Guru Pengampu Mata Pelajaran'
+      'Baik'
     ],
     [
       'BK-2026-005',
@@ -177,16 +215,15 @@ export const downloadBookExcelTemplate = () => {
       'Tere Liye',
       'Gramedia Pustaka Utama',
       2023,
-      '978-602-065-214-3',
+      2026,
+      '2026-10-02',
       '800 - Sastra, Puisi, Prosa, Fiksi & Cerita',
       'Fiksi / Cerita',
       'umum',
       'BOS Kinerja',
       15,
       65000,
-      'Rak Fiksi Novel B-01',
-      'Baik',
-      'Koleksi Pengayaan Literasi Siswa'
+      'Baik'
     ],
     [
       'BK-2026-006',
@@ -195,16 +232,15 @@ export const downloadBookExcelTemplate = () => {
       'Tim Peneliti LIPI',
       'Balai Pustaka',
       2023,
-      '978-979-083-441-2',
+      2026,
+      '2026-10-18',
       '500 - Sains Murni, IPA, Matematika & Biologi',
       'Kamus & Ensiklopedia',
       'referensi',
       'Hibah / Bantuan',
       8,
       125000,
-      'Rak Referensi C-01',
-      'Baik',
-      'Koleksi Rujukan & Eksplorasi Perpustakaan'
+      'Baik'
     ]
   ];
 
@@ -214,21 +250,20 @@ export const downloadBookExcelTemplate = () => {
   // Set explicit column widths for Excel
   ws['!cols'] = [
     { wch: 14 }, // Kode Buku
-    { wch: 42 }, // Judul Buku
+    { wch: 44 }, // Judul Buku
     { wch: 16 }, // Kelas
     { wch: 30 }, // Penulis
     { wch: 30 }, // Penerbit
-    { wch: 13 }, // Tahun
-    { wch: 20 }, // ISBN
+    { wch: 14 }, // Tahun Terbit
+    { wch: 16 }, // Tahun Pembelian
+    { wch: 22 }, // Tanggal Masuk
     { wch: 36 }, // DDC
     { wch: 24 }, // Kategori
     { wch: 20 }, // Status
     { wch: 18 }, // Sumber
     { wch: 18 }, // Jumlah
     { wch: 18 }, // Harga
-    { wch: 22 }, // Rak
-    { wch: 15 }, // Kondisi
-    { wch: 35 }  // Keterangan
+    { wch: 16 }  // Kondisi
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Data Buku');
@@ -238,12 +273,14 @@ export const downloadBookExcelTemplate = () => {
     ['PETUNJUK PENGISIAN TEMPLATE EXCEL BUKU PERPUSTAKAAN SIOPS'],
     [''],
     ['1. Kolom Bertanda Bintang (*)', 'Wajib diisi (Judul Buku dan Jumlah Eksemplar).'],
-    ['2. Kode Buku', 'Bisa dikosongkan. Jika kosong, sistem otomatis membuat kode berurutan (misal: BK-2026-001).'],
-    ['3. Status Buku', 'Pilihan: siswa | guru | referensi | umum'],
-    ['4. Kategori Buku', 'Pilihan: Buku Teks Utama | Buku Pendamping | Buku Guru | Non-Teks / Fiksi | Non-Teks / Non-Fiksi | Kamus & Ensiklopedia | Fiksi / Cerita | Majalah / Terbitan Berkala | Buku Referensi'],
-    ['5. Sumber Pengadaan', 'Pilihan: BOS Reguler | BOS Kinerja | BOS Afirmasi | Hibah / Bantuan | APBD / Pemda | Komite / Paguyuban | Sumbangan Alumni / Siswa | Swadaya Sekolah | DAK'],
-    ['6. Klasifikasi DDC', 'Bisa dikosongkan. Sistem SIOPS dilengkapi Auto-DDC cerdas yang otomatis mendeteksi nomor DDC berdasarkan kata kunci judul buku.'],
-    ['7. Kondisi', 'Pilihan: Baik | Rusak Ringan | Rusak Berat'],
+    ['2. Tahun Pembelian', 'Tahun saat buku dibeli/diadakan oleh sekolah (contoh: 2026). Jika dikosongkan, otomatis mengambil tahun dari Tanggal Masuk.'],
+    ['3. Tanggal Masuk', 'Format tanggal buku masuk ke perpustakaan (YYYY-MM-DD, contoh: 2026-10-15 atau DD/MM/YYYY). Menjadi dasar pemisah penambahan buku bulanan & laporan resmi.'],
+    ['4. Kode Buku', 'Bisa dikosongkan. Jika kosong, sistem otomatis membuat kode berurutan (misal: BK-2026-001).'],
+    ['5. Status Buku', 'Pilihan: siswa | guru | referensi | umum'],
+    ['6. Kategori Buku', 'Pilihan: Buku Teks Utama | Buku Pendamping | Buku Guru | Non-Teks / Fiksi | Non-Teks / Non-Fiksi | Kamus & Ensiklopedia | Fiksi / Cerita | Majalah / Terbitan Berkala | Buku Referensi'],
+    ['7. Sumber Pengadaan', 'Pilihan: BOS Reguler | BOS Kinerja | BOS Afirmasi | Hibah / Bantuan | APBD / Pemda | Komite / Paguyuban | Sumbangan Alumni / Siswa | Swadaya Sekolah | DAK'],
+    ['8. Klasifikasi DDC', 'Bisa dikosongkan. Sistem SIOPS dilengkapi Auto-DDC cerdas yang otomatis mendeteksi nomor DDC berdasarkan kata kunci judul buku.'],
+    ['9. Kondisi', 'Pilihan: Baik | Rusak Ringan | Rusak Berat'],
     [''],
     ['DAFTAR KLASIFIKASI DDC 10 KELAS UTAMA:'],
     ['000', 'Karya Umum, Komputer, Informasi & Bibliografi'],
@@ -275,20 +312,18 @@ export const exportBooksToExcel = (books: LibraryBookItem[], filename: string = 
     'Penulis / Pengarang',
     'Penerbit',
     'Tahun Terbit',
-    'ISBN',
+    'Tahun Pembelian',
+    'Tanggal Masuk',
     'DDC Klasifikasi',
     'Kategori Buku',
     'Status Buku',
     'Sumber Pengadaan',
-    'Tanggal Masuk',
     'Jumlah Total',
     'Tersedia',
     'Dipinjam',
     'Harga Satuan (Rp)',
     'Total Nilai (Rp)',
-    'Lokasi Rak',
-    'Kondisi',
-    'Keterangan'
+    'Kondisi'
   ];
 
   const rows = books.map((b, idx) => [
@@ -299,20 +334,18 @@ export const exportBooksToExcel = (books: LibraryBookItem[], filename: string = 
     b.penulis || '-',
     b.penerbit || '-',
     b.tahunTerbit || '-',
-    b.isbn || '-',
+    b.tahunPengadaan || b.tahunBeli || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 4) : '-'),
+    b.tanggalMasuk || '-',
     b.ddcKlasifikasi || '-',
     b.kategoriBuku || b.kategori || '-',
     b.statusBuku || '-',
     b.sumberPengadaan || '-',
-    b.tanggalMasuk || '-',
     Number(b.jumlah) || 0,
     Number(b.jumlahTersedia ?? b.jumlah) || 0,
     Math.max(0, (Number(b.jumlah) || 0) - (Number(b.jumlahTersedia ?? b.jumlah) || 0)),
     Number(b.hargaSatuan || 0),
     (Number(b.hargaSatuan || 0) * Number(b.jumlah || 0)),
-    b.lokasiRak || '-',
-    b.kondisi || 'Baik',
-    b.keterangan || '-'
+    b.kondisi || 'Baik'
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -382,7 +415,10 @@ export const parseBookExcelFile = async (
   const colKelas = findCol('kelas', 'tingkat');
   const colPenulis = findCol('penulis', 'pengarang', 'author');
   const colPenerbit = findCol('penerbit', 'publisher');
-  const colTahun = findCol('tahun', 'terbit');
+  const colTahunBeli = findCol('tahun pembelian', 'tahun beli', 'tahun pengadaan', 'thn beli', 'thn pengadaan');
+  const colTanggalMasuk = findCol('tanggal masuk', 'tgl masuk', 'tanggal beli', 'tgl beli', 'tanggal', 'tgl');
+  const colTahunTerbit = findCol('tahun terbit', 'thn terbit');
+  const colTahunGeneral = findCol('tahun', 'thn');
   const colIsbn = findCol('isbn');
   const colDdc = findCol('ddc', 'klasifikasi');
   const colKategori = findCol('kategori');
@@ -394,8 +430,8 @@ export const parseBookExcelFile = async (
   const colKondisi = findCol('kondisi');
   const colKet = findCol('keterangan', 'catatan', 'ket');
 
-  const monthKey = targetDate.substring(0, 7);
-  const yearNum = parseInt(targetDate.substring(0, 4), 10) || new Date().getFullYear();
+  const defaultMonthKey = targetDate.substring(0, 7);
+  const defaultYearNum = parseInt(targetDate.substring(0, 4), 10) || new Date().getFullYear();
 
   const results: Omit<LibraryBookItem, 'id'>[] = [];
 
@@ -406,14 +442,53 @@ export const parseBookExcelFile = async (
       return;
     }
 
+    // Parse Tanggal Masuk (support string or Excel serial date)
+    let rowTanggalMasuk = targetDate;
+    if (colTanggalMasuk !== -1 && r[colTanggalMasuk] !== undefined && String(r[colTanggalMasuk]).trim() !== '') {
+      const parsedDate = formatExcelDate(r[colTanggalMasuk], targetDate);
+      if (parsedDate) {
+        rowTanggalMasuk = parsedDate;
+      }
+    }
+
+    // Determine rowMonthKey from rowTanggalMasuk (YYYY-MM)
+    const rowMonthKey = rowTanggalMasuk.length >= 7 ? rowTanggalMasuk.substring(0, 7) : defaultMonthKey;
+
+    // Parse Tahun Pembelian
+    let rowTahunBeli = defaultYearNum;
+    if (colTahunBeli !== -1 && r[colTahunBeli]) {
+      const pYear = parseInt(String(r[colTahunBeli]).replace(/\D/g, ''), 10);
+      if (pYear && pYear >= 1990 && pYear <= 2100) {
+        rowTahunBeli = pYear;
+      }
+    } else if (rowTanggalMasuk && rowTanggalMasuk.length >= 4) {
+      const pYear = parseInt(rowTanggalMasuk.substring(0, 4), 10);
+      if (pYear && pYear >= 1990 && pYear <= 2100) {
+        rowTahunBeli = pYear;
+      }
+    }
+
+    // Parse Tahun Terbit
+    let tahunTerbit = rowTahunBeli;
+    if (colTahunTerbit !== -1 && r[colTahunTerbit]) {
+      const pYear = parseInt(String(r[colTahunTerbit]).replace(/\D/g, ''), 10);
+      if (pYear && pYear >= 1900 && pYear <= 2100) {
+        tahunTerbit = pYear;
+      }
+    } else if (colTahunGeneral !== -1 && colTahunGeneral !== colTahunBeli && r[colTahunGeneral]) {
+      const pYear = parseInt(String(r[colTahunGeneral]).replace(/\D/g, ''), 10);
+      if (pYear && pYear >= 1900 && pYear <= 2100) {
+        tahunTerbit = pYear;
+      }
+    }
+
     const customKode = colKode !== -1 && String(r[colKode]).trim();
     const codeSuffix = String(existingCount + results.length + 1).padStart(3, '0');
-    const kodeBuku = customKode ? customKode : `BK-${yearNum}-${codeSuffix}`;
+    const kodeBuku = customKode ? customKode : `BK-${rowTahunBeli}-${codeSuffix}`;
 
     const kelas = colKelas !== -1 && r[colKelas] ? String(r[colKelas]).trim() : 'Kelas VII';
     const penulis = colPenulis !== -1 && r[colPenulis] ? String(r[colPenulis]).trim() : 'Tim Penyusun';
     const penerbit = colPenerbit !== -1 && r[colPenerbit] ? String(r[colPenerbit]).trim() : 'Kemdikbudristek';
-    const tahunTerbit = colTahun !== -1 && r[colTahun] ? (parseInt(String(r[colTahun]).replace(/\D/g, ''), 10) || yearNum) : yearNum;
     const isbn = colIsbn !== -1 && r[colIsbn] ? String(r[colIsbn]).trim() : '';
     
     // Auto detect DDC if not provided
@@ -437,9 +512,9 @@ export const parseBookExcelFile = async (
     const rawHarga = colHarga !== -1 && r[colHarga] ? parseInt(String(r[colHarga]).replace(/\D/g, ''), 10) : 0;
     const hargaSatuan = isNaN(rawHarga) ? 0 : rawHarga;
 
-    const lokasiRak = colRak !== -1 && r[colRak] ? String(r[colRak]).trim() : 'Rak Koleksi';
+    const lokasiRak = colRak !== -1 && r[colRak] ? String(r[colRak]).trim() : 'Ruang Perpustakaan';
     const kondisi = colKondisi !== -1 && r[colKondisi] ? (String(r[colKondisi]).trim() as any) : 'Baik';
-    const keterangan = colKet !== -1 && r[colKet] ? String(r[colKet]).trim() : 'Diimpor otomatis dari berkas Excel';
+    const keterangan = colKet !== -1 && r[colKet] ? String(r[colKet]).trim() : `Pengadaan Buku ${rowMonthKey}`;
 
     results.push({
       kodeBuku,
@@ -447,15 +522,16 @@ export const parseBookExcelFile = async (
       penulis,
       penerbit,
       tahunTerbit,
+      tahunBeli: rowTahunBeli,
       isbn,
       kelas,
       statusBuku,
       ddcKlasifikasi,
       kategoriBuku,
       sumberPengadaan,
-      tanggalMasuk: targetDate,
-      bulanPengadaan: monthKey,
-      tahunPengadaan: yearNum,
+      tanggalMasuk: rowTanggalMasuk,
+      bulanPengadaan: rowMonthKey,
+      tahunPengadaan: rowTahunBeli,
       jumlah,
       jumlahTersedia: jumlah,
       hargaSatuan,

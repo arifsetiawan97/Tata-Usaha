@@ -53,7 +53,11 @@ export interface LibraryMemberStats {
   siswaLaki: number;
   siswaPerempuan: number;
   guruPendidik: number;
+  guruLaki?: number;
+  guruPerempuan?: number;
   staffTendik: number;
+  staffLaki?: number;
+  staffPerempuan?: number;
   lastUpdated: string;
 }
 
@@ -67,7 +71,7 @@ export interface LibraryMemberItem {
   jenisKelamin: 'L' | 'P';
   tanggalTerdaftar?: string;
   tanggalBergabung?: string;
-  status: 'aktif' | 'nonaktif';
+  status: 'aktif' | 'nonaktif' | 'tamat' | 'alumni' | string;
   telepon?: string;
   keterangan?: string;
 }

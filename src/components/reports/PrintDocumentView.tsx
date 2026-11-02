@@ -125,14 +125,46 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const totalSiswaMember = (libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0);
   const totalAnggotaPerpus = (libraryMemberStats?.guruPendidik || 0) + (libraryMemberStats?.staffTendik || 0) + totalSiswaMember;
 
+  // Helper to extract year and month from book date fields
+  const parseBookDateParts = (book: any, defaultYear: number) => {
+    if (book.tanggalMasuk) {
+      const raw = String(book.tanggalMasuk).trim();
+      const isoMatch = raw.match(/^(\d{4})[-/.](\d{1,2})/);
+      if (isoMatch) {
+        return { year: parseInt(isoMatch[1], 10), month: parseInt(isoMatch[2], 10) };
+      }
+      const dmyMatch = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+      if (dmyMatch) {
+        return { year: parseInt(dmyMatch[3], 10), month: parseInt(dmyMatch[2], 10) };
+      }
+    }
+    if (book.bulanPengadaan) {
+      const rawBp = String(book.bulanPengadaan).trim();
+      const bpMatch = rawBp.match(/^(\d{4})[-/.](\d{1,2})/);
+      if (bpMatch) {
+        return { year: parseInt(bpMatch[1], 10), month: parseInt(bpMatch[2], 10) };
+      }
+      const num = parseInt(rawBp, 10);
+      if (!isNaN(num) && num >= 1 && num <= 12) {
+        const yr = parseInt(String(book.tahunPengadaan || book.tahunBeli || book.tahunTerbit), 10) || defaultYear;
+        return { year: yr, month: num };
+      }
+    }
+    const y = parseInt(String(book.tahunPengadaan || book.tahunBeli || book.tahunTerbit), 10);
+    if (!isNaN(y)) {
+      return { year: y, month: 1 };
+    }
+    return null;
+  };
+
   const monthlyNewBooks = useMemo(() => {
     if (!isPerpus || !isMonthly || !monthlyData) return [];
-    const targetKey = `${monthlyData.year}-${String(monthlyData.month).padStart(2, '0')}`;
+    const targetYear = monthlyData.year;
+    const targetMonth = monthlyData.month;
     return libraryBooks.filter(book => {
-      const rawBulan = String(book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : ''));
-      if (rawBulan.startsWith(targetKey)) return true;
-      if (book.tanggalMasuk && book.tanggalMasuk.startsWith(targetKey)) return true;
-      return false;
+      const parts = parseBookDateParts(book, targetYear);
+      if (!parts) return false;
+      return parts.year === targetYear && parts.month === targetMonth;
     });
   }, [libraryBooks, isPerpus, isMonthly, monthlyData]);
 
@@ -151,17 +183,11 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     
     const monthlyList = MONTH_NAMES.map((name, idx) => {
       const monthNum = idx + 1;
-      const targetMonthKey = `${annualYear}-${String(monthNum).padStart(2, '0')}`;
       
       const booksInMonth = libraryBooks.filter(book => {
-        const rawBulan = String(book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : ''));
-        if (rawBulan.startsWith(targetMonthKey)) return true;
-        if (book.tanggalMasuk && book.tanggalMasuk.startsWith(targetMonthKey)) return true;
-        if (typeof book.bulanPengadaan === 'number' && book.bulanPengadaan === monthNum) {
-          const y = book.tahunPengadaan || (book.tanggalMasuk ? parseInt(book.tanggalMasuk.split('-')[0], 10) : annualYear);
-          if (y === annualYear) return true;
-        }
-        return false;
+        const parts = parseBookDateParts(book, annualYear);
+        if (!parts) return false;
+        return parts.year === annualYear && parts.month === monthNum;
       });
 
       const judulCount = booksInMonth.length;
@@ -222,6 +248,92 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
       };
     });
   }, [libraryBooks, annualYear, isPerpus]);
+
+  // Group books by Class and aggregate copies per subject for the Annual Report
+  const annualClassGroupedBooks = useMemo(() => {
+    if (!isPerpus) return [];
+
+    const classBuckets = [
+      { id: 'Kelas VII', label: 'Kelas VII' },
+      { id: 'Kelas VIII', label: 'Kelas VIII' },
+      { id: 'Kelas IX', label: 'Kelas IX' },
+      { id: 'Kelas VII-IX (Umum)', label: 'Kelas VII - IX (Umum / Bersama)' },
+      { id: 'Guru / Pendidik', label: 'Pegangan Guru / Pendidik' },
+      { id: 'Umum / Referensi', label: 'Referensi, Kamus & Fiksi / Umum' },
+    ];
+
+    const results = classBuckets.map(bucket => {
+      const booksInClass = libraryBooks.filter(book => {
+        const rawKelas = (book.kelas || '').trim().toLowerCase();
+        const rawJudul = (book.judul || '').trim().toLowerCase();
+
+        if (bucket.id === 'Kelas VII') {
+          return rawKelas === 'kelas vii' || rawKelas === 'vii' || rawKelas === '7' ||
+            (/\b(kelas\s*vii|kelas\s*7)\b/i.test(rawJudul) && !/viii|8|ix|9/i.test(rawJudul));
+        }
+        if (bucket.id === 'Kelas VIII') {
+          return rawKelas === 'kelas viii' || rawKelas === 'viii' || rawKelas === '8' ||
+            (/\b(kelas\s*viii|kelas\s*8)\b/i.test(rawJudul) && !/vii\b|7\b|ix|9/i.test(rawJudul));
+        }
+        if (bucket.id === 'Kelas IX') {
+          return rawKelas === 'kelas ix' || rawKelas === 'ix' || rawKelas === '9' ||
+            (/\b(kelas\s*ix|kelas\s*9)\b/i.test(rawJudul) && !/vii\b|7\b|viii|8/i.test(rawJudul));
+        }
+        if (bucket.id === 'Kelas VII-IX (Umum)') {
+          return rawKelas.includes('vii-ix') || rawKelas.includes('7-9') || rawKelas.includes('semua kelas') ||
+            rawJudul.includes('vii-ix') || rawJudul.includes('kelas vii, viii, ix');
+        }
+        if (bucket.id === 'Guru / Pendidik') {
+          return rawKelas.includes('guru') || rawKelas.includes('pendidik') || rawJudul.includes('guru');
+        }
+        // Umum / Referensi
+        const is7 = rawKelas === 'kelas vii' || rawKelas === 'vii' || rawKelas === '7' || /\b(kelas\s*vii|kelas\s*7)\b/i.test(rawJudul);
+        const is8 = rawKelas === 'kelas viii' || rawKelas === 'viii' || rawKelas === '8' || /\b(kelas\s*viii|kelas\s*8)\b/i.test(rawJudul);
+        const is9 = rawKelas === 'kelas ix' || rawKelas === 'ix' || rawKelas === '9' || /\b(kelas\s*ix|kelas\s*9)\b/i.test(rawJudul);
+        const is79 = rawKelas.includes('vii-ix') || rawKelas.includes('7-9');
+        const isGuru = rawKelas.includes('guru') || rawKelas.includes('pendidik');
+        return !is7 && !is8 && !is9 && !is79 && !isGuru;
+      });
+
+      // Group by subject/title within this class
+      const subjectMap = new Map<string, {
+        judul: string;
+        pengarang: string;
+        kategori: string;
+        ddc: string;
+        totalEksemplar: number;
+      }>();
+
+      booksInClass.forEach(b => {
+        const key = b.judul.trim().toLowerCase();
+        const existing = subjectMap.get(key);
+        const qty = Number(b.jumlah) || 1;
+        if (existing) {
+          existing.totalEksemplar += qty;
+        } else {
+          subjectMap.set(key, {
+            judul: b.judul,
+            pengarang: b.pengarang || b.penulis || '-',
+            kategori: b.statusBuku || b.kategoriBuku || b.kategori || 'Buku Teks',
+            ddc: b.ddcKlasifikasi || b.ddc || '-',
+            totalEksemplar: qty
+          });
+        }
+      });
+
+      const subjects = Array.from(subjectMap.values());
+      const classCopies = subjects.reduce((sum, s) => sum + s.totalEksemplar, 0);
+
+      return {
+        ...bucket,
+        subjects,
+        totalJudul: subjects.length,
+        totalCopies: classCopies
+      };
+    }).filter(bucket => bucket.subjects.length > 0);
+
+    return results;
+  }, [libraryBooks, isPerpus]);
 
   // 1. Direct PDF Generation & Download (Supporting OKLCH & Tailwind CSS v4)
   const handleSavePdf = async () => {
@@ -666,7 +778,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                             <thead>
                               <tr className="bg-slate-100 font-bold border-b border-slate-400 print:bg-slate-200">
                                 <th className="py-1 px-2 border border-slate-400">Guru (Pendidik)</th>
-                                <th className="py-1 px-2 border border-slate-400">Tenaga Kependidikan (Staff)</th>
+                                <th className="py-1 px-2 border border-slate-400">Tenaga Kependidikan (Staff/TU)</th>
                                 <th className="py-1 px-2 border border-slate-400 text-center">Siswa Laki-laki</th>
                                 <th className="py-1 px-2 border border-slate-400 text-center">Siswa Perempuan</th>
                                 <th className="py-1 px-2 border border-slate-400 text-center font-bold">Total Seluruh Anggota</th>
@@ -674,11 +786,21 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                             </thead>
                             <tbody>
                               <tr>
-                                <td className="py-1 px-2 border border-slate-300 font-semibold">{libraryMemberStats?.guruPendidik || 0} orang</td>
-                                <td className="py-1 px-2 border border-slate-300 font-semibold">{libraryMemberStats?.staffTendik || 0} orang</td>
-                                <td className="py-1 px-2 text-center border border-slate-300">{libraryMemberStats?.siswaLaki || 0} orang</td>
-                                <td className="py-1 px-2 text-center border border-slate-300">{libraryMemberStats?.siswaPerempuan || 0} orang</td>
-                                <td className="py-1 px-2 text-center font-bold border border-slate-300 text-blue-900">{totalAnggotaPerpus} orang</td>
+                                <td className="py-1 px-2 border border-slate-300">
+                                  <span className="font-bold block text-slate-900">{libraryMemberStats?.guruPendidik || 0} orang</span>
+                                  <span className="text-[9.5px] text-slate-600 font-mono">
+                                    (L: {libraryMemberStats?.guruLaki ?? 10}, P: {libraryMemberStats?.guruPerempuan ?? 14})
+                                  </span>
+                                </td>
+                                <td className="py-1 px-2 border border-slate-300">
+                                  <span className="font-bold block text-slate-900">{libraryMemberStats?.staffTendik || 0} orang</span>
+                                  <span className="text-[9.5px] text-slate-600 font-mono">
+                                    (L: {libraryMemberStats?.staffLaki ?? 5}, P: {libraryMemberStats?.staffPerempuan ?? 3})
+                                  </span>
+                                </td>
+                                <td className="py-1 px-2 text-center border border-slate-300 font-semibold">{libraryMemberStats?.siswaLaki || 0} orang</td>
+                                <td className="py-1 px-2 text-center border border-slate-300 font-semibold">{libraryMemberStats?.siswaPerempuan || 0} orang</td>
+                                <td className="py-1 px-2 text-center font-bold border border-slate-300 text-blue-900 font-mono">{totalAnggotaPerpus} orang</td>
                               </tr>
                             </tbody>
                           </table>
@@ -911,60 +1033,140 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                               <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-1.5 print:border-black">
                                 {isMonthly 
                                   ? `III. LAMPIRAN PENAMBAHAN BUKU BARU & PENGADAAN BULAN ${MONTH_NAMES[(monthlyData?.month || 9) - 1].toUpperCase()} ${monthlyData?.year || 2026}`
-                                  : `III.B. LAMPIRAN KATALOG LENGKAP SELURUH DATA BUKU PERPUSTAKAAN TERDATA`
+                                  : `III.B. LAMPIRAN KATALOG KOLEKSI BUKU PERPUSTAKAAN PER KELAS & MATA PELAJARAN`
                                 }
                               </h4>
                               <p className="text-[10px] text-slate-600 mb-1.5 flex justify-between items-center">
                                 <span>
                                   {isMonthly 
                                     ? `Daftar buku baru yang masuk / dibeli sekolah pada bulan berjalan (${monthlyNewBooks.length} judul / ${totalNewCopies} eks):`
-                                    : `Daftar seluruh judul koleksi buku yang terdata di perpustakaan (${libraryBooks.length} judul / ${totalAllBookCopies} eks):`
+                                    : `Rekapitulasi jumlah buku keseluruhan per kelas sesuai judul mata pelajaran (${libraryBooks.length} judul / ${totalAllBookCopies} eks):`
                                   }
                                 </span>
                               </p>
 
-                              <div className="overflow-x-auto mb-3">
-                                <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
-                                  <thead>
-                                    <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400 print:bg-slate-200">
-                                      <th className="py-1 px-1.5 text-center w-7 border border-slate-400">No</th>
-                                      <th className="py-1 px-2 border border-slate-400">Judul Buku</th>
-                                      <th className="py-1 px-1.5 border border-slate-400">Pengarang / Penerbit</th>
-                                      <th className="py-1 px-1.5 border border-slate-400">Kelas</th>
-                                      <th className="py-1 px-1.5 border border-slate-400">DDC</th>
-                                      <th className="py-1 px-1.5 border border-slate-400">Kategori</th>
-                                      <th className="py-1 px-1.5 border border-slate-400">{isMonthly ? 'Tgl Masuk' : 'Tahun'}</th>
-                                      <th className="py-1 px-1.5 border border-slate-400">Sumber</th>
-                                      <th className="py-1 px-1.5 text-center border border-slate-400">Jml</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {(isMonthly ? monthlyNewBooks : libraryBooks).length === 0 ? (
-                                      <tr>
-                                        <td colSpan={9} className="py-3 text-center text-slate-500 italic border border-slate-300">
-                                          {isMonthly 
-                                            ? 'Pada bulan berjalan tidak ada penambahan buku baru yang masuk / dibeli. Seluruh koleksi terpelihara baik.' 
-                                            : 'Belum ada data buku yang terdaftar.'}
-                                        </td>
+                              {isMonthly ? (
+                                /* TABEL BULANAN: BUKU BARU YANG MASUK */
+                                <div className="overflow-x-auto mb-3">
+                                  <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
+                                    <thead>
+                                      <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400 print:bg-slate-200">
+                                        <th className="py-1 px-1.5 text-center w-7 border border-slate-400">No</th>
+                                        <th className="py-1 px-2 border border-slate-400">Judul Buku</th>
+                                        <th className="py-1 px-1.5 border border-slate-400">Pengarang / Penerbit</th>
+                                        <th className="py-1 px-1.5 border border-slate-400 text-center">Kelas</th>
+                                        <th className="py-1 px-1.5 border border-slate-400">DDC & Kategori</th>
+                                        <th className="py-1 px-1.5 border border-slate-400 text-center">Tgl Masuk</th>
+                                        <th className="py-1 px-1.5 border border-slate-400">Sumber Dana</th>
+                                        <th className="py-1 px-1.5 text-center border border-slate-400 font-bold">Jml (Eks)</th>
                                       </tr>
-                                    ) : (
-                                      (isMonthly ? monthlyNewBooks : libraryBooks).slice(0, isMonthly ? 8 : 12).map((b, idx) => (
-                                        <tr key={b.id} className="border-b border-slate-300">
-                                          <td className="py-1 px-1.5 text-center font-mono border border-slate-300">{idx + 1}</td>
-                                          <td className="py-1 px-2 border border-slate-300 font-semibold">{b.judul}</td>
-                                          <td className="py-1 px-1.5 border border-slate-300 text-[9.5px]">{b.pengarang || '-'}</td>
-                                          <td className="py-1 px-1.5 border border-slate-300">{b.kelas || '-'}</td>
-                                          <td className="py-1 px-1.5 border border-slate-300 font-mono text-[9px]">{b.ddcKlasifikasi || '-'}</td>
-                                          <td className="py-1 px-1.5 border border-slate-300 uppercase text-[9px] font-bold">{b.statusBuku || b.kategori || 'umum'}</td>
-                                          <td className="py-1 px-1.5 border border-slate-300 font-mono text-[9px]">{isMonthly ? (b.tanggalMasuk || '-') : (b.tahunBeli || '-')}</td>
-                                          <td className="py-1 px-1.5 border border-slate-300 text-[9px]">{b.sumberPengadaan || 'BOS'}</td>
-                                          <td className="py-1 px-1.5 text-center font-bold border border-slate-300">{b.jumlah} eks</td>
+                                    </thead>
+                                    <tbody>
+                                      {monthlyNewBooks.length === 0 ? (
+                                        <tr>
+                                          <td colSpan={8} className="py-3 text-center text-slate-500 italic border border-slate-300">
+                                            Pada bulan berjalan tidak ada penambahan buku baru yang masuk / dibeli. Seluruh koleksi terpelihara baik.
+                                          </td>
                                         </tr>
-                                      ))
+                                      ) : (
+                                        monthlyNewBooks.map((b, idx) => (
+                                          <tr key={b.id} className="border-b border-slate-300">
+                                            <td className="py-1 px-1.5 text-center font-mono border border-slate-300">{idx + 1}</td>
+                                            <td className="py-1 px-2 border border-slate-300 font-semibold">{b.judul}</td>
+                                            <td className="py-1 px-1.5 border border-slate-300 text-[9.5px]">{b.pengarang || b.penulis || '-'}</td>
+                                            <td className="py-1 px-1.5 text-center border border-slate-300 font-medium">{b.kelas || '-'}</td>
+                                            <td className="py-1 px-1.5 border border-slate-300">
+                                              <span className="font-mono text-[9px] block text-blue-900">{b.ddcKlasifikasi || b.ddc || '-'}</span>
+                                              <span className="text-[8.5px] text-slate-600 uppercase font-semibold">{b.statusBuku || b.kategori || 'Buku Teks'}</span>
+                                            </td>
+                                            <td className="py-1 px-1.5 text-center border border-slate-300 font-mono text-[9px]">{b.tanggalMasuk || '-'}</td>
+                                            <td className="py-1 px-1.5 border border-slate-300 text-[9px]">{b.sumberPengadaan || 'Dana BOS'}</td>
+                                            <td className="py-1 px-1.5 text-center font-bold border border-slate-300 text-emerald-900">{b.jumlah} eks</td>
+                                          </tr>
+                                        ))
+                                      )}
+                                    </tbody>
+                                    {monthlyNewBooks.length > 0 && (
+                                      <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-400 text-slate-900">
+                                        <tr>
+                                          <td colSpan={7} className="py-1 px-2 text-right border border-slate-400 uppercase text-[9.5px]">
+                                            Total Penambahan Buku Bulan Ini:
+                                          </td>
+                                          <td className="py-1 px-1.5 text-center font-mono text-emerald-900 font-black border border-slate-400">
+                                            {totalNewCopies} eks
+                                          </td>
+                                        </tr>
+                                      </tfoot>
                                     )}
-                                  </tbody>
-                                </table>
-                              </div>
+                                  </table>
+                                </div>
+                              ) : (
+                                /* TABEL TAHUNAN: KOMPILASI JUMLAH BUKU PER KELAS SESUAI JUDUL MATA PELAJARAN */
+                                <div className="space-y-2 mb-3">
+                                  {annualClassGroupedBooks.length === 0 ? (
+                                    <div className="py-3 text-center text-slate-500 italic border border-slate-300 rounded">
+                                      Belum ada data buku yang terdaftar.
+                                    </div>
+                                  ) : (
+                                    <div className="border border-slate-400 rounded overflow-hidden">
+                                      <table className="w-full text-left border-collapse text-[10px]">
+                                        <thead>
+                                          <tr className="bg-slate-200 text-slate-900 font-bold border-b border-slate-400">
+                                            <th className="py-1 px-2 text-center w-8 border-r border-slate-400">No</th>
+                                            <th className="py-1 px-2 border-r border-slate-400">Mata Pelajaran / Judul Buku</th>
+                                            <th className="py-1 px-2 border-r border-slate-400">Klasifikasi DDC & Kategori</th>
+                                            <th className="py-1 px-2 text-center font-bold">Jumlah Eksemplar</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {annualClassGroupedBooks.map((clsGroup, grpIdx) => (
+                                            <React.Fragment key={clsGroup.id}>
+                                              {/* Header Per Kelas */}
+                                              <tr className="bg-slate-100 border-t-2 border-b border-slate-300 font-bold">
+                                                <td colSpan={3} className="py-1 px-2 text-slate-900 text-[10.5px] border-r border-slate-300">
+                                                  📚 <span className="uppercase tracking-wide">{clsGroup.label}</span>
+                                                  <span className="text-[9.5px] font-normal text-slate-600 ml-2">({clsGroup.totalJudul} Judul Mata Pelajaran)</span>
+                                                </td>
+                                                <td className="py-1 px-2 text-center font-mono text-blue-900 font-bold bg-blue-50/50">
+                                                  Subtotal: {clsGroup.totalCopies} eks
+                                                </td>
+                                              </tr>
+
+                                              {/* List Judul Buku Dalam Kelas Ini */}
+                                              {clsGroup.subjects.map((sub, sIdx) => (
+                                                <tr key={sIdx} className="border-b border-slate-200 hover:bg-slate-50/60">
+                                                  <td className="py-0.5 px-2 text-center font-mono text-slate-500 border-r border-slate-200">
+                                                    {sIdx + 1}
+                                                  </td>
+                                                  <td className="py-0.5 px-2 font-medium text-slate-900 border-r border-slate-200">
+                                                    {sub.judul}
+                                                  </td>
+                                                  <td className="py-0.5 px-2 text-slate-600 border-r border-slate-200">
+                                                    <span className="font-mono text-[9px] text-blue-800">{sub.ddc}</span> · <span className="text-[9px]">{sub.kategori}</span>
+                                                  </td>
+                                                  <td className="py-0.5 px-2 text-center font-bold font-mono text-slate-900">
+                                                    {sub.totalEksemplar} eks
+                                                  </td>
+                                                </tr>
+                                              ))}
+                                            </React.Fragment>
+                                          ))}
+                                        </tbody>
+                                        <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-400 text-slate-900">
+                                          <tr>
+                                            <td colSpan={3} className="py-1.5 px-3 text-right uppercase text-[10px] border-r border-slate-400">
+                                              TOTAL SELURUH KOLEKSI BUKU PERPUSTAKAAN:
+                                            </td>
+                                            <td className="py-1.5 px-2 text-center font-mono text-emerald-900 font-black text-xs">
+                                              {totalAllBookCopies} eks
+                                            </td>
+                                          </tr>
+                                        </tfoot>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
 
