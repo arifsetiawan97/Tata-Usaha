@@ -781,11 +781,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const rawatCount = roleTasks.filter(t => t.category === 'perawatan_buku' || t.title.toLowerCase().includes('jilid') || t.title.toLowerCase().includes('rawat')).length;
       const stockCount = roleTasks.filter(t => t.category === 'stock_opname' || t.title.toLowerCase().includes('stock') || t.title.toLowerCase().includes('inventaris')).length;
 
-      achievementsList.push(`Pelayanan sirkulasi peminjaman dan pengembalian bahan pustaka bagi pemustaka (${sirkulasiCount > 0 ? sirkulasiCount : 24} transaksi layanan tercatat tertib)`);
-      achievementsList.push(`Pengolahan katalogisasi DDC, input buku induk & pelabelan barcode koleksi baru (${katalogCount > 0 ? katalogCount : 18} kegiatan pengolahan tuntas)`);
-      achievementsList.push(`Pendampingan kegiatan literasi 15 menit membaca rutin dan pembinaan pojok baca kelas (${literasiCount > 0 ? literasiCount : 20} sesi aktif)`);
-      achievementsList.push(`Realisasi tugas pokok (Tupoksi) perpustakaan: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
-      achievementsList.push(`Realisasi tugas tambahan literasi: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
+      // Extract specific completed task titles for Pokok & Tambahan
+      const pokokDoneTitles = tupoksiCompleted.map(t => t.title);
+      const tambahanDoneTitles = tambahanCompleted.map(t => t.title);
+
+      if (tupoksiCompleted.length > 0) {
+        achievementsList.push(`Pelaksanaan Tugas Pokok (Tupoksi) Perpustakaan: Menyelesaikan ${tupoksiCompleted.length} dari ${tupoksiTasks.length} kegiatan pokok tuntas (${pokokDoneTitles.slice(0, 3).join(', ')})`);
+      } else {
+        achievementsList.push(`Pelayanan sirkulasi peminjaman dan pengembalian bahan pustaka bagi pemustaka (${sirkulasiCount > 0 ? sirkulasiCount : 24} transaksi layanan tercatat tertib)`);
+      }
+
+      if (tambahanCompleted.length > 0) {
+        achievementsList.push(`Pelaksanaan Tugas Tambahan Kedinasan: Menuntaskan ${tambahanCompleted.length} dari ${tambahanTasks.length} kegiatan tugas tambahan (${tambahanDoneTitles.slice(0, 3).join(', ')})`);
+      } else {
+        achievementsList.push(`Pendampingan kegiatan literasi 15 menit membaca rutin dan pembinaan pojok baca kelas (${literasiCount > 0 ? literasiCount : 20} sesi aktif)`);
+      }
+
+      if (katalogCount > 0) {
+        achievementsList.push(`Pengolahan katalogisasi DDC, input buku induk & pelabelan barcode koleksi baru (${katalogCount} kegiatan pengolahan tuntas)`);
+      }
       if (rawatCount > 0) {
         achievementsList.push(`Restorasi, pengeleman, dan perbaikan jilid buku yang mengalami kerusakan fisik (${rawatCount} eksemplar buku tertangani)`);
       }
@@ -859,7 +873,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const summaryTemplates: Record<RoleType, string> = {
-      PERPUS: `Sepanjang bulan ${monthName} ${year}, Layanan Operasional Perpustakaan Sekolah telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 24} agenda kerja (${completionRate}%). Seluruh pelayanan sirkulasi pemustaka, katalogisasi DDC dan pelabelan buku kurikulum merdeka, pendampingan Gerakan Literasi Sekolah (GLS), serta restorasi koleksi fisik terselenggara secara akuntabel dan tertib sesuai standar tata naskah dinas.`,
+      PERPUS: (() => {
+        if (roleTasks.length > 0) {
+          const pokokNames = tupoksiCompleted.map(t => t.title).slice(0, 2);
+          const pokokDesc = pokokNames.length > 0 
+            ? `pelaksanaan tugas pokok berupa ${pokokNames.join(' dan ')}`
+            : 'pelaksanaan tugas pokok sirkulasi peminjaman dan katalogisasi DDC koleksi';
+          
+          const tambahanNames = tambahanCompleted.map(t => t.title).slice(0, 2);
+          const tambahanDesc = tambahanNames.length > 0
+            ? `serta pelaksanaan tugas tambahan seperti ${tambahanNames.join(' dan ')}`
+            : 'serta pelaksanaan tugas tambahan pembinaan literasi dan pojok baca kelas';
+
+          return `Sepanjang bulan ${monthName} ${year}, Pengelola Layanan Perpustakaan Sekolah telah menyelesaikan ${completed.length} dari ${roleTasks.length} agenda kegiatan kedinasan yang terlaksana (${completionRate}% tuntas), terdiri dari ${tupoksiCompleted.length} tugas pokok (Tupoksi) dan ${tambahanCompleted.length} tugas tambahan operasional. Rincian kegiatan yang telah dilaksanakan mencakup ${pokokDesc}, ${tambahanDesc}. Seluruh pelayanan pemustaka, sirkulasi bahan pustaka, dan pemeliharaan koleksi fisik buku terselenggara secara tertib, akuntabel, dan berorientasi pada kepuasan pemustaka sekolah.`;
+        }
+        return `Sepanjang bulan ${monthName} ${year}, Layanan Operasional Perpustakaan Sekolah telah menyelesaikan agenda kegiatan kedinasan secara terencana, terdiri dari tugas pokok pelayanan sirkulasi pemustaka, katalogisasi DDC, pemutakhiran buku induk, serta tugas tambahan pendampingan Gerakan Literasi Sekolah (GLS) dan perawatan fisik buku koleksi sesuai standar tata naskah dinas perpustakaan sekolah.`;
+      })(),
       LAB_IPA: `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional Laboratorium IPA telah menuntaskan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 22} pekerjaan (${completionRate}%). Penyiapan alat dan bahan praktikum fisika, kimia, dan biologi berjalan lancar, sterilisasi alat gelas dan kalibrasi mikroskop tuntas, serta standar keselamatan kerja (Zero Incident K3) dan pengelolaan limbah ramah lingkungan terjaga optimal.`,
       TU: `Sepanjang bulan ${monthName} ${year}, Layanan Operasional Administrasi Tata Usaha telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 28} agenda kedinasan (${completionRate}%). Tata kelola persuratan dinas masuk dan keluar, pelayanan administrasi kesiswaan (buku induk, mutasi, dan legalisasi), pemutakhiran data Dapodik kepegawaian, serta rekonsiliasi berkala buku inventaris barang (KIR) terselenggara sesuai SOP standar pelayanan minimal (SPM).`,
       PENJAGA: `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional Penjaga Sekolah telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 26} tugas pengamanan (${completionRate}%). Seluruh pos penjagaan dan titik rawan terpantau aman dan kondusif dengan status Zero Incident (nihil pencurian, kebakaran, dan gangguan kamtibmas), pengawasan keselamatan penyeberangan jalan peserta didik terlaksana tertib, serta kesiapsiagaan operasional sarana gedung terpelihara prima.`,
@@ -942,6 +971,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? summaryText
       : existing.summary;
 
+    const defaultKPIs = (ROLE_OPERATIONAL_SPECS[role]?.operationalKPIs || []).map(k => ({ ...k }));
+    const finalKPIs = existing?.customKPIs && existing.customKPIs.length > 0 ? existing.customKPIs : defaultKPIs;
+
     return {
       id: existing?.id || `m-rep-${role.toLowerCase()}-${month}-${year}`,
       role,
@@ -952,6 +984,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       achievements: achievementsList,
       obstacles: finalObstacles,
       solutions: finalSolutions,
+      customKPIs: finalKPIs,
       approvalStatus: existing?.approvalStatus || 'diajukan'
     };
   };

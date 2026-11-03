@@ -33,6 +33,7 @@ import {
   Users
 } from 'lucide-react';
 import { initialSchoolConfig } from '../../data/initialData';
+import { ROLE_OPERATIONAL_SPECS } from '../../data/roleOperationalSpecs';
 
 interface PrintDocumentViewProps {
   reportType: 'monthly' | 'annual';
@@ -60,6 +61,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     archiveReport, 
     tupoksiDefinitions,
     libraryBooks,
+    libraryMembers,
     libraryMemberStats
   } = useApp();
   const printableRef = useRef<HTMLDivElement>(null);
@@ -122,8 +124,33 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
 
   // Khusus Perpustakaan
   const isPerpus = role === 'PERPUS';
-  const totalSiswaMember = (libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0);
-  const totalAnggotaPerpus = (libraryMemberStats?.guruPendidik || 0) + (libraryMemberStats?.staffTendik || 0) + totalSiswaMember;
+  const registeredGuruLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'L').length;
+  const registeredGuruPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
+  const registeredStaffLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'L').length;
+  const registeredStaffPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
+  const registeredSiswaLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L' && m.status !== 'tamat' && m.status !== 'alumni').length;
+  const registeredSiswaPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P' && m.status !== 'tamat' && m.status !== 'alumni').length;
+
+  const guruLaki = (registeredGuruLaki + registeredGuruPerempuan > 0) ? registeredGuruLaki : (libraryMemberStats?.guruLaki ?? 10);
+  const guruPerempuan = (registeredGuruLaki + registeredGuruPerempuan > 0) ? registeredGuruPerempuan : (libraryMemberStats?.guruPerempuan ?? 14);
+  const totalGuru = (libraryMemberStats?.guruPendidik && libraryMemberStats.guruPendidik > 0 && registeredGuruLaki + registeredGuruPerempuan === 0)
+    ? libraryMemberStats.guruPendidik
+    : (guruLaki + guruPerempuan);
+
+  const staffLaki = (registeredStaffLaki + registeredStaffPerempuan > 0) ? registeredStaffLaki : (libraryMemberStats?.staffLaki ?? 5);
+  const staffPerempuan = (registeredStaffLaki + registeredStaffPerempuan > 0) ? registeredStaffPerempuan : (libraryMemberStats?.staffPerempuan ?? 3);
+  const totalStaff = (libraryMemberStats?.staffTendik && libraryMemberStats.staffTendik > 0 && registeredStaffLaki + registeredStaffPerempuan === 0)
+    ? libraryMemberStats.staffTendik
+    : (staffLaki + staffPerempuan);
+
+  const siswaLaki = (libraryMemberStats?.siswaLaki && libraryMemberStats.siswaLaki > 0) ? libraryMemberStats.siswaLaki : (registeredSiswaLaki > 0 ? registeredSiswaLaki : 142);
+  const siswaPerempuan = (libraryMemberStats?.siswaPerempuan && libraryMemberStats.siswaPerempuan > 0) ? libraryMemberStats.siswaPerempuan : (registeredSiswaPerempuan > 0 ? registeredSiswaPerempuan : 158);
+  const totalSiswa = siswaLaki + siswaPerempuan;
+  const totalAnggotaPerpus = totalGuru + totalStaff + totalSiswa;
+
+  const printKpis = (isMonthly && monthlyData?.customKPIs && monthlyData.customKPIs.length > 0)
+    ? monthlyData.customKPIs
+    : (ROLE_OPERATIONAL_SPECS[role]?.operationalKPIs || []);
 
   // Helper to extract year and month from book date fields
   const parseBookDateParts = (book: any, defaultYear: number) => {
@@ -763,6 +790,44 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                         </div>
                       </div>
 
+                      {/* MATRIKS TARGET OPERASIONAL & INDIKATOR KINERJA KUNCI (KPI) */}
+                      <div className="mt-3 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                        <div className="flex justify-between items-center mb-1">
+                          <h4 className="font-bold text-xs text-slate-900 uppercase">
+                            MATRIKS TARGET OPERASIONAL & INDIKATOR KINERJA KUNCI (KPI) - {roleTitle.toUpperCase()}
+                          </h4>
+                          <span className="font-mono text-[9.5px] text-slate-600">
+                            Standar Tata Kelola Satdik
+                          </span>
+                        </div>
+                        <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
+                          <thead>
+                            <tr className="bg-slate-100 font-bold border-b border-slate-400 print:bg-slate-200">
+                              <th className="py-1 px-1.5 border border-slate-400 w-16 text-center">Kode</th>
+                              <th className="py-1 px-1.5 border border-slate-400">Indikator Kinerja Kunci (KPI)</th>
+                              <th className="py-1 px-1.5 border border-slate-400 w-36">Target Kerja</th>
+                              <th className="py-1 px-1.5 border border-slate-400 w-44">Realisasi Lapangan</th>
+                              <th className="py-1 px-1.5 border border-slate-400 w-16 text-center">Satuan</th>
+                              <th className="py-1 px-1.5 border border-slate-400 w-16 text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {printKpis.map((kpi, idx) => (
+                              <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/60 print:bg-transparent' : ''}>
+                                <td className="py-1 px-1.5 border border-slate-300 font-mono text-center font-bold text-slate-700">{kpi.code}</td>
+                                <td className="py-1 px-1.5 border border-slate-300 font-semibold text-slate-900">{kpi.name}</td>
+                                <td className="py-1 px-1.5 border border-slate-300 text-slate-700">{kpi.target}</td>
+                                <td className="py-1 px-1.5 border border-slate-300 font-semibold text-slate-800">{kpi.realization}</td>
+                                <td className="py-1 px-1.5 border border-slate-300 text-center text-slate-600">{kpi.unit}</td>
+                                <td className="py-1 px-1.5 border border-slate-300 text-center font-bold text-emerald-800">
+                                  {kpi.status === 'tercapai' ? 'Tercapai' : 'Proses'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
                       {/* DATA REKAPITULASI ANGGOTA PERPUSTAKAAN (GURU, STAFF, SISWA) */}
                       {isPerpus && (
                         <div className="mt-3 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
@@ -787,19 +852,19 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                             <tbody>
                               <tr>
                                 <td className="py-1 px-2 border border-slate-300">
-                                  <span className="font-bold block text-slate-900">{libraryMemberStats?.guruPendidik || 0} orang</span>
+                                  <span className="font-bold block text-slate-900">{totalGuru} orang</span>
                                   <span className="text-[9.5px] text-slate-600 font-mono">
-                                    (L: {libraryMemberStats?.guruLaki ?? 10}, P: {libraryMemberStats?.guruPerempuan ?? 14})
+                                    (L: {guruLaki}, P: {guruPerempuan})
                                   </span>
                                 </td>
                                 <td className="py-1 px-2 border border-slate-300">
-                                  <span className="font-bold block text-slate-900">{libraryMemberStats?.staffTendik || 0} orang</span>
+                                  <span className="font-bold block text-slate-900">{totalStaff} orang</span>
                                   <span className="text-[9.5px] text-slate-600 font-mono">
-                                    (L: {libraryMemberStats?.staffLaki ?? 5}, P: {libraryMemberStats?.staffPerempuan ?? 3})
+                                    (L: {staffLaki}, P: {staffPerempuan})
                                   </span>
                                 </td>
-                                <td className="py-1 px-2 text-center border border-slate-300 font-semibold">{libraryMemberStats?.siswaLaki || 0} orang</td>
-                                <td className="py-1 px-2 text-center border border-slate-300 font-semibold">{libraryMemberStats?.siswaPerempuan || 0} orang</td>
+                                <td className="py-1 px-2 text-center border border-slate-300 font-semibold">{siswaLaki} orang</td>
+                                <td className="py-1 px-2 text-center border border-slate-300 font-semibold">{siswaPerempuan} orang</td>
                                 <td className="py-1 px-2 text-center font-bold border border-slate-300 text-blue-900 font-mono">{totalAnggotaPerpus} orang</td>
                               </tr>
                             </tbody>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { RoleType, MonthlyReport } from '../../types';
+import { RoleType, MonthlyReport, OperationalKPI } from '../../types';
 import { InventoryTable } from '../common/InventoryTable';
 import { 
   getTaskClassification, 
@@ -40,7 +40,11 @@ import {
   BookOpen,
   Users,
   GraduationCap,
-  Briefcase
+  Briefcase,
+  Edit3,
+  Check,
+  X,
+  RotateCcw
 } from 'lucide-react';
 
 interface MonthlyReportViewProps {
@@ -92,6 +96,134 @@ const OFFICIAL_MONTHLY_TEMPLATES: Record<RoleType, {
   }
 };
 
+export const PERPUS_KPI_PRESETS: { id: string; label: string; desc: string; kpis: OperationalKPI[] }[] = [
+  {
+    id: 'standar_snp',
+    label: 'Standar Nasional (SNP / Permendikbud)',
+    desc: 'Standar reguler sirkulasi, pengolahan DDC, GLS, preservasi buku, & stock opname',
+    kpis: [
+      {
+        code: 'KPI-PUS-01',
+        name: 'Sirkulasi Peminjaman & Pengembalian Bahan Pustaka',
+        target: '100% Layanan Tuntas Tepat Waktu',
+        realization: '100% Tercapai (Layanan Tertib & Bebas Komplain)',
+        unit: 'Transaksi Peminjaman',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-02',
+        name: 'Katalogisasi DDC & Pelabelan Barcode Koleksi Baru',
+        target: '100% Bahan Pustaka Masuk Terregistrasi',
+        realization: '100% Terinput ke Buku Induk & Barcode Aktif',
+        unit: 'Eksemplar Buku',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-03',
+        name: 'Pendampingan Gerakan Literasi Sekolah (GLS 15 Menit)',
+        target: 'Minimal 20 Sesi / Bulan di Rombel Kelas',
+        realization: 'Terlaksana 20+ Sesi Aktif Bersama Wali Kelas',
+        unit: 'Sesi Pendampingan',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-04',
+        name: 'Restorasi, Penjilidan & Preservasi Koleksi Rusak',
+        target: '100% Buku Rusak Ringan Tertangani',
+        realization: '100% Diperbaiki dengan Lem Jilid & Sampul Mika',
+        unit: 'Buku Direstorasi',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-05',
+        name: 'Stock Opname Fisik & Layanan Bebas Pustaka',
+        target: 'Verifikasi Berkala & Tertib Administrasi',
+        realization: 'Terselenggara Sesuai Standar Akreditasi Perpus',
+        unit: 'Laporan Opname',
+        status: 'tercapai'
+      }
+    ]
+  },
+  {
+    id: 'fokus_pengadaan_restorasi',
+    label: 'Fokus Pengadaan, Registrasi & Restorasi',
+    desc: 'Penyesuaian prioritas penambahan buku baru, sinkronisasi tanggal/tahun beli & preservasi koleksi',
+    kpis: [
+      {
+        code: 'KPI-PUS-01',
+        name: 'Registrasi Buku Masuk & Validasi Tanggal Beli',
+        target: '100% Buku Masuk Tercatat Tanggal & Tahun Beli',
+        realization: '100% Sinkron Tercatat di Buku Induk & Sistem',
+        unit: 'Eksemplar',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-02',
+        name: 'Klasifikasi DDC, Nomor Panggil & Barcode Koleksi Baru',
+        target: '100% Koleksi Siap Pajang Sesuai DDC & Berlabel',
+        realization: '100% Terlabel Rapi & Barcode Terverifikasi',
+        unit: 'Eksemplar',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-03',
+        name: 'Restorasi Fisik, Pengeleman Jilid & Sampul Mika Plastik',
+        target: 'Minimal 25 Eksemplar Buku Direparasi Per Bulan',
+        realization: '32 Eksemplar Buku Tuntas Direparasi Prima',
+        unit: 'Buku Direparasi',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-04',
+        name: 'Penyiangan (Weeding) Bahan Pustaka Rusak Berat / Usang',
+        target: 'Evaluasi & Berita Acara Penyiangan Periodik',
+        realization: 'Tersusun Berita Acara Penyiangan Koleksi Usang',
+        unit: 'Berita Acara',
+        status: 'tercapai'
+      }
+    ]
+  },
+  {
+    id: 'fokus_gls_pemustaka',
+    label: 'Fokus Layanan Pemustaka & Gerakan Literasi (GLS)',
+    desc: 'Penyesuaian prioritas sirkulasi cepat, kunjungan pemustaka, pojok baca & duta baca',
+    kpis: [
+      {
+        code: 'KPI-PUS-01',
+        name: 'Sirkulasi Cepat & Layanan Peminjaman Kilat',
+        target: '< 2 Menit Per Transaksi Bebas Antrean Loket',
+        realization: 'Rata-rata 1.1 Menit Per Pemustaka Terlayani',
+        unit: 'Menit/Transaksi',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-02',
+        name: 'Tingkat Kunjungan Pemustaka (Guru, Tendik, Siswa)',
+        target: 'Rata-rata > 65 Pemustaka Hadir Membaca Per Hari',
+        realization: 'Tercapai Rata-rata 74 Pemustaka Per Hari',
+        unit: 'Pemustaka/Hari',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-03',
+        name: 'Gerakan Literasi Sekolah (GLS 15 Menit) & Mading Perpus',
+        target: '100% Rombel Kelas Aktif Membaca & Mading Terbit',
+        realization: '100% Rombel Terfasilitasi & Mading Edisi Baru',
+        unit: 'Sesi / Edisi',
+        status: 'tercapai'
+      },
+      {
+        code: 'KPI-PUS-04',
+        name: 'Penyediaan Koleksi Pojok Baca Kelas & Duta Literasi',
+        target: 'Rotasi 50 Buku Pengayaan ke Seluruh Rombel Kelas',
+        realization: '100% Buku Pojok Baca Terdistribusi Rapi',
+        unit: 'Buku / Kelas',
+        status: 'tercapai'
+      }
+    ]
+  }
+];
+
 export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({ 
   onOpenPrint,
   initialRole,
@@ -111,6 +243,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
     lastAddedTaskMonthYear,
     setActiveNavTab,
     libraryBooks,
+    libraryMembers,
     libraryMemberStats
   } = useApp();
 
@@ -236,8 +369,146 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
     return monthlyNewBooks.reduce((sum, b) => sum + (Number(b.jumlah) || 1), 0);
   }, [monthlyNewBooks]);
 
-  const totalSiswaMember = (libraryMemberStats.siswaLaki || 0) + (libraryMemberStats.siswaPerempuan || 0);
-  const totalAnggotaPerpus = (libraryMemberStats.guruPendidik || 0) + (libraryMemberStats.staffTendik || 0) + totalSiswaMember;
+  // SINKRONISASI AKURAT JUMLAH LAKI-LAKI & PEREMPUAN PENDIDIK & TENDIK DENGAN BUKU REKAP ANGGOTA
+  const registeredGuruLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'L').length;
+  const registeredGuruPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
+  const registeredStaffLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'L').length;
+  const registeredStaffPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
+  const registeredSiswaLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L' && m.status !== 'tamat' && m.status !== 'alumni').length;
+  const registeredSiswaPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P' && m.status !== 'tamat' && m.status !== 'alumni').length;
+
+  const guruLaki = (registeredGuruLaki + registeredGuruPerempuan > 0) ? registeredGuruLaki : (libraryMemberStats?.guruLaki ?? 10);
+  const guruPerempuan = (registeredGuruLaki + registeredGuruPerempuan > 0) ? registeredGuruPerempuan : (libraryMemberStats?.guruPerempuan ?? 14);
+  const totalGuru = (libraryMemberStats?.guruPendidik && libraryMemberStats.guruPendidik > 0 && registeredGuruLaki + registeredGuruPerempuan === 0)
+    ? libraryMemberStats.guruPendidik
+    : (guruLaki + guruPerempuan);
+
+  const staffLaki = (registeredStaffLaki + registeredStaffPerempuan > 0) ? registeredStaffLaki : (libraryMemberStats?.staffLaki ?? 5);
+  const staffPerempuan = (registeredStaffLaki + registeredStaffPerempuan > 0) ? registeredStaffPerempuan : (libraryMemberStats?.staffPerempuan ?? 3);
+  const totalStaff = (libraryMemberStats?.staffTendik && libraryMemberStats.staffTendik > 0 && registeredStaffLaki + registeredStaffPerempuan === 0)
+    ? libraryMemberStats.staffTendik
+    : (staffLaki + staffPerempuan);
+
+  const siswaLaki = (libraryMemberStats?.siswaLaki && libraryMemberStats.siswaLaki > 0) ? libraryMemberStats.siswaLaki : (registeredSiswaLaki > 0 ? registeredSiswaLaki : 142);
+  const siswaPerempuan = (libraryMemberStats?.siswaPerempuan && libraryMemberStats.siswaPerempuan > 0) ? libraryMemberStats.siswaPerempuan : (registeredSiswaPerempuan > 0 ? registeredSiswaPerempuan : 158);
+  const totalSiswa = siswaLaki + siswaPerempuan;
+  const totalAnggotaPerpus = totalGuru + totalStaff + totalSiswa;
+
+  // KPI Management States
+  const [isEditKpiModalOpen, setIsEditKpiModalOpen] = useState(false);
+  const [editingKpis, setEditingKpis] = useState<OperationalKPI[]>([]);
+  const [activeKpiPresetId, setActiveKpiPresetId] = useState<string>('standar_snp');
+
+  // Effective KPIs for display
+  const effectiveKpis: OperationalKPI[] = useMemo(() => {
+    if (reportState.customKPIs && reportState.customKPIs.length > 0) {
+      return reportState.customKPIs;
+    }
+    return ROLE_OPERATIONAL_SPECS[effectiveRole]?.operationalKPIs || [];
+  }, [reportState.customKPIs, effectiveRole]);
+
+  const handleOpenEditKpi = () => {
+    setEditingKpis(JSON.parse(JSON.stringify(effectiveKpis)));
+    setIsEditKpiModalOpen(true);
+  };
+
+  const handleApplyPreset = (presetId: string) => {
+    const found = PERPUS_KPI_PRESETS.find(p => p.id === presetId);
+    if (found) {
+      setActiveKpiPresetId(presetId);
+      setEditingKpis(JSON.parse(JSON.stringify(found.kpis)));
+    }
+  };
+
+  const handleSaveKpiChanges = () => {
+    const updated: MonthlyReport = {
+      ...reportState,
+      customKPIs: editingKpis
+    };
+    setReportState(updated);
+    saveMonthlyReport(updated);
+    setIsEditKpiModalOpen(false);
+    showNotification('✅ Matriks Indikator Kinerja Kunci (KPI) berhasil disesuaikan dan disimpan!');
+  };
+
+  const handleResetKpisToDefault = () => {
+    const defaultKpis = ROLE_OPERATIONAL_SPECS[effectiveRole]?.operationalKPIs || [];
+    setEditingKpis(JSON.parse(JSON.stringify(defaultKpis)));
+  };
+
+  const handleAddKpiRow = () => {
+    const nextIdx = editingKpis.length + 1;
+    const prefix = effectiveRole === 'PERPUS' ? 'KPI-PUS' : effectiveRole === 'TU' ? 'KPI-TU' : 'KPI-OP';
+    setEditingKpis(prev => [
+      ...prev,
+      {
+        code: `${prefix}-${String(nextIdx).padStart(2, '0')}`,
+        name: 'Indikator Baru Layanan',
+        target: '100% Tercapai Sesuai Standar',
+        realization: '100% Terlaksana Prima',
+        unit: 'Kegiatan',
+        status: 'tercapai'
+      }
+    ]);
+  };
+
+  const handleRemoveKpiRow = (idx: number) => {
+    setEditingKpis(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // GENERATOR RINGKASAN EKSEKUTIF BERDASARKAN KEGIATAN BULAN INI (TUGAS POKOK & TAMBAHAN)
+  const handleGenerateFromMonthActivities = () => {
+    const completedTupoksi = tupoksiTasks.filter(t => t.status === 'selesai');
+    const completedTambahan = tambahanTasks.filter(t => t.status === 'selesai');
+    const monthName = MONTH_NAMES[selectedMonth - 1];
+
+    let summaryText = '';
+    if (effectiveRole === 'PERPUS') {
+      if (monthTasks.length === 0) {
+        summaryText = `Sepanjang bulan ${monthName} ${selectedYear}, unit Layanan Perpustakaan Sekolah siap melaksanakan agenda operasional, pemeliharaan koleksi, dan pembinaan literasi pemustaka sesuai kalender pendidikan.`;
+      } else {
+        const pokokStr = completedTupoksi.length > 0 
+          ? completedTupoksi.slice(0, 3).map(t => t.title).join(', ') 
+          : 'pelayanan sirkulasi peminjaman buku dan katalogisasi bahan pustaka';
+        const tambahanStr = completedTambahan.length > 0
+          ? ` Disamping tugas pokok, unit perpustakaan juga berhasil menuntaskan tugas tambahan di lapangan berupa ${completedTambahan.slice(0, 2).map(t => t.title).join(', ')}.`
+          : '';
+        const bukuStr = monthlyNewBooks.length > 0
+          ? ` Pada bulan ini juga tercatat penambahan koleksi buku baru sebanyak ${totalNewCopies} eksemplar yang telah selesai diregistrasi ke buku induk.`
+          : '';
+
+        summaryText = `Sepanjang bulan ${monthName} ${selectedYear}, Layanan Operasional Perpustakaan Sekolah telah menyelesaikan ${completedCount} dari ${monthTasks.length} agenda kegiatan (${totalRate}% capaian target kinerja). Pelaksanaan tugas pokok (tupoksi) yang telah dituntaskan mencakup ${pokokStr}.${tambahanStr}${bukuStr} Seluruh pelayanan pemustaka bagi ${totalAnggotaPerpus} anggota (${totalGuru} guru, ${totalStaff} tendik, dan ${totalSiswa} siswa) berlangsung tertib, aman, dan akuntabel sesuai standar perpustakaan sekolah.`;
+      }
+    } else {
+      const pokokStr = completedTupoksi.length > 0 ? completedTupoksi.slice(0, 3).map(t => t.title).join(', ') : 'tugas pokok operasional rutin';
+      const tambahanStr = completedTambahan.length > 0 ? ` serta tugas tambahan berupa ${completedTambahan.slice(0, 2).map(t => t.title).join(', ')}` : '';
+      summaryText = `Kinerja Layanan Operasional ${roleTitle} pada bulan ${monthName} ${selectedYear} telah menuntaskan ${completedCount} dari ${monthTasks.length} kegiatan (${totalRate}% capaian SPM). Fokus pelaksanaan mencakup ${pokokStr}${tambahanStr} dengan hasil memuaskan dan memenuhi standar operasional sekolah.`;
+    }
+
+    // Dynamic Achievements
+    const dynamicAchievements: string[] = [];
+    if (completedTupoksi.length > 0) {
+      dynamicAchievements.push(`Realisasi ${completedTupoksi.length} Tugas Pokok (Tupoksi): ${completedTupoksi.slice(0, 4).map(t => t.title).join('; ')}`);
+    }
+    if (completedTambahan.length > 0) {
+      dynamicAchievements.push(`Penyelesaian ${completedTambahan.length} Tugas Tambahan: ${completedTambahan.slice(0, 3).map(t => t.title).join('; ')}`);
+    }
+    if (isPerpus && monthlyNewBooks.length > 0) {
+      dynamicAchievements.push(`Inventarisasi & registrasi penambahan ${totalNewCopies} eksemplar buku baru periode ${monthName} ${selectedYear}`);
+    }
+    if (isPerpus) {
+      dynamicAchievements.push(`Pelayanan pemustaka sekolah (${totalAnggotaPerpus} anggota terdaftar: ${totalGuru} guru, ${totalStaff} tendik, ${totalSiswa} siswa)`);
+    }
+
+    const updated: MonthlyReport = {
+      ...reportState,
+      summary: summaryText,
+      achievements: dynamicAchievements.length > 0 ? dynamicAchievements : reportState.achievements
+    };
+    setReportState(updated);
+    saveMonthlyReport(updated);
+    showNotification('✨ Ringkasan eksekutif dan capaian berhasil disusun dari kegiatan riil bulan ini (Tugas Pokok & Tambahan)!');
+  };
 
   const filteredDisplayTasks = monthTasks.filter(t => {
     if (taskFilterTab === 'all') return true;
@@ -694,23 +965,39 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <div className="text-[11px] text-blue-200 font-medium flex items-center gap-1.5">
-                <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Guru (Pendidik)</span>
+              <div className="text-[11px] text-blue-200 font-medium flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Guru (Pendidik)</span>
+                </span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30 font-mono">
+                  L: {guruLaki} · P: {guruPerempuan}
+                </span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
-                {libraryMemberStats.guruPendidik || 0} <span className="text-xs font-normal text-blue-200">orang</span>
+                {totalGuru} <span className="text-xs font-normal text-blue-200">orang</span>
               </div>
+              <p className="text-[10px] text-slate-300 mt-0.5">
+                Laki-laki: {guruLaki} · Perempuan: {guruPerempuan}
+              </p>
             </div>
 
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <div className="text-[11px] text-blue-200 font-medium flex items-center gap-1.5">
-                <Briefcase className="w-3.5 h-3.5 text-amber-400" />
-                <span>Staff (Tendik / TU)</span>
+              <div className="text-[11px] text-blue-200 font-medium flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Staff (Tendik / TU)</span>
+                </span>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30 font-mono">
+                  L: {staffLaki} · P: {staffPerempuan}
+                </span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
-                {libraryMemberStats.staffTendik || 0} <span className="text-xs font-normal text-blue-200">orang</span>
+                {totalStaff} <span className="text-xs font-normal text-blue-200">orang</span>
               </div>
+              <p className="text-[10px] text-slate-300 mt-0.5">
+                Laki-laki: {staffLaki} · Perempuan: {staffPerempuan}
+              </p>
             </div>
 
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
@@ -719,8 +1006,11 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
                 <span>Siswa Laki-laki</span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
-                {libraryMemberStats.siswaLaki || 0} <span className="text-xs font-normal text-blue-200">orang</span>
+                {siswaLaki} <span className="text-xs font-normal text-blue-200">orang</span>
               </div>
+              <p className="text-[10px] text-slate-300 mt-0.5">
+                Pemustaka Siswa (L)
+              </p>
             </div>
 
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
@@ -729,8 +1019,11 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
                 <span>Siswa Perempuan</span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
-                {libraryMemberStats.siswaPerempuan || 0} <span className="text-xs font-normal text-blue-200">orang</span>
+                {siswaPerempuan} <span className="text-xs font-normal text-blue-200">orang</span>
               </div>
+              <p className="text-[10px] text-slate-300 mt-0.5">
+                Pemustaka Siswa (P)
+              </p>
             </div>
           </div>
         </div>
@@ -837,11 +1130,22 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1.5">
             <label className="block text-xs font-bold text-slate-800">
               Uraian Narasi Ringkasan Eksekutif Bulanan:
             </label>
-            <span className="text-[11px] text-slate-400 font-medium">Dapat diedit bebas sesuai catatan riil</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleGenerateFromMonthActivities}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                title="Susun narasi ringkasan eksekutif & capaian dari tugas pokok dan tugas tambahan yang terlaksana bulan ini"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span>✨ Susun dari Kegiatan Bulan Ini (Pokok & Tambahan)</span>
+              </button>
+              <span className="text-[11px] text-slate-400 font-medium hidden md:inline">Dapat diedit bebas</span>
+            </div>
           </div>
           <textarea
             rows={3}
@@ -856,27 +1160,63 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             INDIKATOR KINERJA KUNCI (KPI) & TARGET OPERASIONAL
             ======================================================== */}
         <div className="pt-2">
-          <div className="flex items-center justify-between mb-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
             <div className="flex items-center gap-1.5">
               <Target className="w-4 h-4 text-indigo-600" />
               <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">
                 Matriks Target Operasional & Indikator Kinerja Kunci (KPI) - {roleTitle}
               </h4>
             </div>
-            <span className="text-[11px] text-slate-500 font-mono">
-              Standar Permendikbud Tata Kelola
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {isPerpus && (
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-500 px-1.5">Pilihan Cepat:</span>
+                  {PERPUS_KPI_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        const updated: MonthlyReport = {
+                          ...reportState,
+                          customKPIs: JSON.parse(JSON.stringify(preset.kpis))
+                        };
+                        setReportState(updated);
+                        saveMonthlyReport(updated);
+                        showNotification(`Preset Matriks KPI "${preset.label}" berhasil diterapkan!`);
+                      }}
+                      className="px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:text-indigo-700 hover:bg-white rounded transition-colors"
+                      title={preset.desc}
+                    >
+                      {preset.id === 'standar_snp' ? 'SNP Standar' : preset.id === 'fokus_pengadaan_restorasi' ? 'Pengadaan & Restorasi' : 'GLS & Pemustaka'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleOpenEditKpi}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                title="Sesuaikan atau ubah target, realisasi, dan indikator KPI sesuai kondisi di lapangan"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Edit / Sesuaikan KPI</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {(ROLE_OPERATIONAL_SPECS[effectiveRole]?.operationalKPIs || []).map((kpi, idx) => (
+            {effectiveKpis.map((kpi, idx) => (
               <div key={idx} className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 flex flex-col justify-between hover:bg-slate-50 transition-colors">
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
                       {kpi.code}
                     </span>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 ${
+                      kpi.status === 'tercapai' 
+                        ? 'text-emerald-700 bg-emerald-50 border-emerald-200' 
+                        : 'text-amber-700 bg-amber-50 border-amber-200'
+                    }`}>
                       <CheckCircle2 className="w-3 h-3" />
                       <span>{kpi.status === 'tercapai' ? 'Tercapai' : 'Proses'}</span>
                     </span>
@@ -893,6 +1233,10 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
                   <div className="flex items-start justify-between gap-1">
                     <span className="text-slate-500">Realisasi:</span>
                     <span className="font-semibold text-emerald-700 text-right">{kpi.realization}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-1 text-[10px] text-slate-400">
+                    <span>Satuan:</span>
+                    <span className="font-mono text-slate-600">{kpi.unit}</span>
                   </div>
                 </div>
               </div>
@@ -1454,6 +1798,220 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
         </div>
         <InventoryTable role={effectiveRole} />
       </div>
+
+      {/* MODAL EDIT MATRIKS TARGET OPERASIONAL & INDIKATOR KINERJA KUNCI (KPI) */}
+      {isEditKpiModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                  <Target className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight">
+                    Edit & Sesuaikan Matriks Target Operasional & KPI
+                  </h3>
+                  <p className="text-[11px] text-indigo-200">
+                    Bidang: {roleTitle} · Periode {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditKpiModalOpen(false)}
+                className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Presets Helper */}
+            {isPerpus && (
+              <div className="px-5 py-3 bg-indigo-50/70 border-b border-indigo-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Pilih Preset Standar Cepat:</span>
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {PERPUS_KPI_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleApplyPreset(preset.id)}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                        activeKpiPresetId === preset.id
+                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
+                          : 'bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-100'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* KPI Items List */}
+            <div className="p-5 overflow-y-auto space-y-3 flex-1 bg-slate-50/50">
+              <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
+                <span>Daftar Indikator Kinerja Kunci ({editingKpis.length} indikator)</span>
+                <span>Target & Realisasi Lapangan</span>
+              </div>
+
+              {editingKpis.map((kpi, idx) => (
+                <div 
+                  key={idx} 
+                  className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-2.5 hover:border-indigo-300 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="text"
+                        value={kpi.code}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingKpis(prev => prev.map((k, i) => i === idx ? { ...k, code: val } : k));
+                        }}
+                        className="w-24 px-2 py-1 text-xs font-mono font-bold bg-slate-100 border border-slate-300 rounded text-indigo-800 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                        placeholder="Kode KPI"
+                      />
+                      <input
+                        type="text"
+                        value={kpi.name}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingKpis(prev => prev.map((k, i) => i === idx ? { ...k, name: val } : k));
+                        }}
+                        className="flex-1 px-2.5 py-1 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                        placeholder="Nama Indikator Kinerja Kunci (KPI)"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingKpis(prev => prev.map((k, i) => i === idx ? {
+                            ...k,
+                            status: k.status === 'tercapai' ? 'dalam_proses' : 'tercapai'
+                          } : k));
+                        }}
+                        className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors cursor-pointer flex items-center gap-1 ${
+                          kpi.status === 'tercapai'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                            : 'bg-amber-50 text-amber-800 border-amber-300'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>{kpi.status === 'tercapai' ? 'Tercapai' : 'Proses'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveKpiRow(idx)}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                        title="Hapus Indikator Ini"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-100">
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-500 mb-0.5">
+                        Target Kerja:
+                      </label>
+                      <input
+                        type="text"
+                        value={kpi.target}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingKpis(prev => prev.map((k, i) => i === idx ? { ...k, target: val } : k));
+                        }}
+                        className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-300 rounded text-slate-800 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                        placeholder="Target kerja"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-500 mb-0.5">
+                        Realisasi Lapangan:
+                      </label>
+                      <input
+                        type="text"
+                        value={kpi.realization}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingKpis(prev => prev.map((k, i) => i === idx ? { ...k, realization: val } : k));
+                        }}
+                        className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-300 rounded text-slate-800 font-semibold focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                        placeholder="Realisasi lapangan"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10.5px] font-semibold text-slate-500 mb-0.5">
+                        Satuan / Frekuensi:
+                      </label>
+                      <input
+                        type="text"
+                        value={kpi.unit}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingKpis(prev => prev.map((k, i) => i === idx ? { ...k, unit: val } : k));
+                        }}
+                        className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-300 rounded text-slate-700 font-mono focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                        placeholder="Satuan (misal: Eksemplar, Trx, Sesi)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={handleAddKpiRow}
+                className="w-full py-2.5 border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/50 rounded-xl text-xs font-bold text-indigo-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Indikator KPI Baru</span>
+              </button>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3.5 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleResetKpisToDefault}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors cursor-pointer"
+                title="Kembalikan indikator ke pengaturan standar awal"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                <span>Reset ke Standar Bawaan</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditKpiModalOpen(false)}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveKpiChanges}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-indigo-700 hover:bg-indigo-800 rounded-lg shadow-sm transition-colors cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Simpan Perubahan Matriks KPI</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

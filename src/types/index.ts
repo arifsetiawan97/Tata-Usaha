@@ -215,6 +215,7 @@ export interface MonthlyReport {
   achievements: string[];
   obstacles: string[];
   solutions: string[];
+  customKPIs?: OperationalKPI[];
   approvalStatus: 'draft' | 'diajukan' | 'disetujui_kasubag' | 'disahkan_kepsek';
 }
 

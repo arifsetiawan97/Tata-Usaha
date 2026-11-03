@@ -127,6 +127,86 @@ export const matchBookClass = (book: LibraryBookItem, selectedClass: string): bo
   return rawKelas.toLowerCase() === selectedClass.toLowerCase();
 };
 
+// Helper to robustly match book category across all variants (Buku Guru, Buku Referensi, Non-Fiksi, etc.)
+export const matchBookCategory = (book: LibraryBookItem, selectedCategory: string): boolean => {
+  if (!selectedCategory || selectedCategory === 'all') return true;
+
+  const rawKategori = (book.kategoriBuku || book.kategori || '').toLowerCase().trim();
+  const rawStatus = (book.statusBuku || '').toLowerCase().trim();
+  const rawJudul = (book.judul || '').toLowerCase().trim();
+  const rawDdc = (book.ddcKlasifikasi || book.ddc || '').toLowerCase().trim();
+  const combined = `${rawKategori} ${rawStatus} ${rawJudul} ${rawDdc}`.toLowerCase();
+
+  if (selectedCategory === 'Buku Guru') {
+    return rawStatus === 'guru' ||
+           combined.includes('guru') ||
+           combined.includes('pendidik') ||
+           combined.includes('panduan guru') ||
+           combined.includes('pegangan guru') ||
+           combined.includes('pedoman guru') ||
+           rawKategori.includes('guru');
+  }
+
+  if (selectedCategory === 'Buku Referensi') {
+    return rawStatus === 'referensi' ||
+           combined.includes('referensi') ||
+           combined.includes('rujukan') ||
+           combined.includes('ensiklopedia') ||
+           combined.includes('kamus') ||
+           combined.includes('atlas') ||
+           rawKategori.includes('referensi');
+  }
+
+  if (selectedCategory === 'Non-Fiksi') {
+    return combined.includes('non-fiksi') ||
+           combined.includes('non fiksi') ||
+           combined.includes('nonfiksi') ||
+           combined.includes('biografi') ||
+           combined.includes('sejarah') ||
+           combined.includes('sains') ||
+           rawKategori.includes('non-fiksi') ||
+           rawKategori.includes('non fiksi');
+  }
+
+  if (selectedCategory === 'Fiksi / Cerita') {
+    if (combined.includes('non-fiksi') || combined.includes('non fiksi') || combined.includes('nonfiksi')) {
+      return false;
+    }
+    return combined.includes('fiksi') ||
+           combined.includes('cerita') ||
+           combined.includes('novel') ||
+           combined.includes('sastra') ||
+           combined.includes('dongeng') ||
+           combined.includes('cerpen') ||
+           combined.includes('prosa') ||
+           rawKategori.includes('fiksi');
+  }
+
+  if (selectedCategory === 'Buku Teks Utama') {
+    return rawStatus === 'siswa' ||
+           combined.includes('teks utama') ||
+           combined.includes('buku teks') ||
+           combined.includes('buku pelajaran') ||
+           rawKategori.includes('teks');
+  }
+
+  if (selectedCategory === 'Buku Pengayaan') {
+    return combined.includes('pengayaan') ||
+           combined.includes('suplemen') ||
+           rawKategori.includes('pengayaan');
+  }
+
+  if (selectedCategory === 'Kamus & Ensiklopedia') {
+    return combined.includes('kamus') ||
+           combined.includes('ensiklopedia') ||
+           combined.includes('leksikon') ||
+           rawKategori.includes('kamus') ||
+           rawKategori.includes('ensiklopedia');
+  }
+
+  return rawKategori === selectedCategory.toLowerCase().trim();
+};
+
 export const LibraryBookManager: React.FC = () => {
   const { 
     libraryBooks, 
@@ -141,6 +221,7 @@ export const LibraryBookManager: React.FC = () => {
 
   // Filter States
   const [selectedMonth, setSelectedMonth] = useState<string>('all'); // 'all' or 'YYYY-MM'
+  const [purchaseYearFilter, setPurchaseYearFilter] = useState<string>('all'); // 'all' or 'YYYY'
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -242,22 +323,32 @@ export const LibraryBookManager: React.FC = () => {
     return monthKey;
   };
 
-  // Get all unique acquisition months present in the books data
+  // Get all unique acquisition months present in the books data (dynamically adjusted when a year is selected)
   const availableMonths = useMemo(() => {
     const monthMap = new Map<string, number>();
     libraryBooks.forEach(book => {
+      if (purchaseYearFilter !== 'all') {
+        const bookYear = String(book.tahunBeli || book.tahunPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.split('-')[0] : book.tahunTerbit));
+        if (bookYear !== purchaseYearFilter) return;
+      }
       const key = getBookMonthKey(book);
       monthMap.set(key, (monthMap.get(key) || 0) + 1);
     });
     // Sort descending (latest month first)
     const sorted = Array.from(monthMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
     return sorted;
-  }, [libraryBooks]);
+  }, [libraryBooks, purchaseYearFilter]);
 
   // Filtered Books List
   const filteredBooks = useMemo(() => {
     return libraryBooks.filter(book => {
-      // Month filter
+      // Purchase Year Filter (e.g. 2025, 2026, 2024)
+      if (purchaseYearFilter !== 'all') {
+        const bookYear = String(book.tahunBeli || book.tahunPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.split('-')[0] : book.tahunTerbit));
+        if (bookYear !== purchaseYearFilter) return false;
+      }
+
+      // Month filter (e.g. 2025-04)
       if (selectedMonth !== 'all') {
         const bookMonth = getBookMonthKey(book);
         if (bookMonth !== selectedMonth) return false;
@@ -275,10 +366,9 @@ export const LibraryBookManager: React.FC = () => {
         if (!matchTitle && !matchAuthor && !matchPublisher && !matchCode && !matchIsbn && !matchClass) return false;
       }
 
-      // Category filter
+      // Category filter with intelligent multi-match
       if (categoryFilter !== 'all') {
-        const cat = book.kategoriBuku || book.kategori;
-        if (cat !== categoryFilter) return false;
+        if (!matchBookCategory(book, categoryFilter)) return false;
       }
 
       // Source filter
@@ -293,7 +383,7 @@ export const LibraryBookManager: React.FC = () => {
 
       return true;
     });
-  }, [libraryBooks, selectedMonth, searchQuery, categoryFilter, sourceFilter, classFilter]);
+  }, [libraryBooks, purchaseYearFilter, selectedMonth, searchQuery, categoryFilter, sourceFilter, classFilter]);
 
   // Available Purchase Years in Books
   const availablePurchaseYears = useMemo(() => {
@@ -398,12 +488,19 @@ export const LibraryBookManager: React.FC = () => {
     e.preventDefault();
     if (!formData.judul?.trim()) return;
 
-    const tgl = formData.tanggalMasuk || new Date().toISOString().split('T')[0];
+    const tahunBeliNum = Number(formData.tahunBeli) || (formData.tanggalMasuk ? parseInt(formData.tanggalMasuk.split('-')[0], 10) : Number(formData.tahunTerbit) || new Date().getFullYear());
+    let tgl = formData.tanggalMasuk || `${tahunBeliNum}-01-01`;
+    if (tgl.includes('-')) {
+      const parts = tgl.split('-');
+      if (parts[0] !== String(tahunBeliNum)) {
+        tgl = `${tahunBeliNum}-${parts[1] || '01'}-${parts[2] || '01'}`;
+      }
+    }
     const monthKey = tgl.substring(0, 7);
-    const yearNum = parseInt(tgl.substring(0, 4), 10) || Number(formData.tahunTerbit) || new Date().getFullYear();
+    const yearNum = tahunBeliNum;
 
     addLibraryBook({
-      kodeBuku: formData.kodeBuku || `BK-${Date.now().toString().slice(-4)}`,
+      kodeBuku: formData.kodeBuku || `BK-${yearNum}-${Date.now().toString().slice(-4)}`,
       judul: formData.judul.trim(),
       penulis: formData.penulis?.trim() || 'Tim Penyusun',
       penerbit: formData.penerbit?.trim() || 'Kemendikbudristek',
@@ -433,8 +530,12 @@ export const LibraryBookManager: React.FC = () => {
   // Open Edit Modal
   const handleOpenEdit = (book: LibraryBookItem) => {
     setActiveBook(book);
+    const yr = Number(book.tahunBeli || book.tahunPengadaan || (book.tanggalMasuk ? parseInt(book.tanggalMasuk.split('-')[0], 10) : book.tahunTerbit)) || 2026;
     setFormData({
       ...book,
+      tahunBeli: yr,
+      tahunPengadaan: yr,
+      tanggalMasuk: book.tanggalMasuk || `${yr}-01-01`,
       kelas: book.kelas || 'Kelas VII',
       statusBuku: book.statusBuku || 'siswa',
       kategoriBuku: (book.kategoriBuku || book.kategori || 'Buku Teks Utama') as LibraryBookCategory,
@@ -448,9 +549,16 @@ export const LibraryBookManager: React.FC = () => {
     e.preventDefault();
     if (!activeBook || !formData.judul?.trim()) return;
 
-    const tgl = formData.tanggalMasuk || activeBook.tanggalMasuk || new Date().toISOString().split('T')[0];
+    const tahunBeliNum = Number(formData.tahunBeli) || (formData.tanggalMasuk ? parseInt(formData.tanggalMasuk.split('-')[0], 10) : Number(formData.tahunTerbit) || new Date().getFullYear());
+    let tgl = formData.tanggalMasuk || activeBook.tanggalMasuk || `${tahunBeliNum}-01-01`;
+    if (tgl.includes('-')) {
+      const parts = tgl.split('-');
+      if (parts[0] !== String(tahunBeliNum)) {
+        tgl = `${tahunBeliNum}-${parts[1] || '01'}-${parts[2] || '01'}`;
+      }
+    }
     const monthKey = tgl.substring(0, 7);
-    const yearNum = parseInt(tgl.substring(0, 4), 10) || Number(formData.tahunTerbit) || new Date().getFullYear();
+    const yearNum = tahunBeliNum;
 
     updateLibraryBook(activeBook.id, {
       ...formData,
@@ -1126,6 +1234,11 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
 
           <div className="text-xs text-slate-600 font-medium bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-2">
             <span>Filter Aktif:</span>
+            {purchaseYearFilter !== 'all' && (
+              <span className="font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                Tahun Beli {purchaseYearFilter}
+              </span>
+            )}
             <span className="font-bold text-emerald-700">
               {formatMonthLabel(selectedMonth)}
             </span>
@@ -1142,11 +1255,13 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <span>Semua Periode</span>
+            <span>{purchaseYearFilter !== 'all' ? `Semua Bulan ${purchaseYearFilter}` : 'Semua Periode'}</span>
             <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${
               selectedMonth === 'all' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
             }`}>
-              {libraryBooks.length}
+              {purchaseYearFilter !== 'all' 
+                ? libraryBooks.filter(b => String(b.tahunBeli || b.tahunPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.split('-')[0] : b.tahunTerbit)) === purchaseYearFilter).length 
+                : libraryBooks.length}
             </span>
           </button>
 
@@ -1244,7 +1359,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
             <select
               value={classFilter}
               onChange={e => setClassFilter(e.target.value)}
-              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-800"
             >
               <option value="all">Semua Kelas</option>
               <option value="Kelas VII">Kelas VII</option>
@@ -1255,25 +1370,46 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
               <option value="Umum / Referensi">Umum / Referensi</option>
             </select>
 
+            {/* Purchase Year Filter */}
+            <select
+              value={purchaseYearFilter}
+              onChange={e => {
+                const yr = e.target.value;
+                setPurchaseYearFilter(yr);
+                if (yr !== 'all' && selectedMonth !== 'all' && !selectedMonth.startsWith(yr)) {
+                  setSelectedMonth('all');
+                }
+              }}
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold text-slate-800"
+              title="Filter daftar buku berdasarkan tahun pembelian"
+            >
+              <option value="all">Semua Tahun Beli</option>
+              {availablePurchaseYears.map(yr => (
+                <option key={yr} value={yr}>Tahun Beli {yr}</option>
+              ))}
+            </select>
+
+            {/* Category Filter */}
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-800"
             >
               <option value="all">Semua Kategori</option>
-              <option value="Buku Teks Utama">Buku Teks Utama</option>
+              <option value="Buku Guru">Buku Guru / Modul Pendidik</option>
+              <option value="Buku Referensi">Buku Referensi & Rujukan</option>
+              <option value="Non-Fiksi">Buku Non Fiksi / Sains & Biografi</option>
+              <option value="Fiksi / Cerita">Buku Fiksi / Sastra & Cerita</option>
+              <option value="Buku Teks Utama">Buku Teks Utama (Siswa)</option>
               <option value="Buku Pengayaan">Buku Pengayaan</option>
-              <option value="Buku Referensi">Buku Referensi</option>
-              <option value="Fiksi / Cerita">Fiksi / Cerita</option>
-              <option value="Non-Fiksi">Non-Fiksi</option>
-              <option value="Buku Guru">Buku Guru</option>
               <option value="Kamus & Ensiklopedia">Kamus & Ensiklopedia</option>
             </select>
 
+            {/* Source Filter */}
             <select
               value={sourceFilter}
               onChange={e => setSourceFilter(e.target.value)}
-              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-800"
             >
               <option value="all">Semua Sumber Dana</option>
               <option value="BOS Reguler">BOS Reguler</option>
@@ -1420,10 +1556,10 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                       </span>
                     </td>
                     <td className="py-3 px-3 text-center text-slate-600 whitespace-nowrap">
-                      <span className="block font-bold text-slate-800 text-[11px]">
-                        {book.tahunPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 4) : book.tahunTerbit)}
+                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-200 mb-0.5 shadow-2xs">
+                        Thn {book.tahunBeli || book.tahunPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 4) : book.tahunTerbit)}
                       </span>
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[10px] text-slate-500 block font-mono">
                         {book.tanggalMasuk || '-'}
                       </span>
                     </td>
@@ -1891,46 +2027,110 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Tahun Pembelian / Tanggal Masuk *</label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.tanggalMasuk || ''}
-                    onChange={e => setFormData({ ...formData, tanggalMasuk: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
-                  />
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Tahun Pembelian / Pengadaan *
+                    </label>
+                    <input
+                      type="number"
+                      min="1990"
+                      max="2099"
+                      required
+                      value={formData.tahunBeli || (formData.tanggalMasuk ? parseInt(formData.tanggalMasuk.split('-')[0], 10) : new Date().getFullYear())}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val)) {
+                          let newDate = formData.tanggalMasuk || `${val}-01-01`;
+                          if (newDate.includes('-')) {
+                            const parts = newDate.split('-');
+                            newDate = `${val}-${parts[1] || '01'}-${parts[2] || '01'}`;
+                          }
+                          setFormData(prev => ({
+                            ...prev,
+                            tahunBeli: val,
+                            tahunPengadaan: val,
+                            tanggalMasuk: newDate,
+                            bulanPengadaan: newDate.substring(0, 7)
+                          }));
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono font-bold text-slate-800"
+                      placeholder="Contoh: 2025"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">Tercatat sebagai tahun pembelian buku di sistem</span>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Tanggal & Bulan Masuk *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.tanggalMasuk || ''}
+                      onChange={e => {
+                        const d = e.target.value;
+                        const y = d ? parseInt(d.split('-')[0], 10) : undefined;
+                        setFormData(prev => ({
+                          ...prev,
+                          tanggalMasuk: d,
+                          bulanPengadaan: d ? d.substring(0, 7) : prev.bulanPengadaan,
+                          tahunBeli: y || prev.tahunBeli,
+                          tahunPengadaan: y || prev.tahunPengadaan
+                        }));
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono font-semibold"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">Menentukan bulan pencatatan pengadaan buku</span>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Sumber Pengadaan *</label>
-                  <select
-                    value={formData.sumberPengadaan || 'BOS Reguler'}
-                    onChange={e => setFormData({ ...formData, sumberPengadaan: e.target.value as LibraryProcurementSource })}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="BOS Reguler">BOS Reguler</option>
-                    <option value="BOS Kinerja">BOS Kinerja</option>
-                    <option value="Hibah / Bantuan">Hibah / Bantuan</option>
-                    <option value="APBD / DAK">APBD / DAK</option>
-                    <option value="Swadaya / Komite">Swadaya / Komite</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Sumber Pengadaan *</label>
+                    <select
+                      value={formData.sumberPengadaan || 'BOS Reguler'}
+                      onChange={e => setFormData({ ...formData, sumberPengadaan: e.target.value as LibraryProcurementSource })}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="BOS Reguler">BOS Reguler</option>
+                      <option value="BOS Kinerja">BOS Kinerja</option>
+                      <option value="Hibah / Bantuan">Hibah / Bantuan</option>
+                      <option value="APBD / DAK">APBD / DAK</option>
+                      <option value="Swadaya / Komite">Swadaya / Komite</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Jumlah Eksemplar *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={formData.jumlah || 1}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10) || 1;
+                        setFormData({ ...formData, jumlah: val, jumlahTersedia: val });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Jumlah Eksemplar *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={formData.jumlah || 1}
-                    onChange={e => {
-                      const val = parseInt(e.target.value, 10) || 1;
-                      setFormData({ ...formData, jumlah: val, jumlahTersedia: val });
-                    }}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold"
-                  />
+                {/* Live Indicator */}
+                <div className="text-[11px] text-emerald-900 bg-emerald-100/70 p-2.5 rounded-lg border border-emerald-300 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Pencatatan Sistem:</span>
+                  </div>
+                  <span className="font-bold">
+                    Tahun Beli: {formData.tahunBeli || (formData.tanggalMasuk ? formData.tanggalMasuk.split('-')[0] : new Date().getFullYear())}
+                    {' · '}
+                    Bulan: {formData.tanggalMasuk ? formatMonthLabel(formData.tanggalMasuk.substring(0, 7)) : '-'}
+                    {' ('}{formData.tanggalMasuk || '-'}{')'}
+                  </span>
                 </div>
               </div>
 
@@ -2120,46 +2320,109 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Tahun Pembelian / Tanggal Masuk *</label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.tanggalMasuk || ''}
-                    onChange={e => setFormData({ ...formData, tanggalMasuk: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                  />
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Tahun Pembelian / Pengadaan *
+                    </label>
+                    <input
+                      type="number"
+                      min="1990"
+                      max="2099"
+                      required
+                      value={formData.tahunBeli || (formData.tanggalMasuk ? parseInt(formData.tanggalMasuk.split('-')[0], 10) : new Date().getFullYear())}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val)) {
+                          let newDate = formData.tanggalMasuk || `${val}-01-01`;
+                          if (newDate.includes('-')) {
+                            const parts = newDate.split('-');
+                            newDate = `${val}-${parts[1] || '01'}-${parts[2] || '01'}`;
+                          }
+                          setFormData(prev => ({
+                            ...prev,
+                            tahunBeli: val,
+                            tahunPengadaan: val,
+                            tanggalMasuk: newDate,
+                            bulanPengadaan: newDate.substring(0, 7)
+                          }));
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono font-bold text-slate-800"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">Tercatat sebagai tahun pembelian buku di sistem</span>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Tanggal & Bulan Masuk *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.tanggalMasuk || ''}
+                      onChange={e => {
+                        const d = e.target.value;
+                        const y = d ? parseInt(d.split('-')[0], 10) : undefined;
+                        setFormData(prev => ({
+                          ...prev,
+                          tanggalMasuk: d,
+                          bulanPengadaan: d ? d.substring(0, 7) : prev.bulanPengadaan,
+                          tahunBeli: y || prev.tahunBeli,
+                          tahunPengadaan: y || prev.tahunPengadaan
+                        }));
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono font-semibold"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">Menentukan bulan pencatatan pengadaan buku</span>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Sumber Pengadaan</label>
-                  <select
-                    value={formData.sumberPengadaan || 'BOS Reguler'}
-                    onChange={e => setFormData({ ...formData, sumberPengadaan: e.target.value as LibraryProcurementSource })}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="BOS Reguler">BOS Reguler</option>
-                    <option value="BOS Kinerja">BOS Kinerja</option>
-                    <option value="Hibah / Bantuan">Hibah / Bantuan</option>
-                    <option value="APBD / DAK">APBD / DAK</option>
-                    <option value="Swadaya / Komite">Swadaya / Komite</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Sumber Pengadaan *</label>
+                    <select
+                      value={formData.sumberPengadaan || 'BOS Reguler'}
+                      onChange={e => setFormData({ ...formData, sumberPengadaan: e.target.value as LibraryProcurementSource })}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="BOS Reguler">BOS Reguler</option>
+                      <option value="BOS Kinerja">BOS Kinerja</option>
+                      <option value="Hibah / Bantuan">Hibah / Bantuan</option>
+                      <option value="APBD / DAK">APBD / DAK</option>
+                      <option value="Swadaya / Komite">Swadaya / Komite</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Jumlah Eksemplar *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={formData.jumlah || 1}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10) || 1;
+                        setFormData({ ...formData, jumlah: val, jumlahTersedia: val });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Jumlah Eksemplar *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={formData.jumlah || 1}
-                    onChange={e => {
-                      const val = parseInt(e.target.value, 10) || 1;
-                      setFormData({ ...formData, jumlah: val, jumlahTersedia: val });
-                    }}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold"
-                  />
+                {/* Live Indicator */}
+                <div className="text-[11px] text-emerald-900 bg-emerald-100/70 p-2.5 rounded-lg border border-emerald-300 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Pencatatan Sistem:</span>
+                  </div>
+                  <span className="font-bold">
+                    Tahun Beli: {formData.tahunBeli || (formData.tanggalMasuk ? formData.tanggalMasuk.split('-')[0] : new Date().getFullYear())}
+                    {' · '}
+                    Bulan: {formData.tanggalMasuk ? formatMonthLabel(formData.tanggalMasuk.substring(0, 7)) : '-'}
+                    {' ('}{formData.tanggalMasuk || '-'}{')'}
+                  </span>
                 </div>
               </div>
 
