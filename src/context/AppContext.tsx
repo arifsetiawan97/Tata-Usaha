@@ -150,6 +150,18 @@ export const mergeSchoolConfigWithDefaults = (sourceConfig: any): SchoolConfig =
     cleaned.stempelTextLine1 = cleaned.stempelTextLine1.replace(/jawa\s+barat/gi, '').trim();
   }
 
+  // Pembersihan otomatis: Hapus default dummy nama Rahmat Hidayat & Nurul Hidayat jika belum diganti pengguna
+  if (cleaned.kepalaSekolah && typeof cleaned.kepalaSekolah.nama === 'string' && /rahmat\s*hidayat/i.test(cleaned.kepalaSekolah.nama)) {
+    cleaned.kepalaSekolah.nama = '';
+    cleaned.kepalaSekolah.nip = 'NIP. .................................................';
+    cleaned.kepalaSekolah.signatureData = '';
+  }
+  if (cleaned.operatorProfiles?.PERPUS && typeof cleaned.operatorProfiles.PERPUS.nama === 'string' && /nurul\s*hidayat/i.test(cleaned.operatorProfiles.PERPUS.nama)) {
+    cleaned.operatorProfiles.PERPUS.nama = '';
+    cleaned.operatorProfiles.PERPUS.nip = 'NIPPK. .................................................';
+    cleaned.operatorProfiles.PERPUS.signatureData = '';
+  }
+
   return {
     ...initialSchoolConfig,
     ...cleaned,

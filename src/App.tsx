@@ -30,7 +30,7 @@ function MainLayout() {
 
   if (printState && printState.isOpen) {
     return (
-      <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
+      <div className="min-h-screen bg-slate-100 p-4 sm:p-6 print:p-0 print:m-0 print:bg-white print:min-h-0">
         <PrintDocumentView
           reportType={printState.reportType}
           reportData={printState.reportData}

@@ -307,9 +307,18 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
     defaultSignName: string
   ) => {
     const customSig = signatures[targetKey];
-    const formattedNip = officer.nip 
-      ? (officer.nip.startsWith('NIP') ? officer.nip : `NIP. ${officer.nip}`) 
-      : '-';
+    const isDummy = !officer.nama || 
+      /rahmat\s*hidayat/i.test(officer.nama) || 
+      /nurul\s*hidayat/i.test(officer.nama) || 
+      officer.nama.trim() === '';
+    
+    const displayName = isDummy 
+      ? '( .................................................. )' 
+      : formatOfficialNameWithDegree(officer.nama);
+
+    const formattedNip = isDummy || !officer.nip || /19740510\s*199802\s*1\s*003/.test(officer.nip) || /19920815\s*202321\s*2\s*024/.test(officer.nip)
+      ? (targetKey === 'kepsek' ? 'NIP. .................................................' : 'NIP / NIPPK. .................................................')
+      : (officer.nip.startsWith('NIP') ? officer.nip : `NIP. ${officer.nip}`);
 
     return (
       <div className="flex flex-col items-center w-full relative">
@@ -330,8 +339,8 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
           {signatureMode === 'qr' && (
             <OfficialESignQr 
               title={targetKey === 'kepsek' ? 'Kepala Satuan Pendidikan' : targetKey === 'kasubag' ? 'Kasubag TU' : 'Petugas Pelaksana'}
-              name={officer.nama}
-              nip={officer.nip}
+              name={displayName}
+              nip={formattedNip}
               dateStr={manualDate}
             />
           )}
@@ -373,15 +382,21 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
                   alt="Tanda Tangan" 
                   className="max-h-20 max-w-[190px] object-contain drop-shadow-xs" 
                 />
-              ) : (
+              ) : !isDummy && officer.signatureData ? (
                 <div className="flex flex-col items-center justify-center">
                   <span className="signature-font text-2xl sm:text-3xl text-blue-900 select-none tracking-wide transform -rotate-3 py-1">
-                    {officer.signatureData || defaultSignName}
+                    {officer.signatureData}
                   </span>
                   <div className="flex items-center gap-1 text-[8.5px] text-emerald-800 font-medium bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 no-print">
                     <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                     <span>Terverifikasi Digital</span>
                   </div>
+                </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  {!isPrintVersion && (
+                    <span className="text-[10px] text-slate-400 font-mono italic no-print">(Tanda Tangan Kedinasan)</span>
+                  )}
                 </div>
               )}
             </div>
@@ -431,8 +446,8 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
         {/* Officer Name & NIP with strict equal row heights for 100% horizontal alignment */}
         <div className="text-center w-full mt-2">
           <div className="h-6 flex items-center justify-center">
-            <p className="font-bold text-xs sm:text-sm text-slate-950 underline decoration-1 underline-offset-2 tracking-wide truncate max-w-[280px]">
-              {formatOfficialNameWithDegree(officer.nama)}
+            <p className={`font-bold text-xs sm:text-sm text-slate-950 tracking-wide truncate max-w-[280px] ${isDummy ? '' : 'underline decoration-1 underline-offset-2'}`}>
+              {displayName}
             </p>
           </div>
           <div className="h-5 flex items-center justify-center mt-0.5">

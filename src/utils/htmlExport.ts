@@ -56,10 +56,35 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
     role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
   const operator = schoolConfig.operatorProfiles[role] || {
-    nama: 'Petugas Layanan Operasional',
-    nip: '-',
+    nama: '',
+    nip: '',
     jabatan: 'Operator'
   };
+
+  // Deteksi nama dummy/default Rahmat Hidayat & Nurul Hidayat agar tidak tercetak pada berkas kedinasan
+  const isDefaultOrDummyKepsek = !schoolConfig.kepalaSekolah?.nama || 
+    /rahmat\s*hidayat/i.test(schoolConfig.kepalaSekolah.nama) || 
+    schoolConfig.kepalaSekolah.nama.trim() === '';
+  
+  const displayKepsekNama = isDefaultOrDummyKepsek 
+    ? '( .................................................. )' 
+    : formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama);
+
+  const displayKepsekNip = isDefaultOrDummyKepsek || !schoolConfig.kepalaSekolah?.nip || /19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip)
+    ? (schoolConfig.kepalaSekolah?.nip && !/19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip) ? schoolConfig.kepalaSekolah.nip : 'NIP. .................................................')
+    : (schoolConfig.kepalaSekolah.nip.startsWith('NIP') ? schoolConfig.kepalaSekolah.nip : `NIP. ${schoolConfig.kepalaSekolah.nip}`);
+
+  const isDefaultOrDummyOperator = !operator?.nama || 
+    /nurul\s*hidayat/i.test(operator.nama) || 
+    operator.nama.trim() === '';
+
+  const displayOperatorNama = isDefaultOrDummyOperator 
+    ? '( .................................................. )' 
+    : formatOfficialNameWithDegree(operator.nama);
+
+  const displayOperatorNip = isDefaultOrDummyOperator || !operator?.nip || /19920815\s*202321\s*2\s*024/.test(operator.nip)
+    ? (operator?.nip && !/19920815\s*202321\s*2\s*024/.test(operator.nip) ? operator.nip : 'NIP / NIPPK. .................................................')
+    : (operator.nip.startsWith('NIP') ? operator.nip : `NIP / NIPPK. ${operator.nip}`);
 
   const periodString = isMonthly 
     ? `Bulan ${MONTH_NAMES[(monthlyData?.month || 9) - 1]} Tahun ${monthlyData?.year || 2026}`
@@ -96,12 +121,73 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
   const roleInventories = inventories.filter(inv => inv.role === role);
   const tasksWithPhotos = relevantTasks.filter(t => !!t.photoUrl);
 
-  const tasksPerPage = 12;
-  const hasTaskPage2 = relevantTasks.length > tasksPerPage;
-  const totalPages = hasTaskPage2 ? 4 : 3;
+  const page1TaskLimit = role === 'PERPUS' ? 5 : 6;
+  const tasksPage1 = relevantTasks.slice(0, page1TaskLimit);
+  const remainingTasks = relevantTasks.slice(page1TaskLimit);
+  const tasksPerPageSubsequent = 12;
+  const subsequentChunks: typeof relevantTasks[] = [];
+  for (let i = 0; i < remainingTasks.length; i += tasksPerPageSubsequent) {
+    subsequentChunks.push(remainingTasks.slice(i, i + tasksPerPageSubsequent));
+  }
+  const hasSubsequentTasks = subsequentChunks.length > 0;
+  const totalPages = 1 + subsequentChunks.length + 1 + 1; // Lembar 1 + N Task Sheets + Lampiran Sarpras + Lembar Pengesahan
 
-  const tasksPage1 = relevantTasks.slice(0, tasksPerPage);
-  const tasksPage2 = hasTaskPage2 ? relevantTasks.slice(tasksPerPage) : [];
+  // Reusable Kop Surat Generator with user-uploaded logos and official double dividing line
+  const generateKopSuratHtml = (config: typeof schoolConfig) => {
+    const leftLogo = config.logoKopKiri || config.logoKabupatenUrl;
+    const rightLogo = config.logoKopKanan || config.logoSekolahUrl;
+    return `
+      <div class="kop-surat">
+        <div class="kop-logo">
+          ${leftLogo ? `
+            <img src="${leftLogo}" alt="Logo Pemda" style="max-height: 80px; max-width: 80px; object-fit: contain;">
+          ` : `
+            <svg viewBox="0 0 100 120" width="68" height="82" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M50 5 L90 25 L90 75 L50 115 L10 75 L10 25 Z" fill="#1e3a8a" stroke="#fbbf24" stroke-width="4"/>
+              <circle cx="50" cy="50" r="24" fill="#fbbf24"/>
+              <path d="M50 32 L54 44 L66 44 L56 52 L60 64 L50 56 L40 64 L44 52 L34 44 L46 44 Z" fill="#1e3a8a"/>
+              <path d="M25 82 Q50 95 75 82" stroke="#ffffff" stroke-width="3" fill="none"/>
+            </svg>
+          `}
+        </div>
+
+        <div class="kop-center">
+          ${config.pemerintahDaerah && config.pemerintahDaerah.trim() ? `<div class="kop-pemda">${config.pemerintahDaerah}</div>` : ''}
+          ${config.dinasPendidikan && config.dinasPendidikan.trim() ? `<div class="kop-dinas">${config.dinasPendidikan}</div>` : ''}
+          ${config.namaSekolah && config.namaSekolah.trim() ? `<div class="kop-sekolah">${config.namaSekolah}</div>` : ''}
+          <div class="kop-alamat">
+            ${[
+              config.npsn && config.npsn.trim() ? `NPSN: ${config.npsn.trim()}` : '',
+              config.nss && config.nss.trim() ? `NSS: ${config.nss.trim()}` : ''
+            ].filter(Boolean).join(' · ')}${(config.npsn || config.nss) ? '<br>' : ''}
+            ${[
+              config.alamat,
+              config.desaKecamatan,
+              config.kabupatenKota,
+              config.provinsi
+            ].filter((s): s is string => typeof s === 'string' && s.trim().length > 0).join(', ')}${config.kodePos && config.kodePos.trim() ? ` Kode Pos ${config.kodePos.trim()}` : ''}<br>
+            ${[
+              config.telepon && config.telepon.trim() ? `Telp: ${config.telepon.trim()}` : '',
+              config.email && config.email.trim() ? `Email: ${config.email.trim()}` : ''
+            ].filter(Boolean).join(' | ')}
+          </div>
+        </div>
+
+        <div class="kop-logo">
+          ${rightLogo ? `
+            <img src="${rightLogo}" alt="Logo Sekolah" style="max-height: 80px; max-width: 80px; object-fit: contain;">
+          ` : `
+            <svg viewBox="0 0 100 100" width="66" height="66" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="46" fill="#0284c7" stroke="#fbbf24" stroke-width="3"/>
+              <path d="M50 16 L22 36 L22 42 L50 62 L78 42 L78 36 Z" fill="#fbbf24"/>
+              <path d="M50 62 L32 76 L32 82 L50 72 L68 82 L68 76 Z" fill="#ffffff"/>
+              <circle cx="50" cy="40" r="7" fill="#dc2626"/>
+            </svg>
+          `}
+        </div>
+      </div>
+    `;
+  };
 
   return `<!DOCTYPE html>
 <html lang="id">
@@ -616,7 +702,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
   <div class="screen-toolbar no-print">
     <div class="toolbar-info">
       <h3>Dokumen Kedinasan Standar A4 - ${schoolConfig.namaSekolah}</h3>
-      <p>Format Naskah Dinas Pendidikan Resmi · Dilengkapi Garis Ganda Kop, Lembar Pengesahan NIP & Stempel</p>
+      <p>Format Naskah Dinas Pendidikan Resmi · Dilengkapi Garis Ganda Kop & Lembar Pengesahan Kedinasan</p>
     </div>
     <div class="toolbar-actions">
       <button onclick="window.print()" class="btn btn-primary">
@@ -629,52 +715,12 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
   </div>
 
   <!-- ========================================================
-       LEMBAR 1: DOKUMEN INDUK LAPORAN KINERJA
+       LEMBAR 1: DOKUMEN INDUK LAPORAN KINERJA (PADAT & LENGKAP)
        ======================================================== -->
   <div class="page-sheet">
     <div>
-      <!-- KOP SURAT 3 KOLOM RESMI -->
-      <div class="kop-surat">
-        <div class="kop-logo">
-          <svg viewBox="0 0 100 120" width="68" height="82" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M50 5 L90 25 L90 75 L50 115 L10 75 L10 25 Z" fill="#1e3a8a" stroke="#fbbf24" stroke-width="4"/>
-            <circle cx="50" cy="50" r="24" fill="#fbbf24"/>
-            <path d="M50 32 L54 44 L66 44 L56 52 L60 64 L50 56 L40 64 L44 52 L34 44 L46 44 Z" fill="#1e3a8a"/>
-            <path d="M25 82 Q50 95 75 82" stroke="#ffffff" stroke-width="3" fill="none"/>
-          </svg>
-        </div>
-
-        <div class="kop-center">
-          ${schoolConfig.pemerintahDaerah && schoolConfig.pemerintahDaerah.trim() ? `<div class="kop-pemda">${schoolConfig.pemerintahDaerah}</div>` : ''}
-          ${schoolConfig.dinasPendidikan && schoolConfig.dinasPendidikan.trim() ? `<div class="kop-dinas">${schoolConfig.dinasPendidikan}</div>` : ''}
-          ${schoolConfig.namaSekolah && schoolConfig.namaSekolah.trim() ? `<div class="kop-sekolah">${schoolConfig.namaSekolah}</div>` : ''}
-          <div class="kop-alamat">
-            ${[
-              schoolConfig.npsn && schoolConfig.npsn.trim() ? `NPSN: ${schoolConfig.npsn.trim()}` : '',
-              schoolConfig.nss && schoolConfig.nss.trim() ? `NSS: ${schoolConfig.nss.trim()}` : ''
-            ].filter(Boolean).join(' · ')}${(schoolConfig.npsn || schoolConfig.nss) ? '<br>' : ''}
-            ${[
-              schoolConfig.alamat,
-              schoolConfig.desaKecamatan,
-              schoolConfig.kabupatenKota,
-              schoolConfig.provinsi
-            ].filter((s): s is string => typeof s === 'string' && s.trim().length > 0).join(', ')}${schoolConfig.kodePos && schoolConfig.kodePos.trim() ? ` Kode Pos ${schoolConfig.kodePos.trim()}` : ''}<br>
-            ${[
-              schoolConfig.telepon && schoolConfig.telepon.trim() ? `Telp: ${schoolConfig.telepon.trim()}` : '',
-              schoolConfig.email && schoolConfig.email.trim() ? `Email: ${schoolConfig.email.trim()}` : ''
-            ].filter(Boolean).join(' | ')}
-          </div>
-        </div>
-
-        <div class="kop-logo">
-          <svg viewBox="0 0 100 100" width="66" height="66" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="50" cy="50" r="46" fill="#0284c7" stroke="#fbbf24" stroke-width="3"/>
-            <path d="M50 16 L22 36 L22 42 L50 62 L78 42 L78 36 Z" fill="#fbbf24"/>
-            <path d="M50 62 L32 76 L32 82 L50 72 L68 82 L68 76 Z" fill="#ffffff"/>
-            <circle cx="50" cy="40" r="7" fill="#dc2626"/>
-          </svg>
-        </div>
-      </div>
+      <!-- KOP SURAT 3 KOLOM RESMI DENGAN LOGO PENGGUNA -->
+      ${generateKopSuratHtml(schoolConfig)}
 
       <!-- DOKUMEN HEADING -->
       <div class="doc-header">
@@ -692,12 +738,12 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
           <tr>
             <td class="label">Nama Petugas Pelaksana</td>
             <td class="separator">:</td>
-            <td class="value">${operator.nama}</td>
+            <td class="value">${displayOperatorNama}</td>
           </tr>
           <tr>
             <td class="label">NIP / NIPPK</td>
             <td class="separator">:</td>
-            <td class="value">${operator.nip}</td>
+            <td class="value">${displayOperatorNip}</td>
           </tr>
           <tr>
             <td class="label">Jabatan Kedinasan</td>
@@ -716,77 +762,70 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
       <div class="section-title">I. RINGKASAN EKSEKUTIF KINERJA & CAPAIAN TARGET OPERASIONAL (${roleTitle.toUpperCase()})</div>
       <p class="justified-text">${reportData.summary}</p>
 
-      <div style="font-weight: bold; margin-bottom: 5px; font-size: 9.5pt;">Rincian Capaian Indikator Kinerja yang Terlaksana (${roleTitle}):</div>
-      <ol>
+      <div style="font-weight: bold; margin-bottom: 4px; font-size: 9pt;">Rincian Capaian Indikator Kinerja yang Terlaksana (${roleTitle}):</div>
+      <ol style="margin-bottom: 6px;">
         ${(isMonthly ? monthlyData?.achievements : annualData?.annualMilestones)?.map(item => `<li>${item}</li>`).join('') || '<li>Tugas operasional terlaksana sesuai sasaran kerja.</li>'}
       </ol>
 
       ${isMonthly && monthlyData ? `
-      <div style="display: flex; gap: 16px; margin-top: 8px;">
+      <div style="display: flex; gap: 14px; margin-top: 6px; margin-bottom: 6px;">
         <div style="flex: 1;">
-          <div style="font-weight: bold; font-size: 9.5pt; color: #b91c1c; margin-bottom: 3px;">Kendala / Hambatan di Lapangan:</div>
-          <ul>
+          <div style="font-weight: bold; font-size: 9pt; color: #b91c1c; margin-bottom: 2px;">Kendala / Hambatan di Lapangan:</div>
+          <ul style="font-size: 8.5pt;">
             ${monthlyData.obstacles?.map(obs => `<li>${obs}</li>`).join('') || '<li>Tidak ada kendala yang berarti.</li>'}
           </ul>
         </div>
         <div style="flex: 1;">
-          <div style="font-weight: bold; font-size: 9.5pt; color: #15803d; margin-bottom: 3px;">Solusi / Upaya Pemecahan Masalah:</div>
-          <ul>
+          <div style="font-weight: bold; font-size: 9pt; color: #15803d; margin-bottom: 2px;">Solusi / Upaya Pemecahan Masalah:</div>
+          <ul style="font-size: 8.5pt;">
             ${monthlyData.solutions?.map(sol => `<li>${sol}</li>`).join('') || '<li>Koordinasi berkala bersama satuan pendidikan berjalan optimal.</li>'}
           </ul>
         </div>
       </div>` : ''}
 
       ${!isMonthly && annualData && annualData.obstacles && annualData.obstacles.length > 0 ? `
-      <div style="display: flex; gap: 16px; margin-top: 8px;">
+      <div style="display: flex; gap: 14px; margin-top: 6px; margin-bottom: 6px;">
         <div style="flex: 1;">
-          <div style="font-weight: bold; font-size: 9.5pt; color: #b91c1c; margin-bottom: 3px;">Evaluasi Kendala Lapangan Terakumulasi:</div>
-          <ul>
+          <div style="font-weight: bold; font-size: 9pt; color: #b91c1c; margin-bottom: 2px;">Evaluasi Kendala Lapangan Terakumulasi:</div>
+          <ul style="font-size: 8.5pt;">
             ${annualData.obstacles.map(obs => `<li>${obs}</li>`).join('')}
           </ul>
         </div>
         <div style="flex: 1;">
-          <div style="font-weight: bold; font-size: 9.5pt; color: #15803d; margin-bottom: 3px;">Solusi / Mitigasi Kendala:</div>
-          <ul>
+          <div style="font-weight: bold; font-size: 9pt; color: #15803d; margin-bottom: 2px;">Solusi / Mitigasi Kendala:</div>
+          <ul style="font-size: 8.5pt;">
             ${(annualData.solutions || []).map(sol => `<li>${sol}</li>`).join('')}
           </ul>
         </div>
       </div>` : ''}
 
-      ${!isMonthly && annualData ? `
-      <div style="margin-top: 8px;">
-        <div style="font-weight: bold; font-size: 9.5pt; margin-bottom: 3px;">Rekomendasi Rencana Strategis Tahun Depan:</div>
-        <ul>
-          ${annualData.strategicRecommendations?.map(rec => `<li>${rec}</li>`).join('') || '<li>Pemeliharaan berkesinambungan.</li>'}
-        </ul>
-      </div>` : ''}
-
       <!-- II. STANDAR TUGAS POKOK (TUPOKSI) DAN TUGAS TAMBAHAN -->
       <div class="section-title">II. STANDAR TUGAS POKOK (TUPOKSI) DAN TUGAS TAMBAHAN LAYANAN OPERASIONAL</div>
-      <div style="display: flex; gap: 14px; margin-top: 6px; margin-bottom: 10px;">
-        <div style="flex: 1; background: #f8fafc; border: 1px solid #000; padding: 8px 10px; border-radius: 3px;">
-          <div style="font-weight: bold; font-size: 9pt; color: #1e3a8a; margin-bottom: 4px; display: flex; justify-content: space-between;">
+      <div style="display: flex; gap: 12px; margin-top: 4px; margin-bottom: 6px;">
+        <div style="flex: 1; background: #f8fafc; border: 1px solid #000; padding: 6px 8px; border-radius: 3px;">
+          <div style="font-weight: bold; font-size: 8.5pt; color: #1e3a8a; margin-bottom: 2px; display: flex; justify-content: space-between;">
             <span>A. Tugas Pokok (Tupoksi Standar):</span>
             <span style="font-family: monospace;">(${tupoksiCompleted.length}/${tupoksiTasks.length} Tuntas)</span>
           </div>
-          <ul style="padding-left: 18px; margin: 0; font-size: 8.5pt;">
-            ${roleTupoksiList.map(item => `<li style="margin-bottom: 2px;">${item}</li>`).join('') || ''}
+          <ul style="padding-left: 16px; margin: 0; font-size: 8pt; line-height: 1.25;">
+            ${roleTupoksiList.map(item => `<li style="margin-bottom: 1px;">${item}</li>`).join('') || ''}
           </ul>
         </div>
-        <div style="flex: 1; background: #f8fafc; border: 1px solid #000; padding: 8px 10px; border-radius: 3px;">
-          <div style="font-weight: bold; font-size: 9pt; color: #92400e; margin-bottom: 4px; display: flex; justify-content: space-between;">
+        <div style="flex: 1; background: #f8fafc; border: 1px solid #000; padding: 6px 8px; border-radius: 3px;">
+          <div style="font-weight: bold; font-size: 8.5pt; color: #92400e; margin-bottom: 2px; display: flex; justify-content: space-between;">
             <span>B. Tugas Tambahan & Insidental:</span>
             <span style="font-family: monospace;">(${tambahanCompleted.length}/${tambahanTasks.length} Tuntas)</span>
           </div>
-          <ul style="padding-left: 18px; margin: 0; font-size: 8.5pt;">
-            ${roleTambahanList.map(item => `<li style="margin-bottom: 2px;">${item}</li>`).join('') || ''}
+          <ul style="padding-left: 16px; margin: 0; font-size: 8pt; line-height: 1.25;">
+            ${roleTambahanList.map(item => `<li style="margin-bottom: 1px;">${item}</li>`).join('') || ''}
           </ul>
         </div>
       </div>
+
       ${role === 'PERPUS' ? `
       <!-- III. REKAPITULASI ANGGOTA PERPUSTAKAAN -->
       <div class="section-title">III. REKAPITULASI ANGGOTA PERPUSTAKAAN (PEMUSTAKA SEKOLAH)</div>
-      <table class="data-table" style="margin-top: 4px; margin-bottom: 8px;">
+      <table class="data-table" style="margin-top: 3px; margin-bottom: 6px; font-size: 8.5pt;">
         <thead>
           <tr>
             <th>Guru (Pendidik)</th>
@@ -808,42 +847,28 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
           </tr>
         </tbody>
       </table>` : ''}
-    </div>
 
-    <!-- Lembar 1 Page Footer -->
-    <div class="sheet-footer">
-      ${schoolConfig.namaSekolah} · Laporan Kinerja Operator Layanan Operasional · Halaman 1 dari ${totalPages}
-    </div>
-  </div>
-
-  <!-- ========================================================
-       LEMBAR 2: LAMPIRAN I - REKAPITULASI CATATAN TUGAS HARIAN
-       ======================================================== -->
-  <div class="page-sheet">
-    <div>
-      <div class="sheet-subheader">
-        <span>${schoolConfig.namaSekolah} — Lampiran I: Rekapitulasi Tugas ${roleTitle}</span>
-        <span>No: ${noSurat}</span>
+      <!-- ${role === 'PERPUS' ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN -->
+      <div class="section-title">
+        ${role === 'PERPUS' ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN ${hasSubsequentTasks ? '(BAGIAN 1)' : ''}
       </div>
-
-      <div class="section-title">III. REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN</div>
-      <table class="data-table">
+      <table class="data-table" style="margin-top: 3px;">
         <thead>
           <tr>
             <th class="col-no">No</th>
             <th class="col-date">Tanggal</th>
-            <th style="width: 80px; font-size: 8.5pt;">Klasifikasi</th>
+            <th style="width: 75px; font-size: 8pt;">Klasifikasi</th>
             <th class="col-time">Waktu</th>
             <th>Uraian Tugas & Pekerjaan Kedinasan</th>
             <th class="col-vol">Volume</th>
             <th class="col-loc">Lokasi</th>
-            <th style="width: 75px; text-align: center;">Status</th>
+            <th style="width: 70px; text-align: center;">Status</th>
           </tr>
         </thead>
         <tbody>
           ${tasksPage1.length === 0 ? `
             <tr>
-              <td colspan="8" style="text-align: center; padding: 14px; color: #64748b;">
+              <td colspan="8" style="text-align: center; padding: 10px; color: #64748b;">
                 Tidak ada catatan tugas operasional pada periode ini.
               </td>
             </tr>
@@ -853,24 +878,24 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
             <tr>
               <td class="col-no">${idx + 1}</td>
               <td class="col-date">${t.date}</td>
-              <td style="font-size: 8pt; font-weight: bold; white-space: nowrap; color: ${isPokok ? '#1e40af' : '#b45309'};">
+              <td style="font-size: 7.5pt; font-weight: bold; white-space: nowrap; color: ${isPokok ? '#1e40af' : '#b45309'};">
                 ${isPokok ? 'Tugas Pokok' : 'Tambahan'}
               </td>
               <td class="col-time">${t.timeStart} - ${t.timeEnd}</td>
               <td>
                 <div style="font-weight: bold; color: #0f172a;">${t.title}</div>
-                <div style="color: #475569; font-size: 8.5pt; margin-top: 2px;">${t.description}</div>
+                <div style="color: #475569; font-size: 8pt; margin-top: 1px;">${t.description}</div>
               </td>
               <td class="col-vol">${t.volumeUnit}</td>
               <td class="col-loc">${t.location}</td>
-              <td style="text-align: center; font-weight: bold; font-size: 8pt; color: ${t.status === 'selesai' ? '#15803d' : '#b45309'};">
+              <td style="text-align: center; font-weight: bold; font-size: 7.5pt; color: ${t.status === 'selesai' ? '#15803d' : '#b45309'};">
                 ${t.status === 'selesai' ? 'Selesai 100%' : 'Proses'}
               </td>
             </tr>
           `;
           }).join('')}
-          ${!hasTaskPage2 && relevantTasks.length > 0 ? `
-            <tr style="background: #e2e8f0; font-weight: bold; font-size: 8.5pt;">
+          ${!hasSubsequentTasks && relevantTasks.length > 0 ? `
+            <tr style="background: #e2e8f0; font-weight: bold; font-size: 8pt;">
               <td colspan="3" style="text-align: center;">TOTAL REKAPITULASI</td>
               <td colspan="4">
                 ${relevantTasks.length} Tugas Operasional (${tupoksiTasks.length} Tugas Pokok / ${tambahanTasks.length} Tugas Tambahan)
@@ -882,87 +907,105 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
           ` : ''}
         </tbody>
       </table>
+      ${hasSubsequentTasks ? `
+        <div style="font-size: 7.5pt; font-style: italic; color: #475569; margin-top: 4px; text-align: right;">
+          *(Rincian tugas ke-${page1TaskLimit + 1} s.d. ${relevantTasks.length} tercantum secara lengkap pada lembar lampiran berikutnya)
+        </div>
+      ` : ''}
     </div>
 
+    <!-- Lembar 1 Page Footer -->
     <div class="sheet-footer">
-      ${schoolConfig.namaSekolah} · Laporan Kinerja Operator Layanan Operasional · Halaman 2 dari ${totalPages}
+      ${schoolConfig.namaSekolah} · Laporan Kinerja Operator Layanan Operasional · Halaman 1 dari ${totalPages}
     </div>
   </div>
 
-  ${hasTaskPage2 ? `
-  <!-- ========================================================
-       LEMBAR 2B: LANJUTAN REKAPITULASI CATATAN TUGAS HARIAN
-       ======================================================== -->
-  <div class="page-sheet">
-    <div>
-      <div class="sheet-subheader">
-        <span>${schoolConfig.namaSekolah} — Lanjutan Rekapitulasi Tugas ${roleTitle}</span>
-        <span>No: ${noSurat}</span>
+  ${subsequentChunks.map((chunk, chunkIdx) => {
+    const pageNum = 2 + chunkIdx;
+    const isLastTaskChunk = chunkIdx === subsequentChunks.length - 1;
+    return `
+    <!-- ========================================================
+         LEMBAR TUGAS LANJUTAN BAGIAN ${chunkIdx + 2}
+         ======================================================== -->
+    <div class="page-sheet">
+      <div>
+        ${generateKopSuratHtml(schoolConfig)}
+
+        <div class="sheet-subheader">
+          <span>${schoolConfig.namaSekolah} — Lampiran I: Lanjutan Rekapitulasi Tugas ${roleTitle} (Bagian ${chunkIdx + 2})</span>
+          <span>No: ${noSurat}</span>
+        </div>
+
+        <div class="section-title">
+          ${role === 'PERPUS' ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL (LANJUTAN BAGIAN ${chunkIdx + 2})
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="col-no">No</th>
+              <th class="col-date">Tanggal</th>
+              <th style="width: 80px; font-size: 8.5pt;">Klasifikasi</th>
+              <th class="col-time">Waktu</th>
+              <th>Uraian Tugas & Pekerjaan Kedinasan</th>
+              <th class="col-vol">Volume</th>
+              <th class="col-loc">Lokasi</th>
+              <th style="width: 75px; text-align: center;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${chunk.map((t, idx) => {
+              const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
+              return `
+              <tr>
+                <td class="col-no">${page1TaskLimit + chunkIdx * tasksPerPageSubsequent + idx + 1}</td>
+                <td class="col-date">${t.date}</td>
+                <td style="font-size: 8pt; font-weight: bold; white-space: nowrap; color: ${isPokok ? '#1e40af' : '#b45309'};">
+                  ${isPokok ? 'Tugas Pokok' : 'Tambahan'}
+                </td>
+                <td class="col-time">${t.timeStart} - ${t.timeEnd}</td>
+                <td>
+                  <div style="font-weight: bold; color: #0f172a;">${t.title}</div>
+                  <div style="color: #475569; font-size: 8.5pt; margin-top: 2px;">${t.description}</div>
+                </td>
+                <td class="col-vol">${t.volumeUnit}</td>
+                <td class="col-loc">${t.location}</td>
+                <td style="text-align: center; font-weight: bold; font-size: 8pt; color: ${t.status === 'selesai' ? '#15803d' : '#b45309'};">
+                  ${t.status === 'selesai' ? 'Selesai 100%' : 'Proses'}
+                </td>
+              </tr>
+            `;
+            }).join('')}
+            ${isLastTaskChunk ? `
+              <tr style="background: #e2e8f0; font-weight: bold; font-size: 8.5pt;">
+                <td colspan="3" style="text-align: center;">TOTAL REKAPITULASI</td>
+                <td colspan="4">
+                  ${relevantTasks.length} Tugas Operasional (${tupoksiTasks.length} Tugas Pokok / ${tambahanTasks.length} Tugas Tambahan)
+                </td>
+                <td style="text-align: center; color: #15803d;">
+                  ${completedCount}/${relevantTasks.length} Tuntas
+                </td>
+              </tr>
+            ` : ''}
+          </tbody>
+        </table>
       </div>
 
-      <div class="section-title">III. REKAPITULASI RINCIAN TUGAS HARIAN (LANJUTAN)</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th class="col-no">No</th>
-            <th class="col-date">Tanggal</th>
-            <th style="width: 80px; font-size: 8.5pt;">Klasifikasi</th>
-            <th class="col-time">Waktu</th>
-            <th>Uraian Tugas & Pekerjaan Kedinasan</th>
-            <th class="col-vol">Volume</th>
-            <th class="col-loc">Lokasi</th>
-            <th style="width: 75px; text-align: center;">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tasksPage2.map((t, idx) => {
-            const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
-            return `
-            <tr>
-              <td class="col-no">${tasksPerPage + idx + 1}</td>
-              <td class="col-date">${t.date}</td>
-              <td style="font-size: 8pt; font-weight: bold; white-space: nowrap; color: ${isPokok ? '#1e40af' : '#b45309'};">
-                ${isPokok ? 'Tugas Pokok' : 'Tambahan'}
-              </td>
-              <td class="col-time">${t.timeStart} - ${t.timeEnd}</td>
-              <td>
-                <div style="font-weight: bold; color: #0f172a;">${t.title}</div>
-                <div style="color: #475569; font-size: 8.5pt; margin-top: 2px;">${t.description}</div>
-              </td>
-              <td class="col-vol">${t.volumeUnit}</td>
-              <td class="col-loc">${t.location}</td>
-              <td style="text-align: center; font-weight: bold; font-size: 8pt; color: ${t.status === 'selesai' ? '#15803d' : '#b45309'};">
-                ${t.status === 'selesai' ? 'Selesai 100%' : 'Proses'}
-              </td>
-            </tr>
-          `;
-          }).join('')}
-          <tr style="background: #e2e8f0; font-weight: bold; font-size: 8.5pt;">
-            <td colspan="3" style="text-align: center;">TOTAL REKAPITULASI</td>
-            <td colspan="4">
-              ${relevantTasks.length} Tugas Operasional (${tupoksiTasks.length} Tugas Pokok / ${tambahanTasks.length} Tugas Tambahan)
-            </td>
-            <td style="text-align: center; color: #15803d;">
-              ${completedCount}/${relevantTasks.length} Tuntas
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="sheet-footer">
+        ${schoolConfig.namaSekolah} · Laporan Kinerja Operator Layanan Operasional · Halaman ${pageNum} dari ${totalPages}
+      </div>
     </div>
-
-    <div class="sheet-footer">
-      ${schoolConfig.namaSekolah} · Laporan Kinerja Operator Layanan Operasional · Halaman 3 dari ${totalPages}
-    </div>
-  </div>
-  ` : ''}
+    `;
+  }).join('')}
 
   <!-- ========================================================
-       LEMBAR PENUTUP: LAMPIRAN II & LEMBAR PENGESAHAN RESMI (ANTI-TERPOTONG)
+       LEMBAR LAMPIRAN II: SARPRAS & LEMBAR PENGESAHAN RESMI (ANTI-TERPOTONG)
        ======================================================== -->
   <div class="page-sheet">
     <div>
+      ${generateKopSuratHtml(schoolConfig)}
+
       <div class="sheet-subheader">
-        <span>${schoolConfig.namaSekolah} — Lampiran II & Pengesahan ${roleTitle}</span>
+        <span>${schoolConfig.namaSekolah} — Lampiran II: Sarana Prasarana & Rekapitulasi</span>
         <span>No: ${noSurat}</span>
       </div>
 
@@ -1076,30 +1119,18 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
               <div class="sign-title" style="height: 22px; line-height: 22px; font-weight: 600;">Mengetahui / Mengesahkan,</div>
               <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${schoolConfig.kepalaSekolah.jabatan || 'Kepala Satuan Pendidikan'}</div>
               
-              <div class="sign-box" style="height: 90px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
-                ${schoolConfig.stempelEnabled ? `
-                  <div class="stamp-overlay" style="position: absolute; left: 8%; top: -6px; width: 90px; height: 90px; pointer-events: none;">
-                    ${schoolConfig.customStempelUrl ? `
-                      <img src="${schoolConfig.customStempelUrl}" alt="Cap Stempel" style="width: 100%; height: 100%; object-fit: contain;">
-                    ` : `
-                      <div class="stamp-badge">
-                        <span>★ DISDIK ★</span>
-                        <span>${(schoolConfig.kabupatenKota || 'RESMI').toUpperCase()}</span>
-                        <span>RESMI</span>
-                      </div>
-                    `}
-                  </div>
-                ` : ''}
-
-                ${schoolConfig.kepalaSekolah.signatureImage ? `
+              <div class="sign-box" style="height: 85px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
+                ${!isDefaultOrDummyKepsek && schoolConfig.kepalaSekolah.signatureImage ? `
                   <img src="${schoolConfig.kepalaSekolah.signatureImage}" alt="Tanda Tangan Kepsek" class="sign-image" style="max-height: 75px; max-width: 180px; object-fit: contain;">
+                ` : !isDefaultOrDummyKepsek && schoolConfig.kepalaSekolah.signatureData ? `
+                  <div class="signature-font">${schoolConfig.kepalaSekolah.signatureData}</div>
                 ` : `
-                  <div class="signature-font">${schoolConfig.kepalaSekolah.signatureData || schoolConfig.kepalaSekolah.nama.split(' ')[0]}</div>
+                  <div style="height: 75px; width: 100%;"></div>
                 `}
               </div>
 
-              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; text-decoration: underline;">${formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama)}</div>
-              <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${schoolConfig.kepalaSekolah.nip}</div>
+              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; ${isDefaultOrDummyKepsek ? '' : 'text-decoration: underline;'}">${displayKepsekNama}</div>
+              <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${displayKepsekNip}</div>
             </td>
 
             <!-- Kolom Kanan: Petugas Pelaksana (Yang Membuat Laporan) -->
@@ -1108,18 +1139,18 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
               <div class="sign-title" style="height: 22px; line-height: 22px; font-weight: 600;">Yang Membuat Laporan,</div>
               <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${operator.jabatan}</div>
 
-              <div class="sign-box" style="height: 90px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
-                ${operator.signatureImage ? `
+              <div class="sign-box" style="height: 85px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
+                ${!isDefaultOrDummyOperator && operator.signatureImage ? `
                   <img src="${operator.signatureImage}" alt="Tanda Tangan Operator" class="sign-image" style="max-height: 75px; max-width: 180px; object-fit: contain;">
+                ` : !isDefaultOrDummyOperator && operator.signatureData ? `
+                  <div class="signature-font">${operator.signatureData}</div>
                 ` : `
-                  <div class="signature-font">
-                    ${operator.signatureData || operator.nama.split(' ')[0]}
-                  </div>
+                  <div style="height: 75px; width: 100%;"></div>
                 `}
               </div>
 
-              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; text-decoration: underline;">${formatOfficialNameWithDegree(operator.nama)}</div>
-              <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${operator.nip}</div>
+              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; ${isDefaultOrDummyOperator ? '' : 'text-decoration: underline;'}">${displayOperatorNama}</div>
+              <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${displayOperatorNip}</div>
             </td>
           </tr>
         </table>

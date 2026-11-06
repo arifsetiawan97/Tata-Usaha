@@ -32,12 +32,12 @@ export const initialSchoolConfig: SchoolConfig = {
   stempelTextLine1: 'DINAS PENDIDIKAN DAN KEBUDAYAAN',
   stempelTextLine2: 'SMP NEGERI SATU ATAP TELUK',
   kepalaSekolah: {
-    nama: 'Dr. H. RAHMAT HIDAYAT, M.Pd.',
-    nip: 'NIP. 19740510 199802 1 003',
+    nama: '',
+    nip: 'NIP. .................................................',
     pangkatGolongan: 'Pembina Utama Muda, IV/c',
     jabatan: 'Kepala Sekolah',
-    signatureType: 'script',
-    signatureData: 'RahmatHidayat'
+    signatureType: 'draw',
+    signatureData: ''
   },
   operatorProfiles: {
     TU: {
@@ -64,11 +64,11 @@ export const initialSchoolConfig: SchoolConfig = {
       signatureData: 'AgusSupriyadi'
     },
     PERPUS: {
-      nama: 'NURUL HIDAYATI, S.I.Pust.',
-      nip: 'NIPPK. 19920815 202321 2 024',
+      nama: '',
+      nip: 'NIPPK. .................................................',
       jabatan: 'Pengelola / Petugas Perpustakaan',
-      signatureType: 'script',
-      signatureData: 'NurulHidayati'
+      signatureType: 'draw',
+      signatureData: ''
     },
     LAB_IPA: {
       nama: 'HENDRA PRASETYA, S.Pd.',
@@ -355,7 +355,7 @@ export const initialTasks: TaskLog[] = [
     timeEnd: '10:30',
     status: 'selesai',
     volumeUnit: '80 buku teks pelajaran',
-    petugas: 'Nurul Hidayati, S.I.Pust.',
+    petugas: 'Pengelola Perpustakaan',
     notes: 'Data telah tersinkronisasi ke katalog digital perpustakaan (OPAC).'
   },
   {
@@ -371,7 +371,7 @@ export const initialTasks: TaskLog[] = [
     timeEnd: '13:00',
     status: 'selesai',
     volumeUnit: '65 transaksi peminjaman & 42 pengembalian',
-    petugas: 'Nurul Hidayati, S.I.Pust.',
+    petugas: 'Pengelola Perpustakaan',
     notes: 'Seluruh buku dikembalikan tepat waktu tanpa denda keterlambatan.'
   },
   {
@@ -387,7 +387,7 @@ export const initialTasks: TaskLog[] = [
     timeEnd: '08:15',
     status: 'selesai',
     volumeUnit: '2 rombel (64 peserta didik)',
-    petugas: 'Nurul Hidayati, S.I.Pust.',
+    petugas: 'Pengelola Perpustakaan',
     notes: 'Antusiasme siswa tinggi, 28 siswa langsung mendaftar pinjam buku fiksi.'
   },
   {
@@ -403,7 +403,7 @@ export const initialTasks: TaskLog[] = [
     timeEnd: '15:30',
     status: 'selesai',
     volumeUnit: '15 eksemplar buku referensi',
-    petugas: 'Nurul Hidayati, S.I.Pust.',
+    petugas: 'Pengelola Perpustakaan',
     notes: 'Kondisi buku kembali rapi, kuat, dan siap dipinjamkan kembali.'
   },
   {
@@ -419,7 +419,7 @@ export const initialTasks: TaskLog[] = [
     timeEnd: '12:30',
     status: 'selesai',
     volumeUnit: '280 eksemplar buku',
-    petugas: 'Nurul Hidayati, S.I.Pust.',
+    petugas: 'Pengelola Perpustakaan',
     notes: 'Sesuai dengan data sistem, 12 eksemplar terkonfirmasi dalam peminjaman aktif.'
   },
   {
@@ -435,7 +435,7 @@ export const initialTasks: TaskLog[] = [
     timeEnd: '11:45',
     status: 'selesai',
     volumeUnit: '120 kartu perpustakaan',
-    petugas: 'Nurul Hidayati, S.I.Pust.',
+    petugas: 'Pengelola Perpustakaan',
     notes: 'Kartu telah dilaminasi rapi dan siap didistribusikan ke wali kelas.'
   },
   // LABORATORIUM IPA TASKS
@@ -1461,8 +1461,8 @@ export const initialArchives: ArchiveDocument[] = [
     period: 'Bulan September 2026',
     year: 2026,
     month: 9,
-    operatorName: 'NURUL HIDAYATI, S.I.Pust.',
-    operatorNip: 'NIPPK. 19920815 202321 2 024',
+    operatorName: 'Pengelola Perpustakaan',
+    operatorNip: 'NIPPK. .................................................',
     dateArchived: '2026-09-30T14:30:00.000Z',
     approvalStatus: 'disahkan_kepsek',
     inspectionNotes: 'Dokumen pelaporan sirkulasi, pengolahan buku DDC, dan jam literasi terverifikasi lengkap.',

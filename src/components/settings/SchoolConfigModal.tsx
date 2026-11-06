@@ -27,7 +27,8 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setFormData(prev => ({ ...prev, logoKabupatenUrl: event.target?.result as string }));
+        const val = event.target?.result as string;
+        setFormData(prev => ({ ...prev, logoKabupatenUrl: val, logoKopKiri: val }));
       };
       reader.readAsDataURL(file);
     }
@@ -38,7 +39,8 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        setFormData(prev => ({ ...prev, logoSekolahUrl: event.target?.result as string }));
+        const val = event.target?.result as string;
+        setFormData(prev => ({ ...prev, logoSekolahUrl: val, logoKopKanan: val }));
       };
       reader.readAsDataURL(file);
     }
@@ -365,8 +367,8 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                   <label className="block font-semibold text-slate-700 mb-1">Nama Lengkap & Gelar</label>
                   <input
                     type="text"
-                    required
                     value={formData.kepalaSekolah.nama}
+                    placeholder="Contoh: Drs. H. Ahmad Dahlan, M.Pd. (Kosongkan jika ingin format titik-titik)"
                     onChange={(e) => setFormData(prev => ({
                       ...prev,
                       kepalaSekolah: { ...prev.kepalaSekolah, nama: e.target.value }
@@ -379,8 +381,8 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                     <label className="block font-semibold text-slate-700 mb-1">NIP</label>
                     <input
                       type="text"
-                      required
                       value={formData.kepalaSekolah.nip}
+                      placeholder="Contoh: 19740510 199802 1 003"
                       onChange={(e) => setFormData(prev => ({
                         ...prev,
                         kepalaSekolah: { ...prev.kepalaSekolah, nip: e.target.value }
@@ -443,8 +445,8 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                         <label className="block font-semibold text-slate-700 mb-1">Nama Petugas</label>
                         <input
                           type="text"
-                          required
                           value={op.nama}
+                          placeholder="Nama lengkap & gelar (atau kosongkan)"
                           onChange={(e) => setFormData(prev => ({
                             ...prev,
                             operatorProfiles: {
@@ -459,8 +461,8 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                         <label className="block font-semibold text-slate-700 mb-1">NIP atau NIPPK</label>
                         <input
                           type="text"
-                          required
                           value={op.nip}
+                          placeholder="Nomor NIP / NIPPK"
                           onChange={(e) => setFormData(prev => ({
                             ...prev,
                             operatorProfiles: {
@@ -520,7 +522,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                       {formData.logoKabupatenUrl && (
                         <button
                           type="button"
-                          onClick={() => setFormData(prev => ({ ...prev, logoKabupatenUrl: '' }))}
+                          onClick={() => setFormData(prev => ({ ...prev, logoKabupatenUrl: '', logoKopKiri: '' }))}
                           className="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded text-[10px] font-semibold border border-rose-200"
                           title="Kembalikan ke lambang default"
                         >
@@ -554,7 +556,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                       {formData.logoSekolahUrl && (
                         <button
                           type="button"
-                          onClick={() => setFormData(prev => ({ ...prev, logoSekolahUrl: '' }))}
+                          onClick={() => setFormData(prev => ({ ...prev, logoSekolahUrl: '', logoKopKanan: '' }))}
                           className="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded text-[10px] font-semibold border border-rose-200"
                           title="Kembalikan ke lambang default"
                         >

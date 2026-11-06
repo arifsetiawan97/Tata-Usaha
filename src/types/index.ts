@@ -211,6 +211,7 @@ export interface MonthlyReport {
   month: number; // 1-12
   year: number;
   manualDocDate: string; // e.g. "Bogor, 30 September 2026"
+  nomorSurat?: string;
   summary: string;
   achievements: string[];
   obstacles: string[];
@@ -224,6 +225,7 @@ export interface AnnualReport {
   role: RoleType;
   year: number;
   manualDocDate: string; // e.g. "Bogor, 31 Desember 2026"
+  nomorSurat?: string;
   summary: string;
   annualMilestones: string[];
   strategicRecommendations: string[];

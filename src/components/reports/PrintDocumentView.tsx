@@ -30,7 +30,11 @@ import {
   Target,
   BookmarkCheck,
   BookOpen,
-  Users
+  Users,
+  Edit3,
+  Hash,
+  X,
+  Sparkles
 } from 'lucide-react';
 import { initialSchoolConfig } from '../../data/initialData';
 import { ROLE_OPERATIONAL_SPECS } from '../../data/roleOperationalSpecs';
@@ -73,11 +77,35 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
     role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
   const operator = schoolConfig.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role] || {
-    nama: 'Petugas Layanan Operasional',
-    nip: '-',
+    nama: '',
+    nip: '',
     jabatan: roleTitle,
     signatureType: 'script' as const
   };
+
+  const isDefaultOrDummyKepsek = !schoolConfig.kepalaSekolah?.nama || 
+    /rahmat\s*hidayat/i.test(schoolConfig.kepalaSekolah.nama) || 
+    schoolConfig.kepalaSekolah.nama.trim() === '';
+  
+  const displayKepsekNama = isDefaultOrDummyKepsek 
+    ? '( .................................................. )' 
+    : formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama);
+
+  const displayKepsekNip = isDefaultOrDummyKepsek || !schoolConfig.kepalaSekolah?.nip || /19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip)
+    ? (schoolConfig.kepalaSekolah?.nip && !/19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip) ? schoolConfig.kepalaSekolah.nip : 'NIP. .................................................')
+    : (schoolConfig.kepalaSekolah.nip.startsWith('NIP') ? schoolConfig.kepalaSekolah.nip : `NIP. ${schoolConfig.kepalaSekolah.nip}`);
+
+  const isDefaultOrDummyOperator = !operator?.nama || 
+    /nurul\s*hidayat/i.test(operator.nama) || 
+    operator.nama.trim() === '';
+
+  const displayOperatorNama = isDefaultOrDummyOperator 
+    ? '( .................................................. )' 
+    : formatOfficialNameWithDegree(operator.nama);
+
+  const displayOperatorNip = isDefaultOrDummyOperator || !operator?.nip || /19920815\s*202321\s*2\s*024/.test(operator.nip)
+    ? (operator?.nip && !/19920815\s*202321\s*2\s*024/.test(operator.nip) ? operator.nip : 'NIP / NIPPK. .................................................')
+    : (operator.nip.startsWith('NIP') ? operator.nip : `NIP / NIPPK. ${operator.nip}`);
 
   const isMonthly = reportType === 'monthly';
   const monthlyData = isMonthly ? (reportData as MonthlyReport) : null;
@@ -92,8 +120,10 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   );
 
   const [nomorSurat, setNomorSurat] = useState<string>(
-    `800/${isMonthly ? `LAP-BLN/${monthlyData?.month || 9}` : 'LAP-THN'}/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`
+    reportData.nomorSurat || `800/${isMonthly ? `LAP-BLN/${monthlyData?.month || 9}` : 'LAP-THN'}/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`
   );
+  const [isEditNomorModalOpen, setIsEditNomorModalOpen] = useState(false);
+  const [tempNomorSurat, setTempNomorSurat] = useState<string>(nomorSurat);
 
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<string>('');
@@ -486,6 +516,33 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Nomor Surat Editor Box */}
+          <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 w-full xs:w-auto">
+            <Hash className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="text-[10px] text-slate-400 shrink-0">No:</span>
+            <input
+              type="text"
+              value={nomorSurat}
+              onChange={(e) => {
+                setNomorSurat(e.target.value);
+                if (reportData) reportData.nomorSurat = e.target.value;
+              }}
+              className="bg-transparent text-xs text-white font-mono font-medium focus:outline-hidden w-full xs:w-44 sm:w-52"
+              placeholder="Nomor Surat Kedinasan..."
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setTempNomorSurat(nomorSurat);
+                setIsEditNomorModalOpen(true);
+              }}
+              className="text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold px-1.5 py-0.5 rounded cursor-pointer shrink-0 transition-colors"
+              title="Buka pilihan format & edit nomor surat lengkap"
+            >
+              Format
+            </button>
+          </div>
+
           {/* Tanggal Manual Input */}
           <div className="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 w-full xs:w-auto">
             <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -494,7 +551,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
               type="text"
               value={manualDate}
               onChange={(e) => setManualDate(e.target.value)}
-              className="bg-transparent text-xs text-white font-medium focus:outline-hidden w-full xs:w-48 sm:w-52"
+              className="bg-transparent text-xs text-white font-medium focus:outline-hidden w-full xs:w-40 sm:w-48"
               placeholder="Tempat, Tanggal Dokumen..."
             />
           </div>
@@ -584,21 +641,23 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
       </div>
 
       {/* PRINTABLE OFFICIAL DOCUMENT CONTAINER (A4 CALIBRATED PAGES) */}
-      <div className="overflow-x-auto pb-10">
-        <div ref={printableRef} className="space-y-8 max-w-[850px] mx-auto">
+      <div className="overflow-x-auto pb-10 print:overflow-visible print:pb-0 print:m-0 print:p-0">
+        <div ref={printableRef} className="space-y-8 max-w-[850px] mx-auto print:space-y-0 print:max-w-none print:w-full print:m-0 print:p-0 print-page-container">
           {(() => {
-            const tasksPerPage = 10;
-            const taskChunks: typeof relevantTasks[] = [];
-            if (relevantTasks.length === 0) {
-              taskChunks.push([]);
-            } else {
-              for (let i = 0; i < relevantTasks.length; i += tasksPerPage) {
-                taskChunks.push(relevantTasks.slice(i, i + tasksPerPage));
-              }
+            // Lembar 1 task capacity:
+            // For PERPUS (with Rekap Anggota + KPI), 5 tasks fill Lembar 1 cleanly without overflowing
+            // For other roles (no Rekap Anggota), 6 tasks fill Lembar 1 cleanly
+            const page1Limit = isPerpus ? 5 : 6;
+            const tasksPage1 = relevantTasks.slice(0, page1Limit);
+            const remainingTasks = relevantTasks.slice(page1Limit);
+            const tasksPerPageSubsequent = 12;
+            const subsequentTaskChunks: typeof relevantTasks[] = [];
+            for (let i = 0; i < remainingTasks.length; i += tasksPerPageSubsequent) {
+              subsequentTaskChunks.push(remainingTasks.slice(i, i + tasksPerPageSubsequent));
             }
             const roleInventories = inventories.filter(inv => inv.role === role);
             const tasksWithPhotos = relevantTasks.filter(t => !!t.photoUrl);
-            const totalPages = 1 + taskChunks.length + 1 + 1; // Page 1 + N Task Pages + Lampiran Sarpras & Foto + Lembar Pengesahan
+            const totalPages = 1 + subsequentTaskChunks.length + 1 + 1; // Lembar 1 + N Task Sheets + Lampiran Sarpras & Foto + Lembar Pengesahan
 
             return (
               <>
@@ -614,7 +673,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                 </div>
 
                 <div 
-                  className={`print-page bg-white border border-slate-300 shadow-xl rounded-xl p-6 sm:p-8 text-slate-900 leading-normal flex flex-col justify-between print:border-none print:shadow-none print:p-0 min-h-[960px] sm:min-h-[1020px] print:min-h-0 ${
+                  className={`print-page bg-white border border-slate-300 shadow-xl rounded-xl p-5 sm:p-7 text-slate-900 leading-normal flex flex-col justify-between print:border-none print:shadow-none print:p-0 print:m-0 print:rounded-none min-h-[960px] sm:min-h-[1020px] print:min-h-0 print:h-auto ${
                     mobileFitScale ? 'w-full text-[11px]' : 'min-w-[720px] sm:min-w-0'
                   }`}
                   style={{ 
@@ -626,7 +685,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                     <KopSurat config={schoolConfig} isPrintVersion={true} />
 
                     {/* DOKUMEN HEADING */}
-                    <div className="text-center my-3.5 break-inside-avoid">
+                    <div className="text-center my-2.5 break-inside-avoid">
                       <h2 className="text-sm sm:text-base font-extrabold uppercase tracking-wide text-slate-950">
                         {isMonthly 
                           ? `LAPORAN BULANAN KINERJA OPERATOR LAYANAN OPERASIONAL`
@@ -642,24 +701,38 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                           : `Tahun Anggaran: ${annualData?.year || 2026}`
                         }
                       </p>
-                      <p className="text-[11px] font-mono text-slate-600 mt-1">
-                        Nomor: {nomorSurat}
-                      </p>
+                      <div className="flex items-center justify-center gap-2 mt-1">
+                        <p className="text-[11px] font-mono text-slate-700">
+                          Nomor: <span className="font-bold text-slate-950">{nomorSurat}</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempNomorSurat(nomorSurat);
+                            setIsEditNomorModalOpen(true);
+                          }}
+                          className="no-print inline-flex items-center gap-1 text-[10px] text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded cursor-pointer transition-colors shadow-xs"
+                          title="Klik untuk mengubah nomor surat resmi"
+                        >
+                          <Edit3 className="w-2.5 h-2.5" />
+                          <span>Ubah No. Surat</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* IDENTITAS PELAKSANA TUGAS */}
-                    <div className="my-3 p-3 bg-slate-50 border border-slate-300 rounded text-xs break-inside-avoid print:bg-transparent print:border-black">
+                    <div className="my-2 p-2.5 bg-slate-50 border border-slate-300 rounded text-xs break-inside-avoid print:bg-transparent print:border-black">
                       <table className="w-full border-none">
                         <tbody>
                           <tr>
                             <td className="w-40 sm:w-48 font-semibold border-none py-0.5">Nama Petugas Pelaksana</td>
                             <td className="w-4 border-none py-0.5">:</td>
-                            <td className="font-bold border-none py-0.5">{operator.nama}</td>
+                            <td className="font-bold border-none py-0.5">{displayOperatorNama}</td>
                           </tr>
                           <tr>
                             <td className="font-semibold border-none py-0.5">NIP / NIPPK</td>
                             <td className="border-none py-0.5">:</td>
-                            <td className="border-none py-0.5">{operator.nip}</td>
+                            <td className="border-none py-0.5">{displayOperatorNip}</td>
                           </tr>
                           <tr>
                             <td className="font-semibold border-none py-0.5">Jabatan / Satuan Tugas</td>
@@ -676,8 +749,8 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                     </div>
 
                     {/* RINGKASAN KINERJA */}
-                    <div className="my-3 text-xs break-inside-avoid">
-                      <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-2 print:border-black">
+                    <div className="my-2 text-xs break-inside-avoid">
+                      <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-0.5 mb-1.5 print:border-black">
                         I. RINGKASAN EKSEKUTIF KINERJA & CAPAIAN TARGET OPERASIONAL ({roleTitle.toUpperCase()})
                       </h4>
                       <p className="text-justify leading-relaxed text-slate-800 indent-6">
@@ -760,11 +833,11 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                       {/* ========================================================
                           II. STANDAR TUGAS POKOK (TUPOKSI) DAN TUGAS TAMBAHAN
                           ======================================================== */}
-                      <div className="mt-3.5 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
-                        <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-2 print:border-black">
+                      <div className="mt-2 pt-1.5 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                        <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-0.5 mb-1.5 print:border-black">
                           II. STANDAR TUGAS POKOK (TUPOKSI) DAN TUGAS TAMBAHAN LAYANAN OPERASIONAL
                         </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           <div className="p-2 bg-slate-50 border border-slate-300 rounded print:border-black print:bg-transparent">
                             <p className="font-bold text-slate-900 mb-1 flex items-center justify-between text-[10.5px]">
                               <span>A. Tugas Pokok (Tupoksi Standar):</span>
@@ -791,7 +864,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                       </div>
 
                       {/* MATRIKS TARGET OPERASIONAL & INDIKATOR KINERJA KUNCI (KPI) */}
-                      <div className="mt-3 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                      <div className="mt-2 pt-1.5 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
                         <div className="flex justify-between items-center mb-1">
                           <h4 className="font-bold text-xs text-slate-900 uppercase">
                             MATRIKS TARGET OPERASIONAL & INDIKATOR KINERJA KUNCI (KPI) - {roleTitle.toUpperCase()}
@@ -830,7 +903,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
 
                       {/* DATA REKAPITULASI ANGGOTA PERPUSTAKAAN (GURU, STAFF, SISWA) */}
                       {isPerpus && (
-                        <div className="mt-3 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                        <div className="mt-2 pt-1.5 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
                           <div className="flex justify-between items-center mb-1">
                             <h4 className="font-bold text-xs text-slate-900 uppercase">
                               III. DATA REKAPITULASI ANGGOTA PERPUSTAKAAN (PEMUSTAKA SEKOLAH)
@@ -871,35 +944,123 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                           </table>
                         </div>
                       )}
+
+                      {/* REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL (BAGIAN 1) */}
+                      <div className="mt-2.5 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                        <div className="flex justify-between items-center mb-1">
+                          <h4 className="font-bold text-xs text-slate-900 uppercase">
+                            {isPerpus ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN {remainingTasks.length > 0 ? '(BAGIAN 1)' : ''}
+                          </h4>
+                          <span className="font-mono text-[9.5px] text-slate-600">
+                            {tasksPage1.length} dari {relevantTasks.length} Tugas Tercatat
+                          </span>
+                        </div>
+
+                        <div className="w-full overflow-hidden">
+                          <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200 print:border-black">
+                                <th className="py-1 px-1.5 text-center w-7 border border-slate-400 print:border-black">No</th>
+                                <th className="py-1 px-1.5 w-20 border border-slate-400 print:border-black">Tanggal</th>
+                                <th className="py-1 px-1.5 w-22 border border-slate-400 print:border-black">Klasifikasi</th>
+                                <th className="py-1 px-2 border border-slate-400 print:border-black">Uraian Tugas Kedinasan</th>
+                                <th className="py-1 px-1.5 border border-slate-400 print:border-black">Lokasi</th>
+                                <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black whitespace-nowrap">Waktu</th>
+                                <th className="py-1 px-1.5 border border-slate-400 print:border-black">Volume</th>
+                                <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {tasksPage1.length === 0 ? (
+                                <tr>
+                                  <td colSpan={8} className="py-4 text-center text-slate-500 italic border border-slate-400 print:border-black">
+                                    Tidak ada catatan tugas operasional pada periode ini.
+                                  </td>
+                                </tr>
+                              ) : (
+                                tasksPage1.map((t, idx) => {
+                                  const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
+                                  return (
+                                    <tr key={t.id} className="border-b border-slate-300 print:border-black">
+                                      <td className="py-1 px-1.5 text-center font-mono border border-slate-300 print:border-black">
+                                        {idx + 1}
+                                      </td>
+                                      <td className="py-1 px-1.5 font-mono whitespace-nowrap border border-slate-300 print:border-black">{t.date}</td>
+                                      <td className="py-1 px-1.5 text-[9px] border border-slate-300 print:border-black whitespace-nowrap">
+                                        <span className={`font-bold ${isPokok ? 'text-blue-900' : 'text-amber-900'}`}>
+                                          {isPokok ? 'Tugas Pokok' : 'Tambahan'}
+                                        </span>
+                                      </td>
+                                      <td className="py-1 px-2 border border-slate-300 print:border-black">
+                                        <span className="font-semibold text-slate-900 block leading-tight">{t.title}</span>
+                                        <span className="text-[9px] text-slate-600 block mt-0.5 leading-tight">{t.description}</span>
+                                        {t.photoUrl && (
+                                          <span className="text-[8.5px] text-blue-600 font-medium inline-block mt-0.5 no-print">📷 Ada bukti foto</span>
+                                        )}
+                                      </td>
+                                      <td className="py-1 px-1.5 border border-slate-300 print:border-black text-[9.5px]">{t.location}</td>
+                                      <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black whitespace-nowrap font-mono text-[9px]">{t.timeStart} - {t.timeEnd}</td>
+                                      <td className="py-1 px-1.5 border border-slate-300 print:border-black text-[9.5px]">{t.volumeUnit}</td>
+                                      <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black font-semibold text-[9px]">
+                                        {t.status === 'selesai' ? (
+                                          <span className="text-emerald-700 font-bold">Selesai 100%</span>
+                                        ) : (
+                                          <span className="text-amber-700 font-bold">Proses</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                              {remainingTasks.length === 0 && relevantTasks.length > 0 && (
+                                <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400 print:bg-slate-200 print:border-black text-[9.5px]">
+                                  <td colSpan={3} className="py-1 px-1.5 text-center font-bold">TOTAL REKAPITULASI</td>
+                                  <td colSpan={4} className="py-1 px-2">
+                                    {relevantTasks.length} Tugas Operasional Terlaksana ({tupoksiTasks.length} Pokok / {tambahanTasks.length} Tambahan)
+                                  </td>
+                                  <td className="py-1 px-1.5 text-center text-emerald-800 font-bold">
+                                    {completedCount}/{relevantTasks.length} Tuntas
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        {remainingTasks.length > 0 && (
+                          <div className="text-[9px] text-slate-500 italic mt-1 text-right">
+                            *(Catatan: Rincian tugas ke-{page1Limit + 1} s.d. {relevantTasks.length} tercantum secara lengkap pada lembar lampiran berikutnya)
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {/* Lembar 1 Page Footer */}
-                  <div className="pt-2.5 border-t border-slate-200 text-center text-[10px] text-slate-400 font-mono">
+                  <div className="pt-2 border-t border-slate-200 text-center text-[10px] text-slate-400 font-mono">
                     <span>{schoolConfig.namaSekolah} · Laporan Kinerja Operator Layanan Operasional · Halaman 1 dari {totalPages}</span>
                   </div>
                 </div>
 
                 {/* ========================================================
                     LEMBAR LAMPIRAN I: REKAPITULASI RINCIAN TUGAS HARIAN
-                    (DYNAMIC CHUNKED PAGINATION - 10 TUGAS PER LEMBAR A4)
+                    (DYNAMIC CHUNKED PAGINATION - HANYA DIBUAT JIKA ADA SISA TUGAS)
                     ======================================================== */}
-                {taskChunks.map((chunk, chunkIdx) => {
+                {subsequentTaskChunks.map((chunk, chunkIdx) => {
                   const pageNum = 2 + chunkIdx;
-                  const isFirstChunk = chunkIdx === 0;
+                  const isLastTaskChunk = chunkIdx === subsequentTaskChunks.length - 1;
 
                   return (
                     <React.Fragment key={chunkIdx}>
                       <div className="no-print flex items-center justify-between text-xs text-slate-500 font-semibold px-2 mb-1">
                         <span className="flex items-center gap-1.5 text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-200">
                           <FileText className="w-3.5 h-3.5" />
-                          <span>Lembar {pageNum} dari {totalPages} (Lampiran I: Rekapitulasi Rincian Catatan Tugas Harian {taskChunks.length > 1 ? `- Bagian ${chunkIdx + 1}` : ''})</span>
+                          <span>Lembar {pageNum} dari {totalPages} (Lampiran I: Rekapitulasi Rincian Catatan Tugas Harian - Bagian {chunkIdx + 2})</span>
                         </span>
                         <span className="text-[11px] text-slate-400">Standar A4 Kedinasan</span>
                       </div>
 
                       <div 
-                        className={`print-page bg-white border border-slate-300 shadow-xl rounded-xl p-6 sm:p-8 text-slate-900 leading-normal flex flex-col justify-between print:border-none print:shadow-none print:p-0 min-h-[960px] sm:min-h-[1020px] print:min-h-0 ${
+                        className={`print-page bg-white border border-slate-300 shadow-xl rounded-xl p-5 sm:p-7 text-slate-900 leading-normal flex flex-col justify-between print:border-none print:shadow-none print:p-0 print:m-0 print:rounded-none min-h-[960px] sm:min-h-[1020px] print:min-h-0 print:h-auto ${
                           mobileFitScale ? 'w-full text-[11px]' : 'min-w-[720px] sm:min-w-0'
                         }`}
                         style={{ 
@@ -911,79 +1072,71 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                           <KopSurat config={schoolConfig} isPrintVersion={true} className="mb-2" />
 
                           {/* SUB-HEADER IDENTITAS DOKUMEN */}
-                          <div className="border-b border-slate-400 pb-1.5 mb-3 text-xs flex justify-between items-center font-semibold text-slate-700">
-                            <span>{schoolConfig.namaSekolah} — Lampiran I: Rekapitulasi Rincian Tugas Operasional</span>
+                          <div className="border-b border-slate-400 pb-1.5 mb-2.5 text-xs flex justify-between items-center font-semibold text-slate-700">
+                            <span>{schoolConfig.namaSekolah} — Lampiran I: Rekapitulasi Rincian Tugas Operasional (Bagian {chunkIdx + 2})</span>
                             <span className="font-mono text-[10.5px]">No: {nomorSurat}</span>
                           </div>
 
                           <div className="my-2 text-xs">
-                            <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-2.5 print:border-black break-inside-avoid">
-                              III. REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN {taskChunks.length > 1 ? `(BAGIAN ${chunkIdx + 1})` : ''}
+                            <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-2 print:border-black break-inside-avoid">
+                              {isPerpus ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN (LANJUTAN BAGIAN ${chunkIdx + 2})
                             </h4>
 
                             <div className="w-full overflow-hidden">
-                              <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[11px]">
+                              <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10.5px]">
                                 <thead>
                                   <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200 print:border-black">
-                                    <th className="py-1.5 px-2 text-center w-8 border border-slate-400 print:border-black">No</th>
-                                    <th className="py-1.5 px-2 w-20 border border-slate-400 print:border-black">Tanggal</th>
-                                    <th className="py-1.5 px-2 w-22 border border-slate-400 print:border-black">Klasifikasi</th>
-                                    <th className="py-1.5 px-2.5 border border-slate-400 print:border-black">Uraian Tugas / Pekerjaan Kedinasan</th>
-                                    <th className="py-1.5 px-2 border border-slate-400 print:border-black">Lokasi</th>
-                                    <th className="py-1.5 px-2 text-center border border-slate-400 print:border-black whitespace-nowrap">Waktu</th>
-                                    <th className="py-1.5 px-2 border border-slate-400 print:border-black">Volume</th>
-                                    <th className="py-1.5 px-2 text-center border border-slate-400 print:border-black">Status</th>
+                                    <th className="py-1 px-1.5 text-center w-8 border border-slate-400 print:border-black">No</th>
+                                    <th className="py-1 px-1.5 w-20 border border-slate-400 print:border-black">Tanggal</th>
+                                    <th className="py-1 px-1.5 w-22 border border-slate-400 print:border-black">Klasifikasi</th>
+                                    <th className="py-1 px-2 border border-slate-400 print:border-black">Uraian Tugas / Pekerjaan Kedinasan</th>
+                                    <th className="py-1 px-1.5 border border-slate-400 print:border-black">Lokasi</th>
+                                    <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black whitespace-nowrap">Waktu</th>
+                                    <th className="py-1 px-1.5 border border-slate-400 print:border-black">Volume</th>
+                                    <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black">Status</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {chunk.length === 0 ? (
-                                    <tr>
-                                      <td colSpan={8} className="py-6 text-center text-slate-500 italic border border-slate-400 print:border-black">
-                                        Tidak ada catatan tugas operasional pada periode ini.
-                                      </td>
-                                    </tr>
-                                  ) : (
-                                    chunk.map((t, idx) => {
-                                      const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
-                                      return (
-                                        <tr key={t.id} className="border-b border-slate-300 print:border-black">
-                                          <td className="py-1.5 px-2 text-center font-mono border border-slate-300 print:border-black">
-                                            {chunkIdx * tasksPerPage + idx + 1}
-                                          </td>
-                                          <td className="py-1.5 px-2 font-mono whitespace-nowrap border border-slate-300 print:border-black">{t.date}</td>
-                                          <td className="py-1.5 px-2 text-[9.5px] border border-slate-300 print:border-black whitespace-nowrap">
-                                            <span className={`font-semibold ${isPokok ? 'text-blue-900' : 'text-amber-900'}`}>
-                                              {isPokok ? 'Tugas Pokok' : 'Tambahan'}
-                                            </span>
-                                          </td>
-                                          <td className="py-1.5 px-2.5 border border-slate-300 print:border-black">
-                                            <span className="font-semibold text-slate-900 block">{t.title}</span>
-                                            <span className="text-[10px] text-slate-600 block mt-0.5">{t.description}</span>
-                                            {t.photoUrl && (
-                                              <span className="text-[9px] text-blue-600 font-medium inline-block mt-0.5 no-print">📷 Ada bukti foto</span>
-                                            )}
-                                          </td>
-                                          <td className="py-1.5 px-2 border border-slate-300 print:border-black">{t.location}</td>
-                                          <td className="py-1.5 px-2 text-center border border-slate-300 print:border-black whitespace-nowrap">{t.timeStart} - {t.timeEnd}</td>
-                                          <td className="py-1.5 px-2 border border-slate-300 print:border-black font-medium">{t.volumeUnit}</td>
-                                          <td className="py-1.5 px-2 text-center border border-slate-300 print:border-black font-semibold uppercase text-[9.5px]">
-                                            {t.status === 'selesai' ? (
-                                              <span className="text-emerald-700">Selesai 100%</span>
-                                            ) : (
-                                              <span className="text-amber-700">Dalam Proses</span>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })
-                                  )}
-                                  {chunkIdx === taskChunks.length - 1 && relevantTasks.length > 0 && (
-                                    <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400 print:bg-slate-200 print:border-black text-[10px]">
-                                      <td colSpan={3} className="py-1.5 px-2 text-center font-bold">TOTAL REKAPITULASI</td>
-                                      <td colSpan={4} className="py-1.5 px-2">
+                                  {chunk.map((t, idx) => {
+                                    const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
+                                    return (
+                                      <tr key={t.id} className="border-b border-slate-300 print:border-black">
+                                        <td className="py-1 px-1.5 text-center font-mono border border-slate-300 print:border-black">
+                                          {page1Limit + chunkIdx * tasksPerPageSubsequent + idx + 1}
+                                        </td>
+                                        <td className="py-1 px-1.5 font-mono whitespace-nowrap border border-slate-300 print:border-black">{t.date}</td>
+                                        <td className="py-1 px-1.5 text-[9px] border border-slate-300 print:border-black whitespace-nowrap">
+                                          <span className={`font-semibold ${isPokok ? 'text-blue-900' : 'text-amber-900'}`}>
+                                            {isPokok ? 'Tugas Pokok' : 'Tambahan'}
+                                          </span>
+                                        </td>
+                                        <td className="py-1 px-2 border border-slate-300 print:border-black">
+                                          <span className="font-semibold text-slate-900 block leading-tight">{t.title}</span>
+                                          <span className="text-[9.5px] text-slate-600 block mt-0.5 leading-tight">{t.description}</span>
+                                          {t.photoUrl && (
+                                            <span className="text-[8.5px] text-blue-600 font-medium inline-block mt-0.5 no-print">📷 Ada bukti foto</span>
+                                          )}
+                                        </td>
+                                        <td className="py-1 px-1.5 border border-slate-300 print:border-black">{t.location}</td>
+                                        <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black whitespace-nowrap font-mono text-[9px]">{t.timeStart} - {t.timeEnd}</td>
+                                        <td className="py-1 px-1.5 border border-slate-300 print:border-black font-medium">{t.volumeUnit}</td>
+                                        <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black font-semibold uppercase text-[9px]">
+                                          {t.status === 'selesai' ? (
+                                            <span className="text-emerald-700">Selesai 100%</span>
+                                          ) : (
+                                            <span className="text-amber-700">Dalam Proses</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                  {isLastTaskChunk && relevantTasks.length > 0 && (
+                                    <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400 print:bg-slate-200 print:border-black text-[9.5px]">
+                                      <td colSpan={3} className="py-1 px-1.5 text-center font-bold">TOTAL REKAPITULASI</td>
+                                      <td colSpan={4} className="py-1 px-2">
                                         {relevantTasks.length} Tugas Operasional Terlaksana ({tupoksiTasks.length} Tugas Pokok / {tambahanTasks.length} Tugas Tambahan)
                                       </td>
-                                      <td className="py-1.5 px-2 text-center text-emerald-800 font-bold">
+                                      <td className="py-1 px-1.5 text-center text-emerald-800 font-bold">
                                         {completedCount}/{relevantTasks.length} Tuntas
                                       </td>
                                     </tr>
@@ -995,7 +1148,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                         </div>
 
                         {/* Page Footer */}
-                        <div className="pt-2.5 border-t border-slate-200 text-center text-[10px] text-slate-400 font-mono">
+                        <div className="pt-2 border-t border-slate-200 text-center text-[10px] text-slate-400 font-mono">
                           <span>{schoolConfig.namaSekolah} · Laporan Kinerja Operator Layanan Operasional · Halaman {pageNum} dari {totalPages}</span>
                         </div>
                       </div>
@@ -1008,7 +1161,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                     (TERPISAH BERSIH & RAPI AGAR TIDAK MENEKAN PENGESAHAN)
                     ======================================================== */}
                 {(() => {
-                  const invPageNum = 1 + taskChunks.length + 1;
+                  const invPageNum = 1 + subsequentTaskChunks.length + 1;
                   return (
                     <>
                       <div className="no-print flex items-center justify-between text-xs text-slate-500 font-semibold px-2 mb-1">
@@ -1377,11 +1530,11 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                         <tbody>
                           <tr className="border-b border-slate-300">
                             <td className="w-44 py-0.5 px-2 font-semibold bg-slate-100 border-r border-slate-300 print:bg-slate-200">Nama Petugas Pelaksana</td>
-                            <td className="py-0.5 px-2 font-bold text-slate-900">{formatOfficialNameWithDegree(operator.nama)}</td>
+                            <td className="py-0.5 px-2 font-bold text-slate-900">{displayOperatorNama}</td>
                           </tr>
                           <tr className="border-b border-slate-300">
                             <td className="py-0.5 px-2 font-semibold bg-slate-100 border-r border-slate-300 print:bg-slate-200">NIP / NIPPK</td>
-                            <td className="py-0.5 px-2 font-mono text-slate-800">{operator.nip}</td>
+                            <td className="py-0.5 px-2 font-mono text-slate-800">{displayOperatorNip}</td>
                           </tr>
                           <tr className="border-b border-slate-300">
                             <td className="py-0.5 px-2 font-semibold bg-slate-100 border-r border-slate-300 print:bg-slate-200">Jabatan Kedinasan</td>
@@ -1398,7 +1551,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                           <tr>
                             <td className="py-0.5 px-2 font-semibold bg-slate-100 border-r border-slate-300 print:bg-slate-200">Pejabat Pengesah (Penilai)</td>
                             <td className="py-0.5 px-2 font-bold text-slate-900">
-                              {formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama)} ({schoolConfig.kepalaSekolah.nip})
+                              {displayKepsekNama} ({displayKepsekNip})
                             </td>
                           </tr>
                         </tbody>
@@ -1427,6 +1580,119 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
           })()}
         </div>
       </div>
+
+      {/* ========================================================
+          MODAL DIALOG: EDIT NOMOR SURAT KEDINASAN RESMI
+          ======================================================== */}
+      {isEditNomorModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs no-print animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-500/20 text-amber-300 rounded-lg">
+                  <Hash className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Sesuaikan Nomor Surat Kedinasan</h3>
+                  <p className="text-[11px] text-slate-400">Atur nomor surat resmi sesuai buku agenda dinas satuan pendidikan</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditNomorModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-800 mb-1.5">
+                  Nomor Surat Dokumen Resmi:
+                </label>
+                <input
+                  type="text"
+                  value={tempNomorSurat}
+                  onChange={(e) => setTempNomorSurat(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-sm text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-semibold"
+                  placeholder="Contoh: 800/LAP-BLN/09/20202819/2026"
+                />
+                <p className="text-[10.5px] text-slate-500 mt-1">
+                  Nomor ini akan otomatis tercantum pada kepala surat, lembar lampiran, dan lembar pengesahan resmi.
+                </p>
+              </div>
+
+              {/* Quick Format Presets */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Pilihan Rekomendasi Format Naskah Dinas:</span>
+                </label>
+                <div className="space-y-1.5">
+                  {[
+                    {
+                      label: 'Standar Kepegawaian & Kinerja (Kode 800)',
+                      val: `800/${isMonthly ? `LAP-BLN/${monthlyData?.month || 9}` : 'LAP-THN'}/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`
+                    },
+                    {
+                      label: 'Format Urusan Satdik / Sekolah (Kode 421.2)',
+                      val: `421.2/028/${(schoolConfig.npsn || 'SMP').replace(/\s+/g, '')}/${new Date().getFullYear()}`
+                    },
+                    {
+                      label: `Format Tata Usaha & Layanan (${role})`,
+                      val: `005/TU-${role}/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`
+                    },
+                    {
+                      label: 'Format Perlengkapan & Sarpras (Kode 028)',
+                      val: `028/SARPRAS-${role}/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`
+                    }
+                  ].map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setTempNomorSurat(preset.val)}
+                      className="w-full text-left p-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-colors flex items-center justify-between group cursor-pointer"
+                    >
+                      <div>
+                        <span className="font-semibold text-slate-800 block text-[11px]">{preset.label}</span>
+                        <span className="font-mono text-[10px] text-slate-500 group-hover:text-blue-700">{preset.val}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Gunakan
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditNomorModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNomorSurat(tempNomorSurat);
+                  if (reportData) reportData.nomorSurat = tempNomorSurat;
+                  setIsEditNomorModalOpen(false);
+                }}
+                className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
+              >
+                Simpan & Terapkan Nomor Surat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

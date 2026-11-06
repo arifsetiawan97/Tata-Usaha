@@ -21,20 +21,30 @@
   scrollbar-width: none;
 }
 
-/* Strict A4 Print Rules */
+/* Strict A4 Print Rules - Standar Format Naskah Dinas Pendidikan */
 @media print {
   @page {
     size: A4 portrait;
     margin: 8mm 10mm 10mm 10mm;
   }
   
-  html, body {
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Strict Root & Body reset in print */
+  #root, html, body {
     background-color: #ffffff !important;
+    background: #ffffff !important;
     color: #000000 !important;
-    font-size: 10.5pt !important;
-    line-height: 1.35 !important;
+    font-size: 9.5pt !important;
+    line-height: 1.28 !important;
     margin: 0 !important;
     padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
   }
 
   .no-print, 
@@ -45,36 +55,43 @@
   .floating-actions, 
   button:not(.allow-print),
   input[type="file"],
-  .modal-backdrop {
+  .modal-backdrop,
+  .screen-toolbar {
     display: none !important;
   }
 
-  .printable-document {
-    box-shadow: none !important;
-    border: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
+  /* Prevent Tailwind space-y margins from polluting the top of printed pages */
+  .space-y-8 > :not([hidden]) ~ :not([hidden]),
+  .space-y-6 > :not([hidden]) ~ :not([hidden]),
+  .space-y-4 > :not([hidden]) ~ :not([hidden]),
+  .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0 !important;
+  }
+
+  .print-page-container {
     margin: 0 !important;
     padding: 0 !important;
-    background: #ffffff !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
   }
 
   .print-page {
     box-shadow: none !important;
     border: none !important;
+    border-radius: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    min-height: auto !important;
+    min-height: 0 !important;
     height: auto !important;
     page-break-after: always !important;
     break-after: page !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
+    display: block !important;
+    position: relative !important;
   }
 
   .print-page:last-child {
@@ -83,8 +100,8 @@
   }
 
   .page-break {
-    page-break-before: always;
-    break-before: page;
+    page-break-before: always !important;
+    break-before: page !important;
   }
 
   .break-inside-avoid {
@@ -92,9 +109,17 @@
     break-inside: avoid !important;
   }
 
+  /* Official Black Borders for Tables in Print */
   table {
-    page-break-inside: auto;
+    page-break-inside: auto !important;
     width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .print-page table,
+  .print-page th,
+  .print-page td {
+    border-color: #000000 !important;
   }
   
   tr {
@@ -103,6 +128,21 @@
   }
 
   thead {
-    display: table-header-group;
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Compact text sizing & line-height in direct print */
+  p, td, th, li, span, div {
+    orphans: 3;
+    widows: 3;
   }
 }
