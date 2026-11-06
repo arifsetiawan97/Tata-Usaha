@@ -5,6 +5,7 @@ import {
   getTaskClassification, 
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from './taskClassification';
+import { calculateAnnualPerformanceSummary } from './annualPerformanceHelper';
 import { formatOfficialNameWithDegree } from './formatters';
 
 interface DocumentExportParams {
@@ -121,16 +122,25 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
   const roleInventories = inventories.filter(inv => inv.role === role);
   const tasksWithPhotos = relevantTasks.filter(t => !!t.photoUrl);
 
+  const isAnnual = !isMonthly;
   const page1TaskLimit = role === 'PERPUS' ? 5 : 6;
   const tasksPage1 = relevantTasks.slice(0, page1TaskLimit);
-  const remainingTasks = relevantTasks.slice(page1TaskLimit);
+  const remainingTasks = isAnnual ? [] : relevantTasks.slice(page1TaskLimit);
   const tasksPerPageSubsequent = 12;
   const subsequentChunks: typeof relevantTasks[] = [];
-  for (let i = 0; i < remainingTasks.length; i += tasksPerPageSubsequent) {
-    subsequentChunks.push(remainingTasks.slice(i, i + tasksPerPageSubsequent));
+  if (!isAnnual) {
+    for (let i = 0; i < remainingTasks.length; i += tasksPerPageSubsequent) {
+      subsequentChunks.push(remainingTasks.slice(i, i + tasksPerPageSubsequent));
+    }
   }
   const hasSubsequentTasks = subsequentChunks.length > 0;
   const totalPages = 1 + subsequentChunks.length + 1 + 1; // Lembar 1 + N Task Sheets + Lampiran Sarpras + Lembar Pengesahan
+
+  const annualPerformance = calculateAnnualPerformanceSummary(
+    tasks, 
+    role, 
+    !isMonthly ? (reportData as AnnualReport).year : 2026
+  );
 
   // Reusable Kop Surat Generator with user-uploaded logos and official double dividing line
   const generateKopSuratHtml = (config: typeof schoolConfig) => {
@@ -848,70 +858,117 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         </tbody>
       </table>` : ''}
 
-      <!-- ${role === 'PERPUS' ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN -->
-      <div class="section-title">
-        ${role === 'PERPUS' ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN ${hasSubsequentTasks ? '(BAGIAN 1)' : ''}
-      </div>
-      <table class="data-table" style="margin-top: 3px;">
-        <thead>
-          <tr>
-            <th class="col-no">No</th>
-            <th class="col-date">Tanggal</th>
-            <th style="width: 75px; font-size: 8pt;">Klasifikasi</th>
-            <th class="col-time">Waktu</th>
-            <th>Uraian Tugas & Pekerjaan Kedinasan</th>
-            <th class="col-vol">Volume</th>
-            <th class="col-loc">Lokasi</th>
-            <th style="width: 70px; text-align: center;">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tasksPage1.length === 0 ? `
-            <tr>
-              <td colspan="8" style="text-align: center; padding: 10px; color: #64748b;">
-                Tidak ada catatan tugas operasional pada periode ini.
-              </td>
-            </tr>
-          ` : tasksPage1.map((t, idx) => {
-            const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
-            return `
-            <tr>
-              <td class="col-no">${idx + 1}</td>
-              <td class="col-date">${t.date}</td>
-              <td style="font-size: 7.5pt; font-weight: bold; white-space: nowrap; color: ${isPokok ? '#1e40af' : '#b45309'};">
-                ${isPokok ? 'Tugas Pokok' : 'Tambahan'}
-              </td>
-              <td class="col-time">${t.timeStart} - ${t.timeEnd}</td>
-              <td>
-                <div style="font-weight: bold; color: #0f172a;">${t.title}</div>
-                <div style="color: #475569; font-size: 8pt; margin-top: 1px;">${t.description}</div>
-              </td>
-              <td class="col-vol">${t.volumeUnit}</td>
-              <td class="col-loc">${t.location}</td>
-              <td style="text-align: center; font-weight: bold; font-size: 7.5pt; color: ${t.status === 'selesai' ? '#15803d' : '#b45309'};">
-                ${t.status === 'selesai' ? 'Selesai 100%' : 'Proses'}
-              </td>
-            </tr>
-          `;
-          }).join('')}
-          ${!hasSubsequentTasks && relevantTasks.length > 0 ? `
-            <tr style="background: #e2e8f0; font-weight: bold; font-size: 8pt;">
-              <td colspan="3" style="text-align: center;">TOTAL REKAPITULASI</td>
-              <td colspan="4">
-                ${relevantTasks.length} Tugas Operasional (${tupoksiTasks.length} Tugas Pokok / ${tambahanTasks.length} Tugas Tambahan)
-              </td>
-              <td style="text-align: center; color: #15803d;">
-                ${completedCount}/${relevantTasks.length} Tuntas
-              </td>
-            </tr>
-          ` : ''}
-        </tbody>
-      </table>
-      ${hasSubsequentTasks ? `
-        <div style="font-size: 7.5pt; font-style: italic; color: #475569; margin-top: 4px; text-align: right;">
-          *(Rincian tugas ke-${page1TaskLimit + 1} s.d. ${relevantTasks.length} tercantum secara lengkap pada lembar lampiran berikutnya)
+      <!-- REKAPITULASI TUGAS: TAHUNAN ATAU BULANAN -->
+      ${isAnnual ? `
+        <div class="section-title">
+          ${role === 'PERPUS' ? 'IV.' : 'III.'} REKAPITULASI & PERSENTASE KINERJA OPERASIONAL PER BULAN (TUGAS POKOK & TUGAS TAMBAHAN)
         </div>
-      ` : ''}
+        <div style="font-size: 7.5pt; color: #475569; margin-bottom: 4px;">
+          Rekapitulasi volume realisasi tugas kedinasan per bulan menurut bagian Tugas Pokok dan Tugas Tambahan beserta persentase ketercapaian operasional:
+        </div>
+        <table class="data-table" style="margin-top: 3px; font-size: 8pt;">
+          <thead>
+            <tr>
+              <th style="width: 26px; text-align: center;">No</th>
+              <th style="width: 75px;">Bulan</th>
+              <th>Realisasi Tugas Pokok & Volume Hasil</th>
+              <th>Realisasi Tugas Tambahan & Volume Hasil</th>
+              <th style="width: 50px; text-align: center;">Kegiatan</th>
+              <th style="width: 45px; text-align: center;">Tuntas</th>
+              <th style="width: 55px; text-align: center;">Capaian</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${annualPerformance.items.map((item, idx) => `
+              <tr>
+                <td style="text-align: center; font-family: monospace;">${idx + 1}</td>
+                <td style="font-weight: bold; color: #0f172a; white-space: nowrap;">${item.monthName}</td>
+                <td style="font-size: 7.5pt; line-height: 1.3; color: #1e293b;">
+                  ${item.tupoksiSummary}
+                </td>
+                <td style="font-size: 7.5pt; line-height: 1.3; color: #334155;">
+                  ${item.tambahanSummary}
+                </td>
+                <td style="text-align: center; font-family: monospace;">${item.totalTasks}</td>
+                <td style="text-align: center; font-family: monospace; color: #15803d; font-weight: bold;">${item.completedTasks}</td>
+                <td style="text-align: center; font-family: monospace; font-weight: bold; color: #15803d;">${item.percentage}%</td>
+              </tr>
+            `).join('')}
+            <tr style="background: #e2e8f0; font-weight: bold; font-size: 8pt;">
+              <td colspan="2" style="text-align: center;">TOTAL TAHUNAN</td>
+              <td style="font-size: 7.5pt;">Total ${annualPerformance.totalTupoksi} Kegiatan Tugas Pokok Terlaksana</td>
+              <td style="font-size: 7.5pt;">Total ${annualPerformance.totalTambahan} Kegiatan Tugas Tambahan Terlaksana</td>
+              <td style="text-align: center; font-family: monospace;">${annualPerformance.totalTasks}</td>
+              <td style="text-align: center; font-family: monospace; color: #15803d;">${annualPerformance.totalCompleted}</td>
+              <td style="text-align: center; font-family: monospace; color: #15803d; font-weight: bold;">${annualPerformance.averagePercentage.toFixed(1)}%</td>
+            </tr>
+          </tbody>
+        </table>
+      ` : `
+        <div class="section-title">
+          ${role === 'PERPUS' ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN ${hasSubsequentTasks ? '(BAGIAN 1)' : ''}
+        </div>
+        <table class="data-table" style="margin-top: 3px;">
+          <thead>
+            <tr>
+              <th class="col-no">No</th>
+              <th class="col-date">Tanggal</th>
+              <th style="width: 75px; font-size: 8pt;">Klasifikasi</th>
+              <th class="col-time">Waktu</th>
+              <th>Uraian Tugas & Pekerjaan Kedinasan</th>
+              <th class="col-vol">Volume</th>
+              <th class="col-loc">Lokasi</th>
+              <th style="width: 70px; text-align: center;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tasksPage1.length === 0 ? `
+              <tr>
+                <td colspan="8" style="text-align: center; padding: 10px; color: #64748b;">
+                  Tidak ada catatan tugas operasional pada periode ini.
+                </td>
+              </tr>
+            ` : tasksPage1.map((t, idx) => {
+              const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
+              return `
+              <tr>
+                <td class="col-no">${idx + 1}</td>
+                <td class="col-date">${t.date}</td>
+                <td style="font-size: 7.5pt; font-weight: bold; white-space: nowrap; color: ${isPokok ? '#1e40af' : '#b45309'};">
+                  ${isPokok ? 'Tugas Pokok' : 'Tambahan'}
+                </td>
+                <td class="col-time">${t.timeStart} - ${t.timeEnd}</td>
+                <td>
+                  <div style="font-weight: bold; color: #0f172a;">${t.title}</div>
+                  <div style="color: #475569; font-size: 8pt; margin-top: 1px;">${t.description}</div>
+                </td>
+                <td class="col-vol">${t.volumeUnit}</td>
+                <td class="col-loc">${t.location}</td>
+                <td style="text-align: center; font-weight: bold; font-size: 7.5pt; color: ${t.status === 'selesai' ? '#15803d' : '#b45309'};">
+                  ${t.status === 'selesai' ? 'Selesai 100%' : 'Proses'}
+                </td>
+              </tr>
+            `;
+            }).join('')}
+            ${!hasSubsequentTasks && relevantTasks.length > 0 ? `
+              <tr style="background: #e2e8f0; font-weight: bold; font-size: 8pt;">
+                <td colspan="3" style="text-align: center;">TOTAL REKAPITULASI</td>
+                <td colspan="4">
+                  ${relevantTasks.length} Tugas Operasional (${tupoksiTasks.length} Tugas Pokok / ${tambahanTasks.length} Tugas Tambahan)
+                </td>
+                <td style="text-align: center; color: #15803d;">
+                  ${completedCount}/${relevantTasks.length} Tuntas
+                </td>
+              </tr>
+            ` : ''}
+          </tbody>
+        </table>
+        ${hasSubsequentTasks ? `
+          <div style="font-size: 7.5pt; font-style: italic; color: #475569; margin-top: 4px; text-align: right;">
+            *(Rincian tugas ke-${page1TaskLimit + 1} s.d. ${relevantTasks.length} tercantum secara lengkap pada lembar lampiran berikutnya)
+          </div>
+        ` : ''}
+      `}
     </div>
 
     <!-- Lembar 1 Page Footer -->

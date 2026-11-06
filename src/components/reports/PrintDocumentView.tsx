@@ -12,6 +12,7 @@ import {
   getTaskClassification, 
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from '../../utils/taskClassification';
+import { calculateAnnualPerformanceSummary } from '../../utils/annualPerformanceHelper';
 import { formatOfficialNameWithDegree } from '../../utils/formatters';
 import { 
   Printer, 
@@ -151,6 +152,12 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
 
   const roleTupoksiList = tupoksiDefinitions[role]?.tupoksiList || OFFICIAL_TUPOKSI_DEFINITIONS[role].tupoksiList;
   const roleTambahanList = tupoksiDefinitions[role]?.tugasTambahanList || OFFICIAL_TUPOKSI_DEFINITIONS[role].tugasTambahanList;
+
+  // Annual 12-Month Performance Recap (Tugas Pokok & Tugas Tambahan)
+  const annualPerformance = useMemo(() => {
+    const yr = annualData?.year || 2026;
+    return calculateAnnualPerformanceSummary(tasks, role, yr);
+  }, [tasks, role, annualData?.year]);
 
   // Khusus Perpustakaan
   const isPerpus = role === 'PERPUS';
@@ -645,15 +652,18 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         <div ref={printableRef} className="space-y-8 max-w-[850px] mx-auto print:space-y-0 print:max-w-none print:w-full print:m-0 print:p-0 print-page-container">
           {(() => {
             // Lembar 1 task capacity:
-            // For PERPUS (with Rekap Anggota + KPI), 5 tasks fill Lembar 1 cleanly without overflowing
-            // For other roles (no Rekap Anggota), 6 tasks fill Lembar 1 cleanly
+            // For monthly report: 5-6 tasks on page 1, remaining chunked to subsequent pages
+            // For annual report: only display the monthly performance recap table on Lembar 1 (NO subsequent daily task sheets)
+            const isAnnual = !isMonthly;
             const page1Limit = isPerpus ? 5 : 6;
             const tasksPage1 = relevantTasks.slice(0, page1Limit);
-            const remainingTasks = relevantTasks.slice(page1Limit);
+            const remainingTasks = isAnnual ? [] : relevantTasks.slice(page1Limit);
             const tasksPerPageSubsequent = 12;
             const subsequentTaskChunks: typeof relevantTasks[] = [];
-            for (let i = 0; i < remainingTasks.length; i += tasksPerPageSubsequent) {
-              subsequentTaskChunks.push(remainingTasks.slice(i, i + tasksPerPageSubsequent));
+            if (!isAnnual) {
+              for (let i = 0; i < remainingTasks.length; i += tasksPerPageSubsequent) {
+                subsequentTaskChunks.push(remainingTasks.slice(i, i + tasksPerPageSubsequent));
+              }
             }
             const roleInventories = inventories.filter(inv => inv.role === role);
             const tasksWithPhotos = relevantTasks.filter(t => !!t.photoUrl);
@@ -945,93 +955,165 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                         </div>
                       )}
 
-                      {/* REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL (BAGIAN 1) */}
-                      <div className="mt-2.5 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
-                        <div className="flex justify-between items-center mb-1">
-                          <h4 className="font-bold text-xs text-slate-900 uppercase">
-                            {isPerpus ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN {remainingTasks.length > 0 ? '(BAGIAN 1)' : ''}
-                          </h4>
-                          <span className="font-mono text-[9.5px] text-slate-600">
-                            {tasksPage1.length} dari {relevantTasks.length} Tugas Tercatat
-                          </span>
-                        </div>
-
-                        <div className="w-full overflow-hidden">
-                          <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
-                            <thead>
-                              <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200 print:border-black">
-                                <th className="py-1 px-1.5 text-center w-7 border border-slate-400 print:border-black">No</th>
-                                <th className="py-1 px-1.5 w-20 border border-slate-400 print:border-black">Tanggal</th>
-                                <th className="py-1 px-1.5 w-22 border border-slate-400 print:border-black">Klasifikasi</th>
-                                <th className="py-1 px-2 border border-slate-400 print:border-black">Uraian Tugas Kedinasan</th>
-                                <th className="py-1 px-1.5 border border-slate-400 print:border-black">Lokasi</th>
-                                <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black whitespace-nowrap">Waktu</th>
-                                <th className="py-1 px-1.5 border border-slate-400 print:border-black">Volume</th>
-                                <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {tasksPage1.length === 0 ? (
-                                <tr>
-                                  <td colSpan={8} className="py-4 text-center text-slate-500 italic border border-slate-400 print:border-black">
-                                    Tidak ada catatan tugas operasional pada periode ini.
-                                  </td>
-                                </tr>
-                              ) : (
-                                tasksPage1.map((t, idx) => {
-                                  const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
-                                  return (
-                                    <tr key={t.id} className="border-b border-slate-300 print:border-black">
-                                      <td className="py-1 px-1.5 text-center font-mono border border-slate-300 print:border-black">
-                                        {idx + 1}
-                                      </td>
-                                      <td className="py-1 px-1.5 font-mono whitespace-nowrap border border-slate-300 print:border-black">{t.date}</td>
-                                      <td className="py-1 px-1.5 text-[9px] border border-slate-300 print:border-black whitespace-nowrap">
-                                        <span className={`font-bold ${isPokok ? 'text-blue-900' : 'text-amber-900'}`}>
-                                          {isPokok ? 'Tugas Pokok' : 'Tambahan'}
-                                        </span>
-                                      </td>
-                                      <td className="py-1 px-2 border border-slate-300 print:border-black">
-                                        <span className="font-semibold text-slate-900 block leading-tight">{t.title}</span>
-                                        <span className="text-[9px] text-slate-600 block mt-0.5 leading-tight">{t.description}</span>
-                                        {t.photoUrl && (
-                                          <span className="text-[8.5px] text-blue-600 font-medium inline-block mt-0.5 no-print">📷 Ada bukti foto</span>
-                                        )}
-                                      </td>
-                                      <td className="py-1 px-1.5 border border-slate-300 print:border-black text-[9.5px]">{t.location}</td>
-                                      <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black whitespace-nowrap font-mono text-[9px]">{t.timeStart} - {t.timeEnd}</td>
-                                      <td className="py-1 px-1.5 border border-slate-300 print:border-black text-[9.5px]">{t.volumeUnit}</td>
-                                      <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black font-semibold text-[9px]">
-                                        {t.status === 'selesai' ? (
-                                          <span className="text-emerald-700 font-bold">Selesai 100%</span>
-                                        ) : (
-                                          <span className="text-amber-700 font-bold">Proses</span>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })
-                              )}
-                              {remainingTasks.length === 0 && relevantTasks.length > 0 && (
-                                <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400 print:bg-slate-200 print:border-black text-[9.5px]">
-                                  <td colSpan={3} className="py-1 px-1.5 text-center font-bold">TOTAL REKAPITULASI</td>
-                                  <td colSpan={4} className="py-1 px-2">
-                                    {relevantTasks.length} Tugas Operasional Terlaksana ({tupoksiTasks.length} Pokok / {tambahanTasks.length} Tambahan)
-                                  </td>
-                                  <td className="py-1 px-1.5 text-center text-emerald-800 font-bold">
-                                    {completedCount}/{relevantTasks.length} Tuntas
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                        {remainingTasks.length > 0 && (
-                          <div className="text-[9px] text-slate-500 italic mt-1 text-right">
-                            *(Catatan: Rincian tugas ke-{page1Limit + 1} s.d. {relevantTasks.length} tercantum secara lengkap pada lembar lampiran berikutnya)
+                      {/* REKAPITULASI TUGAS: TAMPILAN TAHUNAN (PERSENTASE & VOLUME PER BULAN) ATAU BULANAN (RINCIAN HARIAN) */}
+                      {isAnnual ? (
+                        /* ========================================================
+                           LAPOR TAHUNAN: REKAPITULASI & PERSENTASE KINERJA OPERASIONAL PER BULAN
+                           (TUGAS POKOK & TUGAS TAMBAHAN DENGAN VOLUME HASIL DAN PERSENTASE %)
+                           ======================================================== */
+                        <div className="mt-2.5 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                          <div className="flex justify-between items-center mb-1">
+                            <h4 className="font-bold text-xs text-slate-900 uppercase">
+                              {isPerpus ? 'IV.' : 'III.'} REKAPITULASI & PERSENTASE KINERJA OPERASIONAL PER BULAN (TUGAS POKOK & TUGAS TAMBAHAN)
+                            </h4>
+                            <span className="font-mono text-[9.5px] text-slate-600">
+                              Tahun Anggaran {annualData?.year || 2026} (12 Bulan Pelaksanaan)
+                            </span>
                           </div>
-                        )}
-                      </div>
+                          <p className="text-[9.5px] text-slate-500 mb-1 leading-tight">
+                            Rekapitulasi volume realisasi tugas kedinasan per bulan yang disesuaikan menurut bagian Tugas Pokok dan Tugas Tambahan beserta persentase capaian operasional:
+                          </p>
+
+                          <div className="w-full overflow-hidden">
+                            <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[9.5px]">
+                              <thead>
+                                <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200 print:border-black">
+                                  <th className="py-1 px-1 text-center w-6 border border-slate-400 print:border-black">No</th>
+                                  <th className="py-1 px-1.5 w-20 border border-slate-400 print:border-black font-bold">Bulan</th>
+                                  <th className="py-1 px-2 border border-slate-400 print:border-black min-w-[200px]">Realisasi Tugas Pokok & Volume Hasil</th>
+                                  <th className="py-1 px-2 border border-slate-400 print:border-black min-w-[180px]">Realisasi Tugas Tambahan & Volume Hasil</th>
+                                  <th className="py-1 px-1 text-center border border-slate-400 print:border-black w-12 whitespace-nowrap">Kegiatan</th>
+                                  <th className="py-1 px-1 text-center border border-slate-400 print:border-black w-12 whitespace-nowrap">Tuntas</th>
+                                  <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black w-14 whitespace-nowrap font-bold">Capaian</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {annualPerformance.items.map((item, idx) => (
+                                  <tr key={item.monthIndex} className="border-b border-slate-300 print:border-black">
+                                    <td className="py-0.5 px-1 text-center font-mono border border-slate-300 print:border-black">{idx + 1}</td>
+                                    <td className="py-0.5 px-1.5 font-semibold text-slate-900 border border-slate-300 print:border-black whitespace-nowrap">{item.monthName}</td>
+                                    <td className="py-0.5 px-2 text-[9px] leading-tight text-slate-800 border border-slate-300 print:border-black">
+                                      {item.tupoksiSummary}
+                                    </td>
+                                    <td className="py-0.5 px-2 text-[9px] leading-tight text-slate-700 border border-slate-300 print:border-black">
+                                      {item.tambahanSummary}
+                                    </td>
+                                    <td className="py-0.5 px-1 text-center font-mono border border-slate-300 print:border-black">{item.totalTasks}</td>
+                                    <td className="py-0.5 px-1 text-center font-mono border border-slate-300 print:border-black text-emerald-800 font-semibold">{item.completedTasks}</td>
+                                    <td className="py-0.5 px-1.5 text-center font-mono font-bold text-emerald-700 border border-slate-300 print:border-black">
+                                      {item.percentage}%
+                                    </td>
+                                  </tr>
+                                ))}
+                                <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400 print:bg-slate-200 print:border-black text-[9.5px]">
+                                  <td colSpan={2} className="py-1 px-1.5 text-center font-bold">TOTAL TAHUNAN</td>
+                                  <td className="py-1 px-2 text-[9px]">
+                                    Total {annualPerformance.totalTupoksi} Kegiatan Tugas Pokok Terlaksana
+                                  </td>
+                                  <td className="py-1 px-2 text-[9px]">
+                                    Total {annualPerformance.totalTambahan} Kegiatan Tugas Tambahan Terlaksana
+                                  </td>
+                                  <td className="py-1 px-1 text-center font-mono">{annualPerformance.totalTasks}</td>
+                                  <td className="py-1 px-1 text-center font-mono text-emerald-800">{annualPerformance.totalCompleted}</td>
+                                  <td className="py-1 px-1.5 text-center font-mono text-emerald-900 font-black">
+                                    {annualPerformance.averagePercentage.toFixed(1)}%
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : (
+                        /* ========================================================
+                           LAPOR BULANAN: REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL
+                           ======================================================== */
+                        <div className="mt-2.5 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                          <div className="flex justify-between items-center mb-1">
+                            <h4 className="font-bold text-xs text-slate-900 uppercase">
+                              {isPerpus ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN {remainingTasks.length > 0 ? '(BAGIAN 1)' : ''}
+                            </h4>
+                            <span className="font-mono text-[9.5px] text-slate-600">
+                              {tasksPage1.length} dari {relevantTasks.length} Tugas Tercatat
+                            </span>
+                          </div>
+
+                          <div className="w-full overflow-hidden">
+                            <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
+                              <thead>
+                                <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200 print:border-black">
+                                  <th className="py-1 px-1.5 text-center w-7 border border-slate-400 print:border-black">No</th>
+                                  <th className="py-1 px-1.5 w-20 border border-slate-400 print:border-black">Tanggal</th>
+                                  <th className="py-1 px-1.5 w-22 border border-slate-400 print:border-black">Klasifikasi</th>
+                                  <th className="py-1 px-2 border border-slate-400 print:border-black">Uraian Tugas Kedinasan</th>
+                                  <th className="py-1 px-1.5 border border-slate-400 print:border-black">Lokasi</th>
+                                  <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black whitespace-nowrap">Waktu</th>
+                                  <th className="py-1 px-1.5 border border-slate-400 print:border-black">Volume</th>
+                                  <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {tasksPage1.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={8} className="py-4 text-center text-slate-500 italic border border-slate-400 print:border-black">
+                                      Tidak ada catatan tugas operasional pada periode ini.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  tasksPage1.map((t, idx) => {
+                                    const isPokok = getTaskClassification(role, t.category, t.taskType) === 'pokok';
+                                    return (
+                                      <tr key={t.id} className="border-b border-slate-300 print:border-black">
+                                        <td className="py-1 px-1.5 text-center font-mono border border-slate-300 print:border-black">
+                                          {idx + 1}
+                                        </td>
+                                        <td className="py-1 px-1.5 font-mono whitespace-nowrap border border-slate-300 print:border-black">{t.date}</td>
+                                        <td className="py-1 px-1.5 text-[9px] border border-slate-300 print:border-black whitespace-nowrap">
+                                          <span className={`font-bold ${isPokok ? 'text-blue-900' : 'text-amber-900'}`}>
+                                            {isPokok ? 'Tugas Pokok' : 'Tambahan'}
+                                          </span>
+                                        </td>
+                                        <td className="py-1 px-2 border border-slate-300 print:border-black">
+                                          <span className="font-semibold text-slate-900 block leading-tight">{t.title}</span>
+                                          <span className="text-[9px] text-slate-600 block mt-0.5 leading-tight">{t.description}</span>
+                                          {t.photoUrl && (
+                                            <span className="text-[8.5px] text-blue-600 font-medium inline-block mt-0.5 no-print">📷 Ada bukti foto</span>
+                                          )}
+                                        </td>
+                                        <td className="py-1 px-1.5 border border-slate-300 print:border-black text-[9.5px]">{t.location}</td>
+                                        <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black whitespace-nowrap font-mono text-[9px]">{t.timeStart} - {t.timeEnd}</td>
+                                        <td className="py-1 px-1.5 border border-slate-300 print:border-black text-[9.5px]">{t.volumeUnit}</td>
+                                        <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black font-semibold text-[9px]">
+                                          {t.status === 'selesai' ? (
+                                            <span className="text-emerald-700 font-bold">Selesai 100%</span>
+                                          ) : (
+                                            <span className="text-amber-700 font-bold">Proses</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                                {remainingTasks.length === 0 && relevantTasks.length > 0 && (
+                                  <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400 print:bg-slate-200 print:border-black text-[9.5px]">
+                                    <td colSpan={3} className="py-1 px-1.5 text-center font-bold">TOTAL REKAPITULASI</td>
+                                    <td colSpan={4} className="py-1 px-2">
+                                      {relevantTasks.length} Tugas Operasional Terlaksana ({tupoksiTasks.length} Pokok / {tambahanTasks.length} Tambahan)
+                                    </td>
+                                    <td className="py-1 px-1.5 text-center text-emerald-800 font-bold">
+                                      {completedCount}/{relevantTasks.length} Tuntas
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                          {remainingTasks.length > 0 && (
+                            <div className="text-[9px] text-slate-500 italic mt-1 text-right">
+                              *(Catatan: Rincian tugas ke-{page1Limit + 1} s.d. {relevantTasks.length} tercantum secara lengkap pada lembar lampiran berikutnya)
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

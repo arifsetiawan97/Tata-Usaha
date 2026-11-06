@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { RoleType, AnnualReport } from '../../types';
 import { InventoryTable } from '../common/InventoryTable';
 import { ROLE_OPERATIONAL_SPECS } from '../../data/roleOperationalSpecs';
+import { calculateAnnualPerformanceSummary } from '../../utils/annualPerformanceHelper';
 import { 
   Award, 
   Printer, 
@@ -152,6 +153,11 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
     ) || generateAnnualReportFromMonthly(effectiveRole, selectedYear);
     setReportState(rep);
   }, [effectiveRole, selectedYear, annualReports]);
+
+  // 12-Month Annual Performance Recapitulation (Tugas Pokok & Tugas Tambahan with Volume & %)
+  const annualPerformance = useMemo(() => {
+    return calculateAnnualPerformanceSummary(tasks, effectiveRole, selectedYear);
+  }, [tasks, effectiveRole, selectedYear]);
 
   // Khusus Perpustakaan: Rekapitulasi Pemustaka & Data Seluruh Koleksi Buku Terdata
   const isPerpus = effectiveRole === 'PERPUS';
@@ -1303,6 +1309,114 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
               Tambah
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* REKAPITULASI & PERSENTASE KINERJA OPERASIONAL PER BULAN (TUGAS POKOK & TUGAS TAMBAHAN) */}
+      <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700">
+              <BarChart className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                Rekapitulasi & Persentase Kinerja Operasional per Bulan (Tahun {selectedYear})
+              </h3>
+              <p className="text-xs text-slate-500">
+                Rincian volume realisasi tugas kedinasan per bulan ({roleTitle}) menurut bagian Tugas Pokok dan Tugas Tambahan
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-lg flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Rata-Rata Capaian: {annualPerformance.averagePercentage.toFixed(1)}%</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Quick summary stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <span className="text-[11px] text-slate-500 font-medium block">Total Kegiatan Tahunan</span>
+            <span className="text-lg font-black text-slate-900 font-mono">{annualPerformance.totalTasks}</span>
+            <span className="text-[10.5px] text-slate-500 block mt-0.5">{annualPerformance.totalCompleted} Kegiatan Tuntas</span>
+          </div>
+          <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl">
+            <span className="text-[11px] text-blue-800 font-medium block">Tugas Pokok (Tupoksi)</span>
+            <span className="text-lg font-black text-blue-900 font-mono">{annualPerformance.totalTupoksi}</span>
+            <span className="text-[10.5px] text-blue-700 block mt-0.5">Tugas Utama Kedinasan</span>
+          </div>
+          <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl">
+            <span className="text-[11px] text-amber-800 font-medium block">Tugas Tambahan</span>
+            <span className="text-lg font-black text-amber-900 font-mono">{annualPerformance.totalTambahan}</span>
+            <span className="text-[10.5px] text-amber-700 block mt-0.5">Penugasan Penunjang</span>
+          </div>
+          <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl">
+            <span className="text-[11px] text-emerald-800 font-medium block">Tingkat Penyelesaian</span>
+            <span className="text-lg font-black text-emerald-900 font-mono">{annualPerformance.averagePercentage.toFixed(1)}%</span>
+            <span className="text-[10.5px] text-emerald-700 block mt-0.5">Standar Pelayanan Minimal</span>
+          </div>
+        </div>
+
+        {/* Table 12 Months Performance */}
+        <div className="overflow-x-auto border border-slate-200 rounded-xl">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
+              <tr>
+                <th className="py-2 px-2 text-center w-8">No</th>
+                <th className="py-2 px-3 w-28">Bulan</th>
+                <th className="py-2 px-3">Realisasi Tugas Pokok & Volume Hasil</th>
+                <th className="py-2 px-3">Realisasi Tugas Tambahan & Volume Hasil</th>
+                <th className="py-2 px-2 text-center w-20">Kegiatan</th>
+                <th className="py-2 px-2 text-center w-18">Tuntas</th>
+                <th className="py-2 px-2.5 text-center w-20 font-bold">Capaian</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {annualPerformance.items.map((item, idx) => (
+                <tr key={item.monthIndex} className="hover:bg-slate-50 transition-colors">
+                  <td className="py-2 px-2 text-center font-mono text-slate-500 text-[11px]">{idx + 1}</td>
+                  <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                    {item.monthName} {selectedYear}
+                  </td>
+                  <td className="py-2 px-3 text-[11px] leading-relaxed text-slate-800">
+                    {item.tupoksiSummary}
+                  </td>
+                  <td className="py-2 px-3 text-[11px] leading-relaxed text-slate-700">
+                    {item.tambahanSummary}
+                  </td>
+                  <td className="py-2 px-2 text-center font-mono font-semibold">{item.totalTasks}</td>
+                  <td className="py-2 px-2 text-center font-mono text-emerald-700 font-bold">{item.completedTasks}</td>
+                  <td className="py-2 px-2.5 text-center font-mono font-bold text-emerald-700">
+                    <span className="px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200">
+                      {item.percentage}%
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
+              <tr>
+                <td colSpan={2} className="py-2.5 px-3 text-center uppercase text-xs">
+                  TOTAL REKAPITULASI TAHUNAN:
+                </td>
+                <td className="py-2.5 px-3 text-xs text-blue-900">
+                  Total {annualPerformance.totalTupoksi} Tugas Pokok Terlaksana
+                </td>
+                <td className="py-2.5 px-3 text-xs text-amber-900">
+                  Total {annualPerformance.totalTambahan} Tugas Tambahan Terlaksana
+                </td>
+                <td className="py-2.5 px-2 text-center font-mono">{annualPerformance.totalTasks}</td>
+                <td className="py-2.5 px-2 text-center font-mono text-emerald-800">{annualPerformance.totalCompleted}</td>
+                <td className="py-2.5 px-2.5 text-center font-mono font-black text-emerald-900 text-sm">
+                  {annualPerformance.averagePercentage.toFixed(1)}%
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
 

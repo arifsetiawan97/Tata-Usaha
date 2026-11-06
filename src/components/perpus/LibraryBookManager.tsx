@@ -222,6 +222,7 @@ export const LibraryBookManager: React.FC = () => {
   // Filter States
   const [selectedMonth, setSelectedMonth] = useState<string>('all'); // 'all' or 'YYYY-MM'
   const [purchaseYearFilter, setPurchaseYearFilter] = useState<string>('all'); // 'all' or 'YYYY'
+  const [tanggalMasukFilter, setTanggalMasukFilter] = useState<string>('all'); // 'all' or 'YYYY-MM-DD'
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -339,51 +340,115 @@ export const LibraryBookManager: React.FC = () => {
     return sorted;
   }, [libraryBooks, purchaseYearFilter]);
 
+  // Available Unique Tanggal Masuk (dynamically adjusted based on selected year/month)
+  const availableTanggalMasuk = useMemo(() => {
+    const dateSet = new Set<string>();
+    libraryBooks.forEach(book => {
+      if (purchaseYearFilter !== 'all') {
+        const bookYear = String(book.tahunBeli || book.tahunPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.split('-')[0] : book.tahunTerbit));
+        if (bookYear !== purchaseYearFilter) return;
+      }
+      if (selectedMonth !== 'all') {
+        const bookMonth = getBookMonthKey(book);
+        if (bookMonth !== selectedMonth) return;
+      }
+      if (book.tanggalMasuk && book.tanggalMasuk.trim()) {
+        dateSet.add(book.tanggalMasuk.trim());
+      }
+    });
+    return Array.from(dateSet).sort((a, b) => b.localeCompare(a));
+  }, [libraryBooks, purchaseYearFilter, selectedMonth]);
+
   // Filtered Books List
   const filteredBooks = useMemo(() => {
     return libraryBooks.filter(book => {
-      // Purchase Year Filter (e.g. 2025, 2026, 2024)
+      // 1. Purchase Year Filter (e.g. 2025, 2026, 2024)
       if (purchaseYearFilter !== 'all') {
         const bookYear = String(book.tahunBeli || book.tahunPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.split('-')[0] : book.tahunTerbit));
         if (bookYear !== purchaseYearFilter) return false;
       }
 
-      // Month filter (e.g. 2025-04)
+      // 2. Month filter (e.g. 2025-09)
       if (selectedMonth !== 'all') {
         const bookMonth = getBookMonthKey(book);
         if (bookMonth !== selectedMonth) return false;
       }
 
-      // Search Query
+      // 3. Tanggal Masuk Filter (e.g. 2025-09-01)
+      if (tanggalMasukFilter !== 'all') {
+        const tm = (book.tanggalMasuk || '').trim();
+        if (tm !== tanggalMasukFilter) return false;
+      }
+
+      // 4. Search Query (Intelligent multi-field: title, author, code, date text, month text, year, ddc)
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.toLowerCase().trim();
         const matchTitle = (book.judul || '').toLowerCase().includes(q);
         const matchAuthor = (book.penulis || '').toLowerCase().includes(q);
         const matchPublisher = (book.penerbit || '').toLowerCase().includes(q);
         const matchCode = (book.kodeBuku || '').toLowerCase().includes(q);
         const matchIsbn = (book.isbn || '').toLowerCase().includes(q);
         const matchClass = (book.kelas || '').toLowerCase().includes(q);
-        if (!matchTitle && !matchAuthor && !matchPublisher && !matchCode && !matchIsbn && !matchClass) return false;
+        const matchCategory = (book.kategoriBuku || (book as any).kategori || '').toLowerCase().includes(q);
+        const matchDdc = (book.ddcKlasifikasi || (book as any).ddc || '').toLowerCase().includes(q);
+        const matchSource = (book.sumberPengadaan || '').toLowerCase().includes(q);
+        const matchTanggal = (book.tanggalMasuk || '').toLowerCase().includes(q);
+        const matchBulan = String(book.bulanPengadaan || '').toLowerCase().includes(q);
+        const matchYear = String(book.tahunBeli || book.tahunPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.split('-')[0] : '')).includes(q);
+
+        // Also match formatted Indonesian textual date (e.g. "1 September 2025", "September 2025")
+        let matchTextDate = false;
+        if (book.tanggalMasuk && book.tanggalMasuk.includes('-')) {
+          const parts = book.tanggalMasuk.split('-');
+          if (parts.length === 3) {
+            const mIdx = parseInt(parts[1], 10) - 1;
+            if (mIdx >= 0 && mIdx < 12) {
+              const mName = MONTH_NAMES[mIdx].toLowerCase();
+              const fullFormatted = `${parseInt(parts[2], 10)} ${mName} ${parts[0]}`.toLowerCase();
+              if (fullFormatted.includes(q) || mName.includes(q)) {
+                matchTextDate = true;
+              }
+            }
+          }
+        }
+
+        if (
+          !matchTitle && 
+          !matchAuthor && 
+          !matchPublisher && 
+          !matchCode && 
+          !matchIsbn && 
+          !matchClass && 
+          !matchCategory && 
+          !matchDdc && 
+          !matchSource && 
+          !matchTanggal && 
+          !matchBulan && 
+          !matchYear && 
+          !matchTextDate
+        ) {
+          return false;
+        }
       }
 
-      // Category filter with intelligent multi-match
+      // 5. Category filter with intelligent multi-match
       if (categoryFilter !== 'all') {
         if (!matchBookCategory(book, categoryFilter)) return false;
       }
 
-      // Source filter
+      // 6. Source filter
       if (sourceFilter !== 'all') {
         if (book.sumberPengadaan !== sourceFilter) return false;
       }
 
-      // Class filter with robust intelligent matching (Kelas VII, VIII, IX, VII-IX, Guru, Umum)
+      // 7. Class filter with robust intelligent matching (Kelas VII, VIII, IX, VII-IX, Guru, Umum)
       if (classFilter !== 'all') {
         if (!matchBookClass(book, classFilter)) return false;
       }
 
       return true;
     });
-  }, [libraryBooks, purchaseYearFilter, selectedMonth, searchQuery, categoryFilter, sourceFilter, classFilter]);
+  }, [libraryBooks, purchaseYearFilter, selectedMonth, tanggalMasukFilter, searchQuery, categoryFilter, sourceFilter, classFilter]);
 
   // Available Purchase Years in Books
   const availablePurchaseYears = useMemo(() => {
@@ -812,9 +877,39 @@ export const LibraryBookManager: React.FC = () => {
   // Commit Parsed Excel Books
   const handleCommitParsedExcelImport = () => {
     if (parsedExcelBooks.length === 0) return;
-    const monthKey = importDate.substring(0, 7);
+
+    // Detect unique years and months from the parsed books
+    const importedYears = Array.from(new Set(
+      parsedExcelBooks.map(b => String(b.tahunBeli || b.tahunPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.split('-')[0] : ''))).filter(Boolean)
+    ));
+    const importedMonths = Array.from(new Set(
+      parsedExcelBooks.map(b => b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : '')).filter(Boolean)
+    ));
+    const importedDates = Array.from(new Set(
+      parsedExcelBooks.map(b => b.tanggalMasuk).filter(Boolean)
+    ));
+
     importLibraryBooks(parsedExcelBooks);
-    setSelectedMonth(monthKey);
+
+    // Automatically set filter so newly imported books are immediately visible
+    if (importedYears.length === 1) {
+      setPurchaseYearFilter(String(importedYears[0]));
+    } else {
+      setPurchaseYearFilter('all');
+    }
+
+    if (importedMonths.length === 1) {
+      setSelectedMonth(String(importedMonths[0]));
+    } else {
+      setSelectedMonth('all');
+    }
+
+    if (importedDates.length === 1) {
+      setTanggalMasukFilter(String(importedDates[0]));
+    } else {
+      setTanggalMasukFilter('all');
+    }
+
     setIsImportModalOpen(false);
     setParsedExcelBooks([]);
     setExcelFileName('');
@@ -1232,11 +1327,16 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
             </div>
           </div>
 
-          <div className="text-xs text-slate-600 font-medium bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-2">
+          <div className="text-xs text-slate-600 font-medium bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-2 flex-wrap">
             <span>Filter Aktif:</span>
             {purchaseYearFilter !== 'all' && (
               <span className="font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                 Tahun Beli {purchaseYearFilter}
+              </span>
+            )}
+            {tanggalMasukFilter !== 'all' && (
+              <span className="font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                Tgl Masuk: {tanggalMasukFilter}
               </span>
             )}
             <span className="font-bold text-emerald-700">
@@ -1387,6 +1487,31 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
               {availablePurchaseYears.map(yr => (
                 <option key={yr} value={yr}>Tahun Beli {yr}</option>
               ))}
+            </select>
+
+            {/* Tanggal Masuk Filter */}
+            <select
+              value={tanggalMasukFilter}
+              onChange={e => setTanggalMasukFilter(e.target.value)}
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold text-slate-800"
+              title="Filter buku berdasarkan tanggal masuk persis"
+            >
+              <option value="all">Semua Tgl Masuk</option>
+              {availableTanggalMasuk.map(tgl => {
+                let label = tgl;
+                if (tgl.includes('-')) {
+                  const p = tgl.split('-');
+                  if (p.length === 3) {
+                    const mIdx = parseInt(p[1], 10) - 1;
+                    if (mIdx >= 0 && mIdx < 12) {
+                      label = `${parseInt(p[2], 10)} ${MONTH_NAMES[mIdx]} ${p[0]}`;
+                    }
+                  }
+                }
+                return (
+                  <option key={tgl} value={tgl}>Tgl: {label}</option>
+                );
+              })}
             </select>
 
             {/* Category Filter */}

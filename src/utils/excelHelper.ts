@@ -70,32 +70,57 @@ const saveWorkbook = (workbook: XLSX.WorkBook, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
+const INDO_MONTHS_MAP: Record<string, string> = {
+  januari: '01', jan: '01', january: '01',
+  februari: '02', feb: '02', february: '02',
+  maret: '03', mar: '03', march: '03',
+  april: '04', apr: '04',
+  mei: '05', may: '05',
+  juni: '06', jun: '06', june: '06',
+  juli: '07', jul: '07', july: '07',
+  agustus: '08', ags: '08', agu: '08', aug: '08', august: '08',
+  september: '09', sep: '09', sept: '09',
+  oktober: '10', okt: '10', oct: '10', october: '10',
+  november: '11', nov: '11',
+  desember: '12', des: '12', dec: '12', december: '12'
+};
+
 /**
- * Format date values extracted from Excel (serial numbers, DD/MM/YYYY, YYYY-MM-DD, etc.)
+ * Format date values extracted from Excel (serial numbers, DD/MM/YYYY, Indonesian text, YYYY-MM-DD, etc.)
  */
 export const formatExcelDate = (val: any, fallback: string): string => {
   if (val === undefined || val === null || val === '') return fallback;
-  if (typeof val === 'number') {
-    // Excel serial date to JS Date (base: 1899-12-30)
-    const date = new Date(Math.round((val - 25569) * 86400 * 1000));
-    if (!isNaN(date.getTime())) {
-      return date.toISOString().split('T')[0];
+
+  // Handle native Date instance from XLSX
+  if (val instanceof Date) {
+    if (!isNaN(val.getTime())) {
+      const y = val.getFullYear();
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const d = String(val.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
   }
-  const s = String(val).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  
-  // DD/MM/YYYY or DD-MM-YYYY
-  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (dmy) {
-    const day = dmy[1].padStart(2, '0');
-    const month = dmy[2].padStart(2, '0');
-    const year = dmy[3];
-    return `${year}-${month}-${day}`;
+
+  // Handle Excel serial date number
+  if (typeof val === 'number') {
+    const totalDays = Math.floor(val - 25569);
+    const date = new Date((totalDays * 86400 + 43200) * 1000);
+    if (!isNaN(date.getTime())) {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
   }
 
-  // YYYY/MM/DD
-  const ymd = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  const s = String(val).trim();
+  if (!s) return fallback;
+
+  // 1. Standard ISO: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // 2. YYYY/MM/DD or YYYY.MM.DD
+  const ymd = s.match(/^(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})$/);
   if (ymd) {
     const year = ymd[1];
     const month = ymd[2].padStart(2, '0');
@@ -103,11 +128,53 @@ export const formatExcelDate = (val: any, fallback: string): string => {
     return `${year}-${month}-${day}`;
   }
 
-  // Pure 4-digit year e.g. "2026"
+  // 3. DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY (e.g. 01/09/2025, 1-9-2025)
+  const dmy = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+  if (dmy) {
+    const day = dmy[1].padStart(2, '0');
+    const month = dmy[2].padStart(2, '0');
+    const year = dmy[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // 4. Indonesian Text Date: "1 September 2025", "01-September-2025", "1 Sep 2025"
+  const indoDate = s.match(/^(\d{1,2})[\s/.-]+([a-zA-Z]+)[\s/.-]+(\d{4})$/);
+  if (indoDate) {
+    const day = indoDate[1].padStart(2, '0');
+    const mStr = indoDate[2].toLowerCase();
+    const year = indoDate[3];
+    const month = INDO_MONTHS_MAP[mStr] || '01';
+    return `${year}-${month}-${day}`;
+  }
+
+  // 5. Month & Year text: "September 2025", "Sep 2025"
+  const monthYearText = s.match(/^([a-zA-Z]+)[\s/.-]+(\d{4})$/);
+  if (monthYearText) {
+    const mStr = monthYearText[1].toLowerCase();
+    const year = monthYearText[2];
+    const month = INDO_MONTHS_MAP[mStr] || '01';
+    return `${year}-${month}-01`;
+  }
+
+  // 6. YYYY-MM or YYYY/MM
+  const ym = s.match(/^(\d{4})[/.-](\d{1,2})$/);
+  if (ym) {
+    const year = ym[1];
+    const month = ym[2].padStart(2, '0');
+    return `${year}-${month}-01`;
+  }
+
+  // 7. MM/YYYY
+  const my = s.match(/^(\d{1,2})[/.-](\d{4})$/);
+  if (my) {
+    const month = my[1].padStart(2, '0');
+    const year = my[2];
+    return `${year}-${month}-01`;
+  }
+
+  // 8. Pure 4-digit year e.g. "2025"
   if (/^\d{4}$/.test(s)) {
-    const fallbackMonth = fallback.substring(5, 7) || '01';
-    const fallbackDay = fallback.substring(8, 10) || '01';
-    return `${s}-${fallbackMonth}-${fallbackDay}`;
+    return `${s}-01-01`;
   }
 
   return fallback;
@@ -415,8 +482,9 @@ export const parseBookExcelFile = async (
   const colKelas = findCol('kelas', 'tingkat');
   const colPenulis = findCol('penulis', 'pengarang', 'author');
   const colPenerbit = findCol('penerbit', 'publisher');
-  const colTahunBeli = findCol('tahun pembelian', 'tahun beli', 'tahun pengadaan', 'thn beli', 'thn pengadaan');
-  const colTanggalMasuk = findCol('tanggal masuk', 'tgl masuk', 'tanggal beli', 'tgl beli', 'tanggal', 'tgl');
+  const colTahunBeli = findCol('tahun pembelian', 'tahun beli', 'tahun pengadaan', 'thn beli', 'thn pengadaan', 'tahun masuk', 'thn masuk', 'tahun', 'thn');
+  const colTanggalMasuk = findCol('tanggal masuk', 'tgl masuk', 'tanggal pengadaan', 'tgl pengadaan', 'tanggal beli', 'tgl beli', 'tanggal terima', 'tgl terima', 'waktu masuk', 'tgl_masuk', 'tanggal', 'tgl', 'hari');
+  const colBulan = findCol('bulan masuk', 'bulan pengadaan', 'bln masuk', 'bln pengadaan', 'bulan', 'bln');
   const colTahunTerbit = findCol('tahun terbit', 'thn terbit');
   const colTahunGeneral = findCol('tahun', 'thn');
   const colIsbn = findCol('isbn');
@@ -442,31 +510,61 @@ export const parseBookExcelFile = async (
       return;
     }
 
-    // Parse Tanggal Masuk (support string or Excel serial date)
-    let rowTanggalMasuk = targetDate;
+    // 1. Parse Tanggal Masuk (support string, Excel serial date, Indonesian text, etc.)
+    let rowTanggalMasuk = '';
     if (colTanggalMasuk !== -1 && r[colTanggalMasuk] !== undefined && String(r[colTanggalMasuk]).trim() !== '') {
-      const parsedDate = formatExcelDate(r[colTanggalMasuk], targetDate);
+      const parsedDate = formatExcelDate(r[colTanggalMasuk], '');
       if (parsedDate) {
         rowTanggalMasuk = parsedDate;
       }
     }
 
-    // Determine rowMonthKey from rowTanggalMasuk (YYYY-MM)
-    const rowMonthKey = rowTanggalMasuk.length >= 7 ? rowTanggalMasuk.substring(0, 7) : defaultMonthKey;
+    // 2. Parse Bulan Masuk / Pengadaan if separate column exists
+    let rowBulan = '';
+    if (colBulan !== -1 && r[colBulan] !== undefined && String(r[colBulan]).trim() !== '') {
+      const rawB = String(r[colBulan]).trim().toLowerCase();
+      rowBulan = INDO_MONTHS_MAP[rawB] || (rawB.length === 1 ? `0${rawB}` : rawB.padStart(2, '0'));
+    }
 
-    // Parse Tahun Pembelian
-    let rowTahunBeli = defaultYearNum;
+    // 3. Parse Tahun Pembelian
+    let rowTahunBeli = 0;
     if (colTahunBeli !== -1 && r[colTahunBeli]) {
       const pYear = parseInt(String(r[colTahunBeli]).replace(/\D/g, ''), 10);
       if (pYear && pYear >= 1990 && pYear <= 2100) {
         rowTahunBeli = pYear;
       }
-    } else if (rowTanggalMasuk && rowTanggalMasuk.length >= 4) {
+    }
+    if (!rowTahunBeli && rowTanggalMasuk && rowTanggalMasuk.length >= 4) {
       const pYear = parseInt(rowTanggalMasuk.substring(0, 4), 10);
       if (pYear && pYear >= 1990 && pYear <= 2100) {
         rowTahunBeli = pYear;
       }
     }
+    if (!rowTahunBeli) {
+      rowTahunBeli = defaultYearNum;
+    }
+
+    // Assembling precise Tanggal Masuk (YYYY-MM-DD)
+    if (!rowTanggalMasuk) {
+      const m = rowBulan || targetDate.substring(5, 7) || '01';
+      rowTanggalMasuk = `${rowTahunBeli}-${m.padStart(2, '0')}-01`;
+    } else if (rowBulan && rowTanggalMasuk.includes('-')) {
+      const parts = rowTanggalMasuk.split('-');
+      if (parts.length === 3) {
+        rowTanggalMasuk = `${rowTahunBeli}-${rowBulan.padStart(2, '0')}-${parts[2]}`;
+      }
+    }
+
+    // Ensure year portion aligns with rowTahunBeli
+    if (rowTahunBeli && rowTanggalMasuk.includes('-')) {
+      const parts = rowTanggalMasuk.split('-');
+      if (parts[0] !== String(rowTahunBeli)) {
+        rowTanggalMasuk = `${rowTahunBeli}-${parts[1] || '01'}-${parts[2] || '01'}`;
+      }
+    }
+
+    // Determine rowMonthKey from rowTanggalMasuk (YYYY-MM)
+    const rowMonthKey = rowTanggalMasuk.length >= 7 ? rowTanggalMasuk.substring(0, 7) : `${rowTahunBeli}-01`;
 
     // Parse Tahun Terbit
     let tahunTerbit = rowTahunBeli;
