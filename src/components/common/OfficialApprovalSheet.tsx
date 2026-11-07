@@ -308,9 +308,11 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
   ) => {
     const customSig = signatures[targetKey];
     const isDummy = !officer.nama || 
-      /rahmat\s*hidayat/i.test(officer.nama) || 
-      /nurul\s*hidayat/i.test(officer.nama) || 
+      /rahmat(\s*hidayat)?/i.test(officer.nama) || 
+      /nurul(\s*hidayat|\s*hidayati)?/i.test(officer.nama) || 
       officer.nama.trim() === '';
+    
+    const isDummySig = !officer.signatureData || /rahmat|nurul|hidayat/i.test(officer.signatureData);
     
     const displayName = isDummy 
       ? '( .................................................. )' 
@@ -382,7 +384,7 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
                   alt="Tanda Tangan" 
                   className="max-h-20 max-w-[190px] object-contain drop-shadow-xs" 
                 />
-              ) : !isDummy && officer.signatureData ? (
+              ) : !isDummy && !isDummySig && officer.signatureData ? (
                 <div className="flex flex-col items-center justify-center">
                   <span className="signature-font text-2xl sm:text-3xl text-blue-900 select-none tracking-wide transform -rotate-3 py-1">
                     {officer.signatureData}

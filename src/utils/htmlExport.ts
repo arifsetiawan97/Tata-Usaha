@@ -64,7 +64,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
 
   // Deteksi nama dummy/default Rahmat Hidayat & Nurul Hidayat agar tidak tercetak pada berkas kedinasan
   const isDefaultOrDummyKepsek = !schoolConfig.kepalaSekolah?.nama || 
-    /rahmat\s*hidayat/i.test(schoolConfig.kepalaSekolah.nama) || 
+    /rahmat(\s*hidayat)?/i.test(schoolConfig.kepalaSekolah.nama) || 
     schoolConfig.kepalaSekolah.nama.trim() === '';
   
   const displayKepsekNama = isDefaultOrDummyKepsek 
@@ -76,7 +76,8 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     : (schoolConfig.kepalaSekolah.nip.startsWith('NIP') ? schoolConfig.kepalaSekolah.nip : `NIP. ${schoolConfig.kepalaSekolah.nip}`);
 
   const isDefaultOrDummyOperator = !operator?.nama || 
-    /nurul\s*hidayat/i.test(operator.nama) || 
+    /nurul(\s*hidayat|\s*hidayati)?/i.test(operator.nama) || 
+    /rahmat(\s*hidayat)?/i.test(operator.nama) ||
     operator.nama.trim() === '';
 
   const displayOperatorNama = isDefaultOrDummyOperator 
@@ -1179,8 +1180,6 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
               <div class="sign-box" style="height: 85px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
                 ${!isDefaultOrDummyKepsek && schoolConfig.kepalaSekolah.signatureImage ? `
                   <img src="${schoolConfig.kepalaSekolah.signatureImage}" alt="Tanda Tangan Kepsek" class="sign-image" style="max-height: 75px; max-width: 180px; object-fit: contain;">
-                ` : !isDefaultOrDummyKepsek && schoolConfig.kepalaSekolah.signatureData ? `
-                  <div class="signature-font">${schoolConfig.kepalaSekolah.signatureData}</div>
                 ` : `
                   <div style="height: 75px; width: 100%;"></div>
                 `}
@@ -1190,17 +1189,15 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
               <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${displayKepsekNip}</div>
             </td>
 
-            <!-- Kolom Kanan: Petugas Pelaksana (Yang Membuat Laporan) -->
+            <!-- Kolom Kanan: Petugas Pelaksana / Pengelola (Yang Membuat Laporan) -->
             <td style="width: 50%; vertical-align: top; text-align: center; padding: 0 16px;">
               <div class="sign-date" style="height: 22px; line-height: 22px;">${docDate}</div>
               <div class="sign-title" style="height: 22px; line-height: 22px; font-weight: 600;">Yang Membuat Laporan,</div>
-              <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${operator.jabatan}</div>
+              <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${operator.jabatan || (role === 'PERPUS' ? 'Pengelola Perpustakaan' : 'Petugas Pelaksana')}</div>
 
               <div class="sign-box" style="height: 85px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
                 ${!isDefaultOrDummyOperator && operator.signatureImage ? `
                   <img src="${operator.signatureImage}" alt="Tanda Tangan Operator" class="sign-image" style="max-height: 75px; max-width: 180px; object-fit: contain;">
-                ` : !isDefaultOrDummyOperator && operator.signatureData ? `
-                  <div class="signature-font">${operator.signatureData}</div>
                 ` : `
                   <div style="height: 75px; width: 100%;"></div>
                 `}

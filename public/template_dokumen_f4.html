@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laporan Kinerja & Pelayanan Operasional - Standar Dinas Pendidikan</title>
+  
+  <style>
+    /* =========================================================================
+       1. KONFIGURASI UKURAN KERTAS & MARGIN CETAK (@page)
+       Sesuai Standar Tata Naskah Dinas:
+       - Ukuran F4 / Folio: Lebar 215mm x Tinggi 330mm
+       - Margin: Atas 1.5cm, Kanan 1.5cm, Bawah 1.5cm, Kiri 2.0cm (untuk arsip/lubang map)
+       ========================================================================= */
+    @page {
+      size: 215mm 330mm; /* Kertas Folio / F4 Resmi */
+      margin-top: 1.5cm;
+      margin-bottom: 1.5cm;
+      margin-left: 2.0cm;
+      margin-right: 1.5cm;
+    }
+
+    /* Pengaturan Reset & Typography Cetak */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 11pt;
+      line-height: 1.25;
+      color: #000000;
+      background-color: #e2e8f0;
+    }
+
+    /* Container Kertas di Layar (Screen Preview Mode) */
+    .page-container {
+      width: 215mm;
+      min-height: 330mm;
+      margin: 20px auto;
+      padding: 1.5cm 1.5cm 1.5cm 2.0cm;
+      background: #ffffff;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+      position: relative;
+    }
+
+    /* =========================================================================
+       2. STRUKTUR KOP SURAT RESMI INSTANSI PEMERINTAH
+       ========================================================================= */
+    .kop-surat {
+      width: 100%;
+      display: table;
+      table-layout: fixed;
+      margin-bottom: 4px;
+    }
+
+    .kop-logo-kiri {
+      display: table-cell;
+      width: 75px;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    .kop-logo-kiri svg, .kop-logo-kiri img {
+      width: 68px;
+      height: 68px;
+      object-fit: contain;
+    }
+
+    .kop-teks {
+      display: table-cell;
+      vertical-align: middle;
+      text-align: center;
+      padding: 0 10px;
+    }
+
+    .kop-instansi-1 {
+      font-size: 11.5pt;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      line-height: 1.15;
+    }
+
+    .kop-instansi-2 {
+      font-size: 12.5pt;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+
+    .kop-sekolah {
+      font-size: 15pt;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin: 2px 0;
+      line-height: 1.15;
+    }
+
+    .kop-alamat {
+      font-size: 8.5pt;
+      font-style: italic;
+      font-family: Arial, sans-serif;
+      line-height: 1.2;
+      margin-top: 1px;
+    }
+
+    .kop-kontak {
+      font-size: 8pt;
+      font-family: Arial, sans-serif;
+      line-height: 1.2;
+    }
+
+    /* Garis Ganda Pembatas Kop Surat (Tebal 3px & Tipis 1px) */
+    .kop-garis-pembatas {
+      margin-top: 5px;
+      margin-bottom: 12px;
+      border-top: 2.5px solid #000000;
+      border-bottom: 0.75px solid #000000;
+      height: 4px;
+      width: 100%;
+    }
+
+    /* =========================================================================
+       3. JUDUL DOKUMEN & IDENTITAS SURAT
+       ========================================================================= */
+    .judul-dokumen-wrapper {
+      text-align: center;
+      margin-bottom: 14px;
+    }
+
+    .judul-dokumen-teks {
+      font-size: 13pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      text-decoration: underline;
+      margin: 0;
+      letter-spacing: 0.5px;
+    }
+
+    .nomor-surat-teks {
+      font-size: 10.5pt;
+      font-weight: 600;
+      margin-top: 3px;
+      font-family: Arial, sans-serif;
+    }
+
+    .metadata-box {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      font-size: 10pt;
+    }
+
+    .metadata-box td {
+      padding: 2px 4px;
+      vertical-align: top;
+    }
+
+    .metadata-box td.label {
+      width: 140px;
+      font-weight: 600;
+    }
+
+    .metadata-box td.separator {
+      width: 12px;
+      text-align: center;
+    }
+
+    /* =========================================================================
+       4. TABEL DATA RESMI (PADAT, RAPI, TANPA TERPOTONG)
+       ========================================================================= */
+    .tabel-data-resmi {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      margin-bottom: 12px;
+      font-size: 9.5pt;
+      line-height: 1.2;
+    }
+
+    .tabel-data-resmi th, 
+    .tabel-data-resmi td {
+      border: 1px solid #000000;
+      padding: 4px 6px;
+      vertical-align: middle;
+    }
+
+    .tabel-data-resmi thead th {
+      background-color: #f1f5f9;
+      font-weight: 700;
+      text-align: center;
+      text-transform: uppercase;
+      font-size: 9pt;
+      letter-spacing: 0.3px;
+    }
+
+    .tabel-data-resmi tbody tr {
+      /* Mencegah baris terpotong secara janggal antar halaman */
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    .tabel-data-resmi tfoot td {
+      background-color: #f8fafc;
+      font-weight: 700;
+      border: 1px solid #000000;
+    }
+
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .text-left { text-align: left; }
+    .font-semibold { font-weight: 600; }
+    .font-bold { font-weight: 700; }
+
+    /* =========================================================================
+       5. BLOK TANDA TANGAN RESMI KEDINASAN (APPROVAL BLOCK)
+       - Kiri : Kepala Sekolah (Mengetahui / Mengesahkan)
+       - Kanan: Pengelola / Yang Membuat Laporan
+       - Bersih tanpa watermark dummy yang menimpa tanda tangan
+       ========================================================================= */
+    .lembar-pengesahan-wrapper {
+      margin-top: 18px;
+      width: 100%;
+      /* Pastikan satu blok tanda tangan tidak terpecah ke halaman baru */
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    .tabel-tanda-tangan {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .tabel-tanda-tangan td {
+      width: 50%;
+      vertical-align: top;
+      text-align: center;
+      padding: 0 10px;
+    }
+
+    .ttd-tanggal {
+      font-size: 10pt;
+      height: 18px;
+      line-height: 18px;
+      margin-bottom: 2px;
+    }
+
+    .ttd-jabatan-utama {
+      font-size: 10.5pt;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .ttd-jabatan-sub {
+      font-size: 9.5pt;
+      margin-top: 1px;
+      margin-bottom: 2px;
+    }
+
+    /* Ruang Bersih Tanda Tangan Fisik (75px) */
+    .ttd-ruang-kosong {
+      height: 75px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ttd-nama-pejabat {
+      font-size: 11pt;
+      font-weight: 700;
+      text-decoration: underline;
+      line-height: 1.2;
+    }
+
+    .ttd-nip-pejabat {
+      font-size: 9.5pt;
+      font-family: Arial, sans-serif;
+      margin-top: 2px;
+    }
+
+    .catatan-kaki-resmi {
+      margin-top: 18px;
+      padding-top: 6px;
+      border-top: 0.5px solid #94a3b8;
+      font-size: 8pt;
+      font-family: Arial, sans-serif;
+      color: #334155;
+      font-style: italic;
+      text-align: justify;
+      line-height: 1.25;
+    }
+
+    /* =========================================================================
+       6. INTERFACE SCREEN BAR (TOMBOL CETAK & UNDUH HTML)
+       ========================================================================= */
+    .toolbar-screen {
+      position: sticky;
+      top: 0;
+      z-index: 9999;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 10px 16px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .toolbar-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toolbar-badge {
+      background: #2563eb;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .btn-print {
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .btn-print:hover { background: #1d4ed8; }
+
+    .btn-download {
+      background: #059669;
+      color: #ffffff;
+    }
+    .btn-download:hover { background: #047857; }
+
+    .btn-secondary {
+      background: #334155;
+      color: #ffffff;
+    }
+    .btn-secondary:hover { background: #475569; }
+
+    .petunjuk-cetak-box {
+      width: 215mm;
+      margin: 12px auto 0 auto;
+      background: #eff6ff;
+      border-left: 4px solid #2563eb;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-family: sans-serif;
+      color: #1e3a8a;
+      border-radius: 0 6px 6px 0;
+    }
+
+    /* =========================================================================
+       7. MEDIA PRINT RULE (ATURAN CETAK MUTLAK TANPA KOSONG)
+       ========================================================================= */
+    @media print {
+      body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      .no-print, .toolbar-screen, .petunjuk-cetak-box {
+        display: none !important;
+      }
+
+      .page-container {
+        width: 100% !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        background: transparent !important;
+      }
+
+      /* Pastikan warna latar tabel dicetak */
+      .tabel-data-resmi thead th {
+        background-color: #f1f5f9 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- =======================================================================
+       TOOLBAR ATAS (Layar Komputer / Smartphone)
+       Otomatis tersembunyi saat dicetak (no-print)
+       ======================================================================= -->
+  <header class="toolbar-screen no-print">
+    <div class="toolbar-title-group">
+      <span class="toolbar-badge">STANDAR DINAS PENDIDIKAN</span>
+      <span style="font-size: 13px; font-weight: 600;">Format Naskah Resmi Kertas F4 (Folio 215mm × 330mm)</span>
+    </div>
+    <div class="toolbar-actions">
+      <!-- Tombol Pilihan Ukuran Kertas -->
+      <button type="button" class="btn-action btn-secondary" onclick="togglePaperSize()" id="btnSize">
+        <span>Kertas: F4 (Folio)</span>
+      </button>
+
+      <!-- Tombol Cetak / PDF -->
+      <button type="button" class="btn-action btn-print" onclick="window.print()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 6 2 18 2 18 9"></polyline>
+          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+          <rect x="6" y="14" width="12" height="8"></rect>
+        </svg>
+        <span>Cetak / Ekspor PDF</span>
+      </button>
+
+      <!-- Tombol Unduh HTML Mandiri -->
+      <button type="button" class="btn-action btn-download" onclick="unduhDokumenHtml()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <span>Unduh File HTML</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Petunjuk Praktis Cetak -->
+  <div class="petunjuk-cetak-box no-print">
+    <b>💡 Tips Cetak Rapi:</b> Pada dialog cetak browser (Ctrl + P), pastikan <i>Destination</i> diset ke <b>Save as PDF</b> atau printer fisik, pilih Paper size <b>Folio / F4</b> (atau <b>A4</b>), dan hapus centang pada <b>Headers and footers</b> agar tidak muncul URL/tanggal di bagian bawah kertas.
+  </div>
+
+  <!-- =======================================================================
+       LEMBAR DOKUMEN RESMI (STANDAR FOLIO F4)
+       ======================================================================= -->
+  <main class="page-container" id="printableDocument">
+
+    <!-- 1. KOP SURAT RESMI KEDINASAN -->
+    <div class="kop-surat">
+      <div class="kop-logo-kiri">
+        <!-- Logo Tut Wuri Handayani / Lambang Pendidikan (Inline Vector Tajam) -->
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="46" fill="#1e3a8a" stroke="#d97706" stroke-width="3"/>
+          <circle cx="50" cy="50" r="41" fill="#2563eb"/>
+          <!-- Sayap & Buku Pendidikan -->
+          <path d="M50 20 L62 42 L82 45 L66 58 L71 78 L50 67 L29 78 L34 58 L18 45 L38 42 Z" fill="#fbbf24"/>
+          <path d="M25 65 C35 55, 45 60, 50 68 C55 60, 65 55, 75 65 C65 72, 55 70, 50 78 C45 70, 35 72, 25 65 Z" fill="#ffffff"/>
+          <circle cx="50" cy="38" r="6" fill="#ffffff"/>
+          <!-- Api Obor Belajar -->
+          <path d="M50 24 Q53 30 50 34 Q47 30 50 24 Z" fill="#ef4444"/>
+        </svg>
+      </div>
+      <div class="kop-teks">
+        <div class="kop-instansi-1">Pemerintah Kabupaten Batang Hari</div>
+        <div class="kop-instansi-2">Dinas Pendidikan dan Kebudayaan</div>
+        <div class="kop-sekolah">SMP Negeri Satu Atap Teluk</div>
+        <div class="kop-alamat">Jalan Teluk RT. 15, Desa Teluk, Kec. Pemayung, Kab. Batang Hari - Jambi 36657</div>
+        <div class="kop-kontak">NPSN: 20202819 · NSS: 201020201004 · Pos-el: smpsatap.teluk@gmail.com</div>
+      </div>
+    </div>
+
+    <!-- Garis Ganda Pembatas Kop Surat -->
+    <div class="kop-garis-pembatas"></div>
+
+    <!-- 2. JUDUL DOKUMEN RESMI & REGISTER SURAT -->
+    <div class="judul-dokumen-wrapper">
+      <h1 class="judul-dokumen-teks">Laporan Rekapitulasi Pelayanan Operasional & Administrasi</h1>
+      <div class="nomor-surat-teks">Nomor: 800 / LAP-OPS / 09 / 20202819 / 2026</div>
+    </div>
+
+    <!-- 3. IDENTITAS & METADATA DOKUMEN -->
+    <table class="metadata-box">
+      <tr>
+        <td class="label">Satuan Pendidikan</td>
+        <td class="separator">:</td>
+        <td class="font-bold">SMP NEGERI SATU ATAP TELUK</td>
+        <td class="label" style="width: 110px;">Periode Tugas</td>
+        <td class="separator">:</td>
+        <td>Bulan September 2026</td>
+      </tr>
+      <tr>
+        <td class="label">Unit Pelaksana Kerja</td>
+        <td class="separator">:</td>
+        <td>Layanan Operasional & Tata Usaha</td>
+        <td class="label">Tahun Anggaran</td>
+        <td class="separator">:</td>
+        <td>2026 / 2027</td>
+      </tr>
+      <tr>
+        <td class="label">Dasar Pelaksanaan</td>
+        <td class="separator">:</td>
+        <td colspan="4">Keputusan Kepala Satuan Pendidikan tentang Pembagian Beban Kerja Tenaga Kependidikan</td>
+      </tr>
+    </table>
+
+    <!-- 4. TABEL DATA RESMI DINAS PENDIDIKAN -->
+    <table class="tabel-data-resmi">
+      <thead>
+        <tr>
+          <th style="width: 32px;">No</th>
+          <th style="width: 78px;">Tanggal</th>
+          <th style="width: 105px;">Klasifikasi</th>
+          <th>Rincian Kegiatan / Pelayanan Operasional</th>
+          <th style="width: 120px;">Sasaran & Output</th>
+          <th style="width: 70px;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="text-center font-semibold">1</td>
+          <td class="text-center">01/09/2026</td>
+          <td>Administrasi TU</td>
+          <td>Pengarsipan dokumen surat masuk dinas, pencatatan buku agenda, dan pengajuan lembar disposisi kepala sekolah.</td>
+          <td class="text-center font-semibold">6 Berkas Dinas</td>
+          <td class="text-center font-bold">Selesai</td>
+        </tr>
+        <tr>
+          <td class="text-center font-semibold">2</td>
+          <td class="text-center">05/09/2026</td>
+          <td>Perpustakaan</td>
+          <td>Inventarisasi pengadaan buku teks kurikulum merdeka, pencatatan buku induk inventaris, dan pemberian stempel kepemilikan.</td>
+          <td class="text-center font-semibold">45 Eksemplar</td>
+          <td class="text-center font-bold">Selesai</td>
+        </tr>
+        <tr>
+          <td class="text-center font-semibold">3</td>
+          <td class="text-center">10/09/2026</td>
+          <td>Sarana Prasarana</td>
+          <td>Pengecekan rutin dan pemeliharaan instalasi sanitasi air bersih serta kebersihan lingkungan ruang kelas 7 dan 8.</td>
+          <td class="text-center font-semibold">4 Ruang Satdik</td>
+          <td class="text-center font-bold">Selesai</td>
+        </tr>
+        <tr>
+          <td class="text-center font-semibold">4</td>
+          <td class="text-center">15/09/2026</td>
+          <td>Kepegawaian</td>
+          <td>Verifikasi kelengkapan berkas usulan kenaikan pangkat pilihan pendidik dan tenaga kependidikan periode Oktober 2026.</td>
+          <td class="text-center font-semibold">3 Berkas PTK</td>
+          <td class="text-center font-bold">Selesai</td>
+        </tr>
+        <tr>
+          <td class="text-center font-semibold">5</td>
+          <td class="text-center">22/09/2026</td>
+          <td>Kesiswaan</td>
+          <td>Pemberkasan dan validasi data usulan Program Indonesia Pintar (PIP) fase D jenjang SMP semester ganjil.</td>
+          <td class="text-center font-semibold">32 Peserta Didik</td>
+          <td class="text-center font-bold">Selesai</td>
+        </tr>
+        <tr>
+          <td class="text-center font-semibold">6</td>
+          <td class="text-center">30/09/2026</td>
+          <td>Pelaporan</td>
+          <td>Penyusunan rekapitulasi data buku induk, catatan logbook kinerja bulanan, dan evaluasi ketercapaian target layanan.</td>
+          <td class="text-center font-semibold">1 Laporan Bulanan</td>
+          <td class="text-center font-bold">Selesai</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4" class="text-right font-bold" style="padding-right: 12px;">TOTAL KETERLAKSANAAN VOLUME KEGIATAN</td>
+          <td class="text-center font-bold">6 Target Selesai</td>
+          <td class="text-center font-bold">100%</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <p style="text-align: justify; margin: 6px 0; font-size: 10pt; line-height: 1.25;">
+      Demikian laporan rekapitulasi pelaksanaan operasional dan pelayanan administrasi ini dibuat dengan sebenar-benarnya berdasarkan kondisi lapangan yang terlaksana, untuk dapat dipergunakan sebagai bahan evaluasi dan kelengkapan akuntabilitas kinerja satuan pendidikan.
+    </p>
+
+    <!-- 5. LEMBAR TANDA TANGAN PENGESAHAN RESMI (APPROVAL SHEET)
+         Format Standar:
+         - Kiri: Kepala Satuan Pendidikan (Mengetahui / Mengesahkan)
+         - Kanan: Petugas Pelaksana / Pengelola (Yang Membuat Laporan)
+         - Bersih tanpa watermark / coretan nama dummy
+    -->
+    <div class="lembar-pengesahan-wrapper">
+      <table class="tabel-tanda-tangan">
+        <tr>
+          <!-- Kolom Kiri: Kepala Sekolah -->
+          <td>
+            <div class="ttd-tanggal" aria-hidden="true">&nbsp;</div>
+            <div class="ttd-jabatan-utama">Mengetahui / Mengesahkan,</div>
+            <div class="ttd-jabatan-sub">Kepala Satuan Pendidikan</div>
+            
+            <!-- Ruang Bersih Tanda Tangan Fisik -->
+            <div class="ttd-ruang-kosong"></div>
+
+            <div class="ttd-nama-pejabat">ZUBAIDI, S.Ag., M.Pd.</div>
+            <div class="ttd-nip-pejabat">NIP. 19680617 199512 1 002</div>
+          </td>
+
+          <!-- Kolom Kanan: Pengelola / Yang Membuat Laporan -->
+          <td>
+            <div class="ttd-tanggal">Batang Hari, 30 September 2026</div>
+            <div class="ttd-jabatan-utama">Yang Membuat Laporan,</div>
+            <div class="ttd-jabatan-sub">Pengelola Layanan Operasional</div>
+
+            <!-- Ruang Bersih Tanda Tangan Fisik -->
+            <div class="ttd-ruang-kosong"></div>
+
+            <div class="ttd-nama-pejabat">ARIF SETIAWAN, S.E.</div>
+            <div class="ttd-nip-pejabat">NIPPK. 19970530 202521 1 019</div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Catatan Kaki Kedinasan -->
+      <div class="catatan-kaki-resmi">
+        * Dokumen kedinasan ini diterbitkan secara sah berdasarkan Tata Naskah Dinas Satuan Pendidikan dan siap untuk dibubuhi tanda tangan basah serta cap stempel resmi instansi sekolah.
+      </div>
+    </div>
+
+  </main>
+
+  <!-- =======================================================================
+       8. JAVASCRIPT: UNDUH DOKUMEN HTML MANDIRI & TOGGLE UKURAN KERTAS
+       ======================================================================= -->
+  <script>
+    // 1. Fungsi Unduh Halaman sebagai File .html Mandiri
+    function unduhDokumenHtml() {
+      try {
+        const docContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+        const blob = new Blob([docContent], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        
+        const timestamp = new Date().toISOString().slice(0, 10);
+        link.href = url;
+        link.download = `Dokumen_Resmi_Dinas_Pendidikan_${timestamp}.html`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert("Gagal mengunduh dokumen: " + err.message);
+      }
+    }
+
+    // 2. Fungsi Pengubah Ukuran Kertas Dinamis (F4 Folio ↔ A4)
+    let currentPaper = "F4";
+    function togglePaperSize() {
+      const btn = document.getElementById("btnSize");
+      const pageStyle = document.querySelector("style");
+      
+      if (currentPaper === "F4") {
+        currentPaper = "A4";
+        btn.innerHTML = "<span>Kertas: A4 (210×297mm)</span>";
+        document.getElementById("printableDocument").style.width = "210mm";
+        document.getElementById("printableDocument").style.minHeight = "297mm";
+      } else {
+        currentPaper = "F4";
+        btn.innerHTML = "<span>Kertas: F4 (Folio 215×330mm)</span>";
+        document.getElementById("printableDocument").style.width = "215mm";
+        document.getElementById("printableDocument").style.minHeight = "330mm";
+      }
+    }
+  </script>
+</body>
+</html>

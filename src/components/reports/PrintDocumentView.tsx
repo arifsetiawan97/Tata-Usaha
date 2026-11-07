@@ -85,7 +85,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   };
 
   const isDefaultOrDummyKepsek = !schoolConfig.kepalaSekolah?.nama || 
-    /rahmat\s*hidayat/i.test(schoolConfig.kepalaSekolah.nama) || 
+    /rahmat(\s*hidayat)?/i.test(schoolConfig.kepalaSekolah.nama) || 
     schoolConfig.kepalaSekolah.nama.trim() === '';
   
   const displayKepsekNama = isDefaultOrDummyKepsek 
@@ -97,7 +97,8 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     : (schoolConfig.kepalaSekolah.nip.startsWith('NIP') ? schoolConfig.kepalaSekolah.nip : `NIP. ${schoolConfig.kepalaSekolah.nip}`);
 
   const isDefaultOrDummyOperator = !operator?.nama || 
-    /nurul\s*hidayat/i.test(operator.nama) || 
+    /nurul(\s*hidayat|\s*hidayati)?/i.test(operator.nama) || 
+    /rahmat(\s*hidayat)?/i.test(operator.nama) ||
     operator.nama.trim() === '';
 
   const displayOperatorNama = isDefaultOrDummyOperator 

@@ -150,16 +150,30 @@ export const mergeSchoolConfigWithDefaults = (sourceConfig: any): SchoolConfig =
     cleaned.stempelTextLine1 = cleaned.stempelTextLine1.replace(/jawa\s+barat/gi, '').trim();
   }
 
-  // Pembersihan otomatis: Hapus default dummy nama Rahmat Hidayat & Nurul Hidayat jika belum diganti pengguna
-  if (cleaned.kepalaSekolah && typeof cleaned.kepalaSekolah.nama === 'string' && /rahmat\s*hidayat/i.test(cleaned.kepalaSekolah.nama)) {
-    cleaned.kepalaSekolah.nama = '';
-    cleaned.kepalaSekolah.nip = 'NIP. .................................................';
-    cleaned.kepalaSekolah.signatureData = '';
+  // Pembersihan otomatis: Hapus default dummy nama & tanda tangan Rahmat Hidayat & Nurul Hidayat
+  if (cleaned.kepalaSekolah) {
+    if (typeof cleaned.kepalaSekolah.nama === 'string' && /rahmat|hidayat/i.test(cleaned.kepalaSekolah.nama)) {
+      cleaned.kepalaSekolah.nama = '';
+      cleaned.kepalaSekolah.nip = 'NIP. .................................................';
+    }
+    if (typeof cleaned.kepalaSekolah.signatureData === 'string' && /rahmat|nurul|hidayat/i.test(cleaned.kepalaSekolah.signatureData)) {
+      cleaned.kepalaSekolah.signatureData = '';
+    }
   }
-  if (cleaned.operatorProfiles?.PERPUS && typeof cleaned.operatorProfiles.PERPUS.nama === 'string' && /nurul\s*hidayat/i.test(cleaned.operatorProfiles.PERPUS.nama)) {
-    cleaned.operatorProfiles.PERPUS.nama = '';
-    cleaned.operatorProfiles.PERPUS.nip = 'NIPPK. .................................................';
-    cleaned.operatorProfiles.PERPUS.signatureData = '';
+
+  if (cleaned.operatorProfiles) {
+    Object.keys(cleaned.operatorProfiles).forEach((k) => {
+      const prof = cleaned.operatorProfiles?.[k as RoleType];
+      if (prof) {
+        if (typeof prof.nama === 'string' && /nurul|hidayat|rahmat/i.test(prof.nama)) {
+          prof.nama = '';
+          prof.nip = 'NIPPK. .................................................';
+        }
+        if (typeof prof.signatureData === 'string' && /rahmat|nurul|hidayat/i.test(prof.signatureData)) {
+          prof.signatureData = '';
+        }
+      }
+    });
   }
 
   return {

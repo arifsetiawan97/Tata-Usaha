@@ -1220,9 +1220,14 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
     URL.revokeObjectURL(url);
   };
 
-  const kepalaSekolahName = formatOfficialNameWithDegree(schoolConfig.kepalaSekolah?.nama || 'Kepala Sekolah');
+  const rawKepsekNama = schoolConfig.kepalaSekolah?.nama || '';
+  const isDummyKepsek = !rawKepsekNama || /rahmat(\s*hidayat)?/i.test(rawKepsekNama);
+  const kepalaSekolahName = isDummyKepsek ? 'Kepala Sekolah' : formatOfficialNameWithDegree(rawKepsekNama);
+
   const pengelolaPerpus = schoolConfig.operatorProfiles?.PERPUS;
-  const pengelolaName = formatOfficialNameWithDegree(pengelolaPerpus?.nama || 'Pengelola Perpustakaan');
+  const rawPengelolaNama = pengelolaPerpus?.nama || '';
+  const isDummyPengelola = !rawPengelolaNama || /nurul(\s*hidayat|\s*hidayati)?/i.test(rawPengelolaNama) || /rahmat/i.test(rawPengelolaNama);
+  const pengelolaName = isDummyPengelola ? 'Pengelola Perpustakaan' : formatOfficialNameWithDegree(rawPengelolaNama);
 
   return (
     <div className="space-y-6">
