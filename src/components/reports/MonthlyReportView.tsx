@@ -46,6 +46,7 @@ import {
   X,
   RotateCcw
 } from 'lucide-react';
+import { SecretAiGeneratorModal } from '../common/SecretAiGeneratorModal';
 
 interface MonthlyReportViewProps {
   onOpenPrint: (reportType: 'monthly' | 'annual', data: any, options?: { autoPrint?: boolean }) => void;
@@ -324,6 +325,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
   const [newSolution, setNewSolution] = useState('');
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSecretAiOpen, setIsSecretAiOpen] = useState(false);
 
   // Synchronize report state if role, month, or year changes or monthlyReports updates
   useEffect(() => {
@@ -741,6 +743,17 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
                 <span>Analisis Cerdas Otomatis</span>
               </>
             )}
+          </button>
+
+          {/* Fitur Kecerdasan Tersembunyi (Akses Khusus: ARIF SETIAWAN) */}
+          <button
+            type="button"
+            onClick={() => setIsSecretAiOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-black text-amber-950 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 border border-amber-500/40 active:scale-95 rounded-lg transition-all shadow-md cursor-pointer"
+            title="Kecerdasan Tersembunyi: Generate Instan Lapor Bulanan & Rekap Tugas Operasional (Otorisasi: ARIF SETIAWAN)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-900 animate-bounce" />
+            <span>⚡ Lapor Bulanan Instan (Kecerdasan Tersembunyi)</span>
           </button>
 
           {/* Template Button */}
@@ -2011,6 +2024,18 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Secret AI Generator Modal (Otorisasi: ARIF SETIAWAN) */}
+      {isSecretAiOpen && (
+        <SecretAiGeneratorModal
+          isOpen={isSecretAiOpen}
+          onClose={() => setIsSecretAiOpen(false)}
+          defaultRole={effectiveRole}
+          onOpenReport={(m, y, r) => {
+            handleMonthYearChange(m, y);
+          }}
+        />
       )}
     </div>
   );

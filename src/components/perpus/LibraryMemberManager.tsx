@@ -68,6 +68,22 @@ export const LibraryMemberManager: React.FC = () => {
   const [excelFileName, setExcelFileName] = useState('');
   const [activeCardMember, setActiveCardMember] = useState<LibraryMemberItem | null>(null);
 
+  // Print Customization States (Kertas F4/A4, Edit Tanggal Manual, Mode Lengkap/Ringkasan)
+  const [printPaperSize, setPrintPaperSize] = useState<'F4' | 'A4'>('F4');
+  const [printContentMode, setPrintContentMode] = useState<'full' | 'summary'>('full');
+  const [printManualDate, setPrintManualDate] = useState<string>(() => {
+    const loc = schoolConfig.kabupatenKota || 'Batang Hari';
+    const d = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    return `${loc}, ${d}`;
+  });
+  const [printNomorDokumen, setPrintNomorDokumen] = useState<string>(() => {
+    return `421.2/028/REKAP-ANGGOTA/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`;
+  });
+  const [isEditPrintDateOpen, setIsEditPrintDateOpen] = useState(false);
+  const [isEditNomorDokumenOpen, setIsEditNomorDokumenOpen] = useState(false);
+  const [tempPrintDate, setTempPrintDate] = useState('');
+  const [tempPrintNomor, setTempPrintNomor] = useState('');
+
   // Active member for Edit / Delete
   const [activeMember, setActiveMember] = useState<LibraryMemberItem | null>(null);
 
@@ -480,9 +496,337 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
     reader.readAsText(file);
   };
 
-  const kepalaSekolahName = formatOfficialNameWithDegree(schoolConfig.kepalaSekolah?.nama || 'Kepala Sekolah');
+  const rawKepsekNama = schoolConfig.kepalaSekolah?.nama || '';
+  const isDummyKepsek = !rawKepsekNama || /rahmat(\s*hidayat)?/i.test(rawKepsekNama);
+  const kepalaSekolahName = isDummyKepsek ? 'Kepala Sekolah' : formatOfficialNameWithDegree(rawKepsekNama);
+
   const pengelolaPerpus = schoolConfig.operatorProfiles?.PERPUS;
-  const pengelolaName = formatOfficialNameWithDegree(pengelolaPerpus?.nama || 'Pengelola Perpustakaan');
+  const rawPengelolaNama = pengelolaPerpus?.nama || '';
+  const isDummyPengelola = !rawPengelolaNama || /nurul(\s*hidayat|\s*hidayati)?/i.test(rawPengelolaNama) || /rahmat/i.test(rawPengelolaNama);
+  const pengelolaName = isDummyPengelola ? 'Pengelola Perpustakaan' : formatOfficialNameWithDegree(rawPengelolaNama);
+
+  // Fungsi Unduh Dokumen HTML Mandiri Standar Dinas Pendidikan
+  const handleDownloadMemberReportHtml = () => {
+    const isF4 = printPaperSize === 'F4';
+    const paperSizeCss = isF4 ? '215mm 330mm' : '210mm 297mm';
+    const paperWidth = isF4 ? '215mm' : '210mm';
+    const paperMinHeight = isF4 ? '330mm' : '297mm';
+
+    const membersHtmlRows = libraryMembers.map((m, idx) => {
+      const typeLabel = m.tipeAnggota === 'GURU' ? 'Pendidik (Guru)' : m.tipeAnggota === 'STAFF' ? 'Tenaga Kependidikan' : 'Peserta Didik (Siswa)';
+      const statusBadge = (m.status || 'aktif').toLowerCase() === 'aktif' ? 'Aktif' : (m.status || '').toLowerCase() === 'tamat' ? 'Tamat / Alumni' : 'Nonaktif';
+      return `
+        <tr>
+          <td style="text-align: center; font-weight: 600;">${idx + 1}</td>
+          <td style="font-family: monospace; font-size: 8pt; text-align: center;">${m.nomorAnggota || '-'}</td>
+          <td style="font-weight: 600;">${m.nama}</td>
+          <td>${typeLabel}</td>
+          <td>${m.kelasAtauJabatan || '-'}</td>
+          <td style="text-align: center; font-weight: bold;">${m.jenisKelamin || 'L'}</td>
+          <td style="font-family: monospace; font-size: 8pt;">${m.nomorIdentitas || '-'}</td>
+          <td style="text-align: center;">${statusBadge}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const fullHtml = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Laporan Rekapitulasi Anggota Perpustakaan - ${schoolConfig.namaSekolah}</title>
+  <style>
+    @page {
+      size: ${paperSizeCss};
+      margin-top: 1.5cm;
+      margin-bottom: 1.5cm;
+      margin-left: 2.0cm;
+      margin-right: 1.5cm;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 10.5pt;
+      line-height: 1.25;
+      color: #000;
+      background: #f1f5f9;
+    }
+    .page-container {
+      width: ${paperWidth};
+      min-height: ${paperMinHeight};
+      margin: 20px auto;
+      padding: 1.5cm 1.5cm 1.5cm 2.0cm;
+      background: #ffffff;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+    }
+    .kop-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 4px;
+    }
+    .kop-teks {
+      text-align: center;
+      vertical-align: middle;
+      padding: 0 10px;
+    }
+    .kop-1 { font-size: 11pt; font-weight: bold; text-transform: uppercase; line-height: 1.15; }
+    .kop-2 { font-size: 12pt; font-weight: bold; text-transform: uppercase; line-height: 1.2; }
+    .kop-3 { font-size: 14pt; font-weight: 800; text-transform: uppercase; margin: 2px 0; }
+    .kop-alamat { font-size: 8.5pt; font-style: italic; font-family: Arial, sans-serif; }
+    .kop-garis {
+      border-top: 2.5px solid #000;
+      border-bottom: 0.75px solid #000;
+      height: 4px;
+      margin: 5px 0 12px 0;
+    }
+    .doc-title {
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .doc-title h2 {
+      font-size: 12.5pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      text-decoration: underline;
+      margin: 0;
+    }
+    .doc-title .nomor {
+      font-size: 10pt;
+      font-family: Arial, sans-serif;
+      font-weight: 600;
+      margin-top: 3px;
+    }
+    .table-rekap, .table-full {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 14px;
+      font-size: 9.5pt;
+    }
+    .table-full { font-size: 8.5pt; }
+    .table-rekap th, .table-rekap td, .table-full th, .table-full td {
+      border: 1px solid #000;
+      padding: 4px 6px;
+      vertical-align: middle;
+    }
+    .table-full td { padding: 3px 5px; }
+    .table-rekap thead th, .table-full thead th {
+      background: #f1f5f9;
+      font-weight: bold;
+      text-align: center;
+      text-transform: uppercase;
+    }
+    .table-rekap tbody tr, .table-full tbody tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .signatures-wrap {
+      width: 100%;
+      margin-top: 20px;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .signatures-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    .signatures-table td {
+      width: 50%;
+      text-align: center;
+      vertical-align: top;
+      padding: 0 10px;
+    }
+    .sign-space { height: 75px; }
+    .sign-name {
+      font-weight: bold;
+      text-decoration: underline;
+      font-size: 11pt;
+    }
+    .sign-nip {
+      font-size: 9.5pt;
+      font-family: Arial, sans-serif;
+      margin-top: 2px;
+    }
+    .toolbar-screen {
+      position: sticky;
+      top: 0;
+      background: #0f172a;
+      color: #fff;
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: sans-serif;
+      z-index: 999;
+    }
+    .btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 12px;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-blue { background: #2563eb; color: #fff; }
+    @media print {
+      body { background: #fff !important; }
+      .no-print { display: none !important; }
+      .page-container {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar-screen no-print">
+    <div>
+      <strong>Laporan Resmi Anggota Perpustakaan</strong> · Format: ${isF4 ? 'Kertas F4 (Folio 215×330mm)' : 'Kertas A4 (210×297mm)'}
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn btn-blue" onclick="window.print()">Cetak / Simpan PDF</button>
+    </div>
+  </div>
+
+  <div class="page-container">
+    <table class="kop-table">
+      <tr>
+        <td class="kop-teks">
+          <div class="kop-1">${schoolConfig.pemerintahDaerah || 'PEMERINTAH KABUPATEN BATANG HARI'}</div>
+          <div class="kop-2">${schoolConfig.dinasPendidikan || 'DINAS PENDIDIKAN DAN KEBUDAYAAN'}</div>
+          <div class="kop-3">${schoolConfig.namaSekolah || 'SMP NEGERI SATU ATAP TELUK'}</div>
+          <div class="kop-alamat">${schoolConfig.alamat || 'Jalan Teluk RT. 15'}, ${schoolConfig.desaKecamatan || ''} ${schoolConfig.kabupatenKota || 'Batang Hari'}</div>
+        </td>
+      </tr>
+    </table>
+    <div class="kop-garis"></div>
+
+    <div class="doc-title">
+      <h2>LAPORAN REKAPITULASI JUMLAH & DATA ANGGOTA PERPUSTAKAAN SEKOLAH</h2>
+      <div class="nomor">Nomor: ${printNomorDokumen}</div>
+      <div style="font-size: 9.5pt; font-family: Arial, sans-serif; margin-top: 2px;">Tahun Ajaran ${new Date().getFullYear()} / ${new Date().getFullYear() + 1}</div>
+    </div>
+
+    <!-- Bagian Atas: Total Keseluruhan Anggota Pendidik, Kependidikan, dan Siswa -->
+    <div style="font-weight: bold; font-size: 10.5pt; margin-bottom: 6px; text-transform: uppercase;">
+      I. REKAPITULASI MATRIKS PEMUSTAKA PERPUSTAKAAN
+    </div>
+    <table class="table-rekap">
+      <thead>
+        <tr>
+          <th style="width: 35px;">No</th>
+          <th>Klasifikasi Pemustaka</th>
+          <th style="width: 110px;">Laki-laki (L)</th>
+          <th style="width: 110px;">Perempuan (P)</th>
+          <th style="width: 120px;">Jumlah Anggota</th>
+          <th style="width: 90px;">Rasio</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="text-align: center; font-weight: bold;">1</td>
+          <td style="font-weight: 600;">Pendidik (Guru Sekolah)</td>
+          <td style="text-align: center;">${guruLakiCount} orang</td>
+          <td style="text-align: center;">${guruPerempuanCount} orang</td>
+          <td style="text-align: center; font-weight: bold;">${totalGuru} orang</td>
+          <td style="text-align: center;">${grandTotal > 0 ? ((totalGuru / grandTotal) * 100).toFixed(1) : '0'}%</td>
+        </tr>
+        <tr>
+          <td style="text-align: center; font-weight: bold;">2</td>
+          <td style="font-weight: 600;">Tenaga Kependidikan (Staff / TU)</td>
+          <td style="text-align: center;">${staffLakiCount} orang</td>
+          <td style="text-align: center;">${staffPerempuanCount} orang</td>
+          <td style="text-align: center; font-weight: bold;">${totalStaff} orang</td>
+          <td style="text-align: center;">${grandTotal > 0 ? ((totalStaff / grandTotal) * 100).toFixed(1) : '0'}%</td>
+        </tr>
+        <tr>
+          <td style="text-align: center; font-weight: bold;">3</td>
+          <td style="font-weight: 600;">Peserta Didik (Siswa / Siswi)</td>
+          <td style="text-align: center;">${siswaLakiCount} orang</td>
+          <td style="text-align: center;">${siswaPerempuanCount} orang</td>
+          <td style="text-align: center; font-weight: bold;">${totalSiswa} orang</td>
+          <td style="text-align: center;">${grandTotal > 0 ? ((totalSiswa / grandTotal) * 100).toFixed(1) : '0'}%</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr style="background: #f8fafc; font-weight: bold;">
+          <td colspan="4" style="text-align: right; padding-right: 12px; text-transform: uppercase;">Total Keseluruhan Pemustaka Terdaftar:</td>
+          <td style="text-align: center; font-size: 11pt; color: #1e3a8a;">${grandTotal} Orang</td>
+          <td style="text-align: center;">100%</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    ${printContentMode === 'full' ? `
+    <!-- Bagian Bawah: Data Keseluruhan Anggota Perpustakaan -->
+    <div style="font-weight: bold; font-size: 10.5pt; margin-top: 14px; margin-bottom: 6px; text-transform: uppercase;">
+      II. DAFTAR KESELURUHAN ANGGOTA PERPUSTAKAAN SEKOLAH (${libraryMembers.length} PEMUSTAKA)
+    </div>
+    <table class="table-full">
+      <thead>
+        <tr>
+          <th style="width: 28px;">No</th>
+          <th style="width: 75px;">No. Anggota</th>
+          <th>Nama Lengkap Pemustaka</th>
+          <th style="width: 120px;">Kategori</th>
+          <th style="width: 100px;">Kelas / Jabatan</th>
+          <th style="width: 35px;">L/P</th>
+          <th style="width: 105px;">Nomor Identitas</th>
+          <th style="width: 65px;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${membersHtmlRows}
+      </tbody>
+    </table>
+    ` : ''}
+
+    <p style="text-align: justify; font-size: 9.5pt; margin: 10px 0;">
+      Demikian laporan rekapitulasi data keanggotaan perpustakaan ini disusun dan diverifikasi dengan sebenar-benarnya sebagai dokumen administrasi perpustakaan sekolah yang sah dan akuntabel.
+    </p>
+
+    <!-- Lembar Pengesahan Resmi -->
+    <div class="signatures-wrap">
+      <table class="signatures-table">
+        <tr>
+          <td>
+            <div>Mengetahui / Mengesahkan,</div>
+            <div style="font-weight: bold; margin-top: 2px;">Kepala Satuan Pendidikan</div>
+            <div class="sign-space"></div>
+            <div class="sign-name">${kepalaSekolahName}</div>
+            <div class="sign-nip">NIP. ${schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001'}</div>
+          </td>
+          <td>
+            <div>${printManualDate}</div>
+            <div style="font-weight: bold; margin-top: 2px;">Pengelola Perpustakaan</div>
+            <div class="sign-space"></div>
+            <div class="sign-name">${pengelolaName}</div>
+            <div class="sign-nip">NIPPK. ${pengelolaPerpus?.nip || '19970530 202521 1 019'}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Laporan_Rekap_Anggota_Perpustakaan_${printPaperSize}_${new Date().toISOString().slice(0, 10)}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-6">
@@ -1538,144 +1882,446 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
         </div>
       )}
 
-      {/* MODAL 6: CETAK REKAPITULASI RESMI ANGGOTA PERPUSTAKAAN */}
+      {/* MODAL 6: CETAK REKAPITULASI RESMI ANGGOTA PERPUSTAKAAN (STANDAR DINAS PENDIDIKAN - F4 / A4) */}
       {isPrintModalOpen && (
         <div 
-          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4"
+          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-1 sm:p-4 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsPrintModalOpen(false);
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col animate-scaleIn relative">
-            {/* Modal Controls Top Bar */}
-            <div className="shrink-0 p-4 bg-slate-900 text-white flex items-center justify-between no-print border-b border-slate-800">
+          {/* Dynamic Print Style for F4 vs A4 */}
+          <style dangerouslySetInnerHTML={{
+            __html: `
+              @media print {
+                @page {
+                  size: ${printPaperSize === 'F4' ? '215mm 330mm' : '210mm 297mm'} !important;
+                  margin-top: 1.5cm !important;
+                  margin-bottom: 1.5cm !important;
+                  margin-left: 2.0cm !important;
+                  margin-right: 1.5cm !important;
+                }
+                body {
+                  background: #ffffff !important;
+                  color: #000000 !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
+                .printable-member-document {
+                  width: 100% !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  box-shadow: none !important;
+                }
+                .avoid-break {
+                  page-break-inside: avoid !important;
+                  break-inside: avoid !important;
+                }
+                table tr {
+                  page-break-inside: avoid !important;
+                  break-inside: avoid !important;
+                }
+              }
+            `
+          }} />
+
+          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[94vh] overflow-hidden flex flex-col animate-scaleIn relative">
+            {/* Modal Controls Top Bar (No-Print) */}
+            <div className="shrink-0 p-3.5 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 no-print border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-blue-400" />
-                <h3 className="font-bold text-sm">Pratinjau Rekapitulasi Anggota Perpustakaan Sekolah</h3>
+                <div>
+                  <h3 className="font-bold text-xs sm:text-sm text-white">Cetak Dokumen Resmi Rekapitulasi Anggota Perpustakaan</h3>
+                  <span className="text-[10px] text-slate-400 font-mono">Format Naskah Dinas Satuan Pendidikan</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Action Toolbar */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* 1. Pemilih Ukuran Kertas F4 / A4 */}
+                <div className="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setPrintPaperSize('F4')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
+                      printPaperSize === 'F4' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-300 hover:text-white'
+                    }`}
+                    title="Kertas Folio F4 (215mm × 330mm)"
+                  >
+                    Kertas F4
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintPaperSize('A4')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition ${
+                      printPaperSize === 'A4' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-300 hover:text-white'
+                    }`}
+                    title="Kertas Standar A4 (210mm × 297mm)"
+                  >
+                    Kertas A4
+                  </button>
+                </div>
+
+                {/* 2. Pilihan Mode Tampilan Cetak (Lengkap vs Ringkasan Saja) */}
+                <div className="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setPrintContentMode('full')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition flex items-center gap-1 ${
+                      printContentMode === 'full' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-300 hover:text-white'
+                    }`}
+                    title="Bagian atas matriks total pemustaka + bagian bawah tabel keseluruhan anggota"
+                  >
+                    <span>Lengkap (+ Data Keseluruhan)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintContentMode('summary')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition flex items-center gap-1 ${
+                      printContentMode === 'summary' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-300 hover:text-white'
+                    }`}
+                    title="Hanya ringkasan matriks pemustaka 1 halaman"
+                  >
+                    <span>Ringkasan Saja</span>
+                  </button>
+                </div>
+
+                {/* 3. Tombol Edit Tanggal Pengesahan Manual */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempPrintDate(printManualDate);
+                    setIsEditPrintDateOpen(true);
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                  title="Sesuaikan tempat dan tanggal tanda tangan pengesahan"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Edit Tanggal</span>
+                </button>
+
+                {/* 4. Tombol Unduh File HTML Mandiri */}
+                <button
+                  type="button"
+                  onClick={handleDownloadMemberReportHtml}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
+                  title="Unduh dokumen lengkap sebagai file .html mandiri"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Unduh HTML</span>
+                </button>
+
+                {/* 5. Tombol Cetak / PDF */}
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow cursor-pointer"
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
+                  title="Buka dialog cetak browser atau simpan PDF"
                 >
-                  <Printer className="w-4 h-4" />
-                  <span>Cetak / Simpan PDF</span>
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Cetak / PDF</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setIsPrintModalOpen(false)}
-                  className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                  title="Tutup pratinjau"
                 >
                   <X className="w-4 h-4" />
-                  <span>Tutup</span>
                 </button>
               </div>
             </div>
 
-            {/* Printable Sheet */}
-            <div className="flex-1 overflow-y-auto p-8 sm:p-12 text-slate-900 bg-white font-serif leading-relaxed text-xs sm:text-sm print:p-0 print:overflow-visible">
-              {/* Kop Surat Resmi dengan Logo Kiri & Kanan */}
-              <KopSurat config={schoolConfig} isPrintVersion={true} className="mb-4" />
-
-              {/* Document Title */}
-              <div className="text-center mb-6 space-y-1">
-                <h4 className="font-bold text-sm sm:text-base uppercase tracking-wider underline">
-                  LAPORAN REKAPITULASI JUMLAH ANGGOTA PERPUSTAKAAN SEKOLAH
-                </h4>
-                <div className="text-xs font-mono">
-                  Tahun Ajaran {new Date().getFullYear()} / {new Date().getFullYear() + 1}
+            {/* Quick Edit Tanggal Bar (Jika Aktif) */}
+            {isEditPrintDateOpen && (
+              <div className="shrink-0 p-3 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-2 no-print">
+                <div className="flex items-center gap-2 flex-1 max-w-xl">
+                  <span className="text-xs font-bold text-amber-900 shrink-0">Tempat & Tanggal Pengesahan:</span>
+                  <input
+                    type="text"
+                    value={tempPrintDate}
+                    onChange={(e) => setTempPrintDate(e.target.value)}
+                    placeholder="Contoh: Batang Hari, 30 September 2026"
+                    className="flex-1 px-3 py-1 bg-white border border-amber-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrintManualDate(tempPrintDate.trim() || `${schoolConfig.kabupatenKota || 'Batang Hari'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`);
+                      setIsEditPrintDateOpen(false);
+                    }}
+                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg"
+                  >
+                    Simpan Tanggal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditPrintDateOpen(false)}
+                    className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg"
+                  >
+                    Batal
+                  </button>
                 </div>
               </div>
+            )}
 
-              {/* Aggregate Table */}
-              <div className="mb-6 border border-slate-300 rounded-lg overflow-hidden">
-                <table className="w-full text-left font-sans text-xs">
-                  <thead className="bg-slate-100 font-bold border-b border-slate-300">
-                    <tr>
-                      <th className="p-2.5 w-10 text-center border-r border-slate-300">No</th>
-                      <th className="p-2.5 border-r border-slate-300">Klasifikasi Pemustaka</th>
-                      <th className="p-2.5 border-r border-slate-300 text-center">Laki-laki (L)</th>
-                      <th className="p-2.5 border-r border-slate-300 text-center">Perempuan (P)</th>
-                      <th className="p-2.5 text-center">Jumlah Anggota</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    <tr>
-                      <td className="p-2 text-center border-r border-slate-200">1</td>
-                      <td className="p-2 font-semibold border-r border-slate-200">Guru (Pendidik)</td>
-                      <td className="p-2 text-center border-r border-slate-200 font-medium">{guruLakiCount} orang</td>
-                      <td className="p-2 text-center border-r border-slate-200 font-medium">{guruPerempuanCount} orang</td>
-                      <td className="p-2 text-center font-bold">{totalGuru} orang</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 text-center border-r border-slate-200">2</td>
-                      <td className="p-2 font-semibold border-r border-slate-200">Tenaga Kependidikan (Staff / TU)</td>
-                      <td className="p-2 text-center border-r border-slate-200 font-medium">{staffLakiCount} orang</td>
-                      <td className="p-2 text-center border-r border-slate-200 font-medium">{staffPerempuanCount} orang</td>
-                      <td className="p-2 text-center font-bold">{totalStaff} orang</td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 text-center border-r border-slate-200">3</td>
-                      <td className="p-2 font-semibold border-r border-slate-200">Peserta Didik (Siswa)</td>
-                      <td className="p-2 text-center border-r border-slate-200 font-medium">{siswaLakiCount} orang</td>
-                      <td className="p-2 text-center border-r border-slate-200 font-medium">{siswaPerempuanCount} orang</td>
-                      <td className="p-2 text-center font-bold">{totalSiswa} orang</td>
-                    </tr>
-                  </tbody>
-                  <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-300">
-                    <tr>
-                      <td colSpan={4} className="p-2 text-right border-r border-slate-300 uppercase">
-                        Total Seluruh Pemustaka Terdaftar:
-                      </td>
-                      <td className="p-2 text-center text-blue-900 text-sm">
-                        {grandTotal} orang
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+            {/* Quick Edit Nomor Surat Bar (Jika Aktif) */}
+            {isEditNomorDokumenOpen && (
+              <div className="shrink-0 p-3 bg-blue-50 border-b border-blue-200 flex flex-wrap items-center justify-between gap-2 no-print">
+                <div className="flex items-center gap-2 flex-1 max-w-xl">
+                  <span className="text-xs font-bold text-blue-900 shrink-0">Nomor Dokumen / Surat:</span>
+                  <input
+                    type="text"
+                    value={tempPrintNomor}
+                    onChange={(e) => setTempPrintNomor(e.target.value)}
+                    placeholder="Contoh: 421.2/028/REKAP-ANGGOTA/2026"
+                    className="flex-1 px-3 py-1 bg-white border border-blue-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrintNomorDokumen(tempPrintNomor.trim() || `421.2/028/REKAP-ANGGOTA/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`);
+                      setIsEditNomorDokumenOpen(false);
+                    }}
+                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg"
+                  >
+                    Simpan Nomor
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditNomorDokumenOpen(false)}
+                    className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg"
+                  >
+                    Batal
+                  </button>
+                </div>
               </div>
+            )}
 
-              {/* Signatures Sejajar Sesuai Permintaan User: KEPALA SEKOLAH DI KIRI, PENGELOLA PERPUSTAKAAN DI KANAN */}
-              <div className="pt-6 grid grid-cols-2 gap-8 text-center font-sans text-xs">
-                {/* Sisi KIRI: Kepala Sekolah */}
-                <div className="flex flex-col items-center">
-                  <div className="text-slate-600">Mengetahui / Mengesahkan,</div>
-                  <div className="font-semibold text-slate-800 mt-0.5">Kepala Sekolah</div>
-                  <div className="h-20 flex items-center justify-center">
-                    {/* Ruang tanda tangan rapi */}
+            {/* Printable Document Container (Mendukung F4 215mm & A4 210mm) */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-100 flex justify-center print:bg-white print:p-0 print:overflow-visible">
+              <div 
+                className="printable-member-document bg-white text-slate-900 shadow-xl print:shadow-none p-8 sm:p-12 transition-all font-serif"
+                style={{
+                  width: printPaperSize === 'F4' ? '215mm' : '210mm',
+                  minHeight: printPaperSize === 'F4' ? '330mm' : '297mm'
+                }}
+              >
+                {/* 1. Kop Surat Resmi dengan Logo Kiri & Kanan */}
+                <KopSurat config={schoolConfig} isPrintVersion={true} className="mb-2" />
+
+                {/* 2. Judul Dokumen Resmi & Nomor Dokumen */}
+                <div className="text-center my-4 space-y-1">
+                  <h4 className="font-bold text-sm sm:text-base uppercase tracking-wider underline">
+                    LAPORAN REKAPITULASI JUMLAH & DATA ANGGOTA PERPUSTAKAAN SEKOLAH
+                  </h4>
+                  <div className="text-xs font-mono font-semibold text-slate-800 flex items-center justify-center gap-2">
+                    <span>Nomor: {printNomorDokumen}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempPrintNomor(printNomorDokumen);
+                        setIsEditNomorDokumenOpen(true);
+                      }}
+                      className="text-blue-600 hover:text-blue-800 text-[10px] underline no-print cursor-pointer"
+                      title="Edit nomor dokumen"
+                    >
+                      (Ubah)
+                    </button>
                   </div>
-                  <div className="font-bold text-slate-900 underline text-xs">
-                    {kepalaSekolahName}
-                  </div>
-                  <div className="text-[11px] text-slate-600 mt-0.5">
-                    NIP: {schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001'}
+                  <div className="text-xs text-slate-600 font-sans">
+                    Tahun Ajaran {new Date().getFullYear()} / {new Date().getFullYear() + 1}
                   </div>
                 </div>
 
-                {/* Sisi KANAN: Pengelola Perpustakaan */}
-                <div className="flex flex-col items-center">
-                  <div className="text-slate-600">
-                    {schoolConfig.kabupatenKota || 'Sekolah'}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                {/* 3. BAGIAN ATAS: REKAPITULASI MATRIKS PEMUSTAKA SEKOLAH */}
+                <div className="mb-6 avoid-break">
+                  <div className="font-bold font-sans text-xs uppercase tracking-wide text-slate-800 mb-2 flex items-center justify-between border-b pb-1">
+                    <span>I. REKAPITULASI JUMLAH ANGGOTA PEMUSTAKA SEKOLAH</span>
+                    <span className="text-[10px] text-slate-500 font-normal">Klasifikasi Berdasarkan Kategori & Jenis Kelamin</span>
                   </div>
-                  <div className="font-semibold text-slate-800 mt-0.5">Pengelola Perpustakaan</div>
-                  <div className="h-20 flex items-center justify-center">
-                    {/* Ruang tanda tangan rapi */}
-                  </div>
-                  <div className="font-bold text-slate-900 underline text-xs">
-                    {pengelolaName}
-                  </div>
-                  <div className="text-[11px] text-slate-600 mt-0.5">
-                    NIP: {pengelolaPerpus?.nip || '19880415 201502 2 001'}
+
+                  <div className="border border-slate-400 rounded-md overflow-hidden">
+                    <table className="w-full text-left font-sans text-xs border-collapse">
+                      <thead className="bg-slate-100 font-bold border-b border-slate-400">
+                        <tr>
+                          <th className="p-2 w-10 text-center border-r border-slate-300">No</th>
+                          <th className="p-2 border-r border-slate-300">Klasifikasi Pemustaka</th>
+                          <th className="p-2 w-28 text-center border-r border-slate-300">Laki-laki (L)</th>
+                          <th className="p-2 w-28 text-center border-r border-slate-300">Perempuan (P)</th>
+                          <th className="p-2 w-32 text-center border-r border-slate-300">Total Anggota</th>
+                          <th className="p-2 w-20 text-center">Rasio</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-300">
+                        <tr>
+                          <td className="p-2 text-center border-r border-slate-300 font-semibold">1</td>
+                          <td className="p-2 font-semibold border-r border-slate-300">Pendidik (Guru Sekolah)</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-medium">{guruLakiCount} orang</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-medium">{guruPerempuanCount} orang</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-bold text-slate-900">{totalGuru} orang</td>
+                          <td className="p-2 text-center font-medium">{grandTotal > 0 ? ((totalGuru / grandTotal) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr>
+                          <td className="p-2 text-center border-r border-slate-300 font-semibold">2</td>
+                          <td className="p-2 font-semibold border-r border-slate-300">Tenaga Kependidikan (Staff / TU)</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-medium">{staffLakiCount} orang</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-medium">{staffPerempuanCount} orang</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-bold text-slate-900">{totalStaff} orang</td>
+                          <td className="p-2 text-center font-medium">{grandTotal > 0 ? ((totalStaff / grandTotal) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                        <tr>
+                          <td className="p-2 text-center border-r border-slate-300 font-semibold">3</td>
+                          <td className="p-2 font-semibold border-r border-slate-300">Peserta Didik (Siswa / Siswi)</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-medium">{siswaLakiCount} orang</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-medium">{siswaPerempuanCount} orang</td>
+                          <td className="p-2 text-center border-r border-slate-300 font-bold text-slate-900">{totalSiswa} orang</td>
+                          <td className="p-2 text-center font-medium">{grandTotal > 0 ? ((totalSiswa / grandTotal) * 100).toFixed(1) : 0}%</td>
+                        </tr>
+                      </tbody>
+                      <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-400">
+                        <tr>
+                          <td colSpan={4} className="p-2 text-right border-r border-slate-300 uppercase tracking-wide">
+                            Total Keseluruhan Pemustaka Terdaftar:
+                          </td>
+                          <td className="p-2 text-center text-blue-900 font-black text-sm border-r border-slate-300">
+                            {grandTotal} Orang
+                          </td>
+                          <td className="p-2 text-center text-blue-900 font-black">
+                            100%
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 </div>
+
+                {/* 4. BAGIAN BAWAH: DATA KESELURUHAN ANGGOTA PERPUSTAKAAN (JIKA MODE LENGKAP DIPILIH) */}
+                {printContentMode === 'full' && (
+                  <div className="mb-6">
+                    <div className="font-bold font-sans text-xs uppercase tracking-wide text-slate-800 mb-2 flex items-center justify-between border-b pb-1">
+                      <span>II. DAFTAR KESELURUHAN ANGGOTA PERPUSTAKAAN SEKOLAH</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Total: {libraryMembers.length} Orang Terdaftar</span>
+                    </div>
+
+                    <div className="border border-slate-400 rounded-md overflow-hidden">
+                      <table className="w-full text-left font-sans text-[11px] leading-tight border-collapse">
+                        <thead className="bg-slate-100 font-bold border-b border-slate-400 text-[10px] uppercase">
+                          <tr>
+                            <th className="p-1.5 w-7 text-center border-r border-slate-300">No</th>
+                            <th className="p-1.5 w-20 text-center border-r border-slate-300">No. Anggota</th>
+                            <th className="p-1.5 border-r border-slate-300">Nama Pemustaka</th>
+                            <th className="p-1.5 w-28 border-r border-slate-300">Kategori</th>
+                            <th className="p-1.5 w-24 border-r border-slate-300">Kelas / Jabatan</th>
+                            <th className="p-1.5 w-9 text-center border-r border-slate-300">L/P</th>
+                            <th className="p-1.5 w-24 border-r border-slate-300">Identitas</th>
+                            <th className="p-1.5 w-16 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {libraryMembers.map((m, idx) => {
+                            const typeLabel = m.tipeAnggota === 'GURU' ? 'Pendidik' : m.tipeAnggota === 'STAFF' ? 'Tenaga Kependidikan' : 'Peserta Didik';
+                            const statusStr = (m.status || 'aktif').toLowerCase();
+                            return (
+                              <tr key={m.id || idx} className="hover:bg-slate-50 avoid-break">
+                                <td className="p-1.5 text-center border-r border-slate-200 font-semibold">{idx + 1}</td>
+                                <td className="p-1.5 text-center font-mono text-[9px] border-r border-slate-200">{m.nomorAnggota || '-'}</td>
+                                <td className="p-1.5 font-bold text-slate-900 border-r border-slate-200">{m.nama}</td>
+                                <td className="p-1.5 border-r border-slate-200 text-slate-700">{typeLabel}</td>
+                                <td className="p-1.5 border-r border-slate-200 text-slate-600">{m.kelasAtauJabatan || '-'}</td>
+                                <td className="p-1.5 text-center font-bold border-r border-slate-200">{m.jenisKelamin || 'L'}</td>
+                                <td className="p-1.5 font-mono text-[9.5px] border-r border-slate-200">{m.nomorIdentitas || '-'}</td>
+                                <td className="p-1.5 text-center">
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                    statusStr === 'aktif' ? 'text-emerald-700 bg-emerald-50' : 'text-slate-600 bg-slate-100'
+                                  }`}>
+                                    {statusStr === 'aktif' ? 'Aktif' : statusStr === 'tamat' ? 'Alumni' : 'Nonaktif'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-justify font-serif text-xs leading-relaxed my-4">
+                  Demikian laporan rekapitulasi data keanggotaan perpustakaan sekolah ini disusun dan disahkan dengan sebenar-benarnya sebagai wujud tertib administrasi dan keterbukaan layanan pemustaka di lingkungan satuan pendidikan.
+                </p>
+
+                {/* 5. LEMBAR TANDA TANGAN PENGESAHAN RESMI (AVOID BREAK) */}
+                <div className="pt-6 grid grid-cols-2 gap-8 text-center font-sans text-xs avoid-break">
+                  {/* Sisi KIRI: Kepala Satuan Pendidikan */}
+                  <div className="flex flex-col items-center">
+                    <div className="text-slate-600">Mengetahui / Mengesahkan,</div>
+                    <div className="font-semibold text-slate-800 mt-0.5">Kepala Satuan Pendidikan</div>
+                    
+                    {/* Ruang Bersih Tanda Tangan Fisik (Tinggi 75px) */}
+                    <div className="h-20 w-full flex items-center justify-center"></div>
+
+                    <div className="font-bold text-slate-900 underline text-xs">
+                      {kepalaSekolahName}
+                    </div>
+                    <div className="text-[11px] text-slate-600 mt-0.5 font-mono">
+                      NIP. {schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001'}
+                    </div>
+                  </div>
+
+                  {/* Sisi KANAN: Pengelola Perpustakaan */}
+                  <div className="flex flex-col items-center">
+                    <div className="text-slate-700 font-medium">
+                      {printManualDate}
+                    </div>
+                    <div className="font-semibold text-slate-800 mt-0.5">Pengelola Perpustakaan</div>
+
+                    {/* Ruang Bersih Tanda Tangan Fisik (Tinggi 75px) */}
+                    <div className="h-20 w-full flex items-center justify-center"></div>
+
+                    <div className="font-bold text-slate-900 underline text-xs">
+                      {pengelolaName}
+                    </div>
+                    <div className="text-[11px] text-slate-600 mt-0.5 font-mono">
+                      NIPPK. {pengelolaPerpus?.nip || '19970530 202521 1 019'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Catatan Kaki Kedinasan */}
+                <div className="mt-8 pt-3 border-t border-slate-300 text-[9px] text-slate-500 font-sans italic text-center avoid-break">
+                  * Dokumen kedinasan resmi diterbitkan oleh Unit Pengelola Perpustakaan {schoolConfig.namaSekolah}.
+                </div>
+
               </div>
             </div>
 
-            {/* Sticky Bottom Footer (no-print) */}
+            {/* Modal Bottom Bar (No-Print) */}
             <div className="shrink-0 p-3 bg-slate-100 border-t border-slate-300 flex items-center justify-between no-print">
-              <span className="text-xs text-slate-600 font-medium">Rekapitulasi Anggota Siap Cetak</span>
+              <div className="flex items-center gap-2 text-xs text-slate-700">
+                <span className="font-bold">Ukuran Kertas:</span>
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-900 font-mono font-bold rounded">
+                  {printPaperSize === 'F4' ? 'Folio F4 (215×330mm)' : 'A4 (210×297mm)'}
+                </span>
+                <span className="mx-1 text-slate-400">·</span>
+                <span>Mode: <strong>{printContentMode === 'full' ? 'Lengkap (Matriks + Seluruh Anggota)' : 'Ringkasan Matriks Saja'}</strong></span>
+              </div>
+
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadMemberReportHtml}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Unduh Dokumen HTML</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -1687,7 +2333,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                 <button
                   type="button"
                   onClick={() => setIsPrintModalOpen(false)}
-                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                   <span>Tutup</span>

@@ -23,9 +23,10 @@ import {
   Bot,
   Database
 } from 'lucide-react';
-import { LogoKabupatenDefault } from './KopSurat';
 import { initialSchoolConfig } from '../../data/initialData';
 import { AiAssistantModal } from './AiAssistantModal';
+import { SecretAiGeneratorModal } from './SecretAiGeneratorModal';
+import { LogoKabupatenDefault } from './KopSurat';
 
 export const Header: React.FC = () => {
   const { 
@@ -53,6 +54,7 @@ export const Header: React.FC = () => {
   const [newPinInput, setNewPinInput] = useState('');
   const [pinChangeNotice, setPinChangeNotice] = useState<string | null>(null);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
+  const [isSecretAiOpen, setIsSecretAiOpen] = useState(false);
 
   if (!currentRole) return null;
 
@@ -245,6 +247,17 @@ export const Header: React.FC = () => {
               >
                 <Bot className="w-3.5 h-3.5 text-amber-300" />
                 <span className="hidden sm:inline">Asisten AI</span>
+              </button>
+
+              {/* Fitur Kecerdasan Tersembunyi (Akses Khusus: ARIF SETIAWAN) */}
+              <button
+                type="button"
+                onClick={() => setIsSecretAiOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-black text-amber-950 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 border border-amber-500/40 rounded-lg transition-all shadow-xs cursor-pointer"
+                title="Kecerdasan Tersembunyi: Generator Instan Lapor Bulanan & Rekap Tugas Operasional (Otorisasi: ARIF SETIAWAN)"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-900 animate-pulse" />
+                <span className="hidden md:inline">Kecerdasan Tersembunyi</span>
               </button>
 
               {/* Settings Button */}
@@ -483,6 +496,18 @@ export const Header: React.FC = () => {
           isOpen={isAiAssistantOpen}
           onClose={() => setIsAiAssistantOpen(false)}
           initialRole={currentRole}
+        />
+      )}
+
+      {/* Secret AI Generator Modal (Otorisasi: ARIF SETIAWAN) */}
+      {isSecretAiOpen && (
+        <SecretAiGeneratorModal
+          isOpen={isSecretAiOpen}
+          onClose={() => setIsSecretAiOpen(false)}
+          defaultRole={currentRole}
+          onOpenReport={(m, y, r) => {
+            setActiveNavTab('monthly');
+          }}
         />
       )}
     </>
