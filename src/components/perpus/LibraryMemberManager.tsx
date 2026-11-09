@@ -569,6 +569,16 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
       border-collapse: collapse;
       margin-bottom: 4px;
     }
+    .kop-logo {
+      width: 75px;
+      vertical-align: middle;
+      text-align: center;
+    }
+    .kop-logo img, .kop-logo svg {
+      max-width: 72px;
+      max-height: 72px;
+      object-fit: contain;
+    }
     .kop-teks {
       text-align: center;
       vertical-align: middle;
@@ -698,11 +708,39 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
   <div class="page-container">
     <table class="kop-table">
       <tr>
+        <td class="kop-logo">
+          ${(schoolConfig.logoKopKiri || schoolConfig.logoKabupatenUrl) ? `
+            <img src="${schoolConfig.logoKopKiri || schoolConfig.logoKabupatenUrl}" alt="Logo Kiri" style="max-height: 75px; max-width: 75px; object-fit: contain;">
+          ` : `
+            <svg viewBox="0 0 120 140" width="65" height="75" xmlns="http://www.w3.org/2000/svg">
+              <path d="M60 4 C95 4, 114 15, 114 42 C114 85, 78 122, 60 136 C42 122, 6 85, 6 42 C6 15, 25 4, 60 4 Z" fill="#1e3a8a" stroke="#d97706" stroke-width="3.5"/>
+              <polygon points="60,18 63,27 72,27 65,33 67,42 60,37 53,42 55,33 48,27 57,27" fill="#fde047"/>
+              <path d="M32 50 C26 70, 36 96, 60 108" fill="none" stroke="#fbbf24" stroke-width="3" stroke-dasharray="4 2"/>
+              <path d="M88 50 C94 70, 84 96, 60 108" fill="none" stroke="#fbbf24" stroke-width="3" stroke-dasharray="4 2"/>
+              <polygon points="60,52 40,82 80,82" fill="#22c55e"/>
+              <path d="M28 112 Q60 106 92 112 L88 122 Q60 116 32 122 Z" fill="#b91c1c"/>
+              <text x="60" y="119" text-anchor="middle" font-size="6.5" font-weight="bold" fill="#ffffff" font-family="sans-serif">PEMDA</text>
+            </svg>
+          `}
+        </td>
         <td class="kop-teks">
           <div class="kop-1">${schoolConfig.pemerintahDaerah || 'PEMERINTAH KABUPATEN BATANG HARI'}</div>
           <div class="kop-2">${schoolConfig.dinasPendidikan || 'DINAS PENDIDIKAN DAN KEBUDAYAAN'}</div>
           <div class="kop-3">${schoolConfig.namaSekolah || 'SMP NEGERI SATU ATAP TELUK'}</div>
           <div class="kop-alamat">${schoolConfig.alamat || 'Jalan Teluk RT. 15'}, ${schoolConfig.desaKecamatan || ''} ${schoolConfig.kabupatenKota || 'Batang Hari'}</div>
+          ${(schoolConfig.npsn || schoolConfig.nss) ? `<div style="font-size: 8pt; font-family: Arial, sans-serif; margin-top: 2px;">NPSN: ${schoolConfig.npsn || '-'} · NSS: ${schoolConfig.nss || '-'}</div>` : ''}
+        </td>
+        <td class="kop-logo">
+          ${(schoolConfig.logoKopKanan || schoolConfig.logoSekolahUrl) ? `
+            <img src="${schoolConfig.logoKopKanan || schoolConfig.logoSekolahUrl}" alt="Logo Kanan" style="max-height: 75px; max-width: 75px; object-fit: contain;">
+          ` : `
+            <svg viewBox="0 0 100 100" width="65" height="65" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="46" fill="#0284c7" stroke="#fbbf24" stroke-width="3"/>
+              <path d="M50 16 L22 36 L22 42 L50 62 L78 42 L78 36 Z" fill="#fbbf24"/>
+              <path d="M50 62 L32 76 L32 82 L50 72 L68 82 L68 76 Z" fill="#ffffff"/>
+              <circle cx="50" cy="40" r="7" fill="#dc2626"/>
+            </svg>
+          `}
         </td>
       </tr>
     </table>

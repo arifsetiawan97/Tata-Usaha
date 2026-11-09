@@ -59,14 +59,15 @@
       margin-bottom: 4px;
     }
 
-    .kop-logo-kiri {
+    .kop-logo-kiri, .kop-logo-kanan {
       display: table-cell;
       width: 75px;
       vertical-align: middle;
       text-align: center;
     }
 
-    .kop-logo-kiri svg, .kop-logo-kiri img {
+    .kop-logo-kiri svg, .kop-logo-kiri img,
+    .kop-logo-kanan svg, .kop-logo-kanan img {
       width: 68px;
       height: 68px;
       object-fit: contain;
@@ -467,27 +468,45 @@
        ======================================================================= -->
   <main class="page-container" id="printableDocument">
 
-    <!-- 1. KOP SURAT RESMI KEDINASAN -->
+    <!-- 1. KOP SURAT RESMI KEDINASAN (LENGKAP DUA LOGO: KIRI & KANAN) -->
     <div class="kop-surat">
+      <!-- Logo Kiri: Lambang Pemda / Daerah -->
       <div class="kop-logo-kiri">
-        <!-- Logo Tut Wuri Handayani / Lambang Pendidikan (Inline Vector Tajam) -->
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="50" cy="50" r="46" fill="#1e3a8a" stroke="#d97706" stroke-width="3"/>
-          <circle cx="50" cy="50" r="41" fill="#2563eb"/>
-          <!-- Sayap & Buku Pendidikan -->
-          <path d="M50 20 L62 42 L82 45 L66 58 L71 78 L50 67 L29 78 L34 58 L18 45 L38 42 Z" fill="#fbbf24"/>
-          <path d="M25 65 C35 55, 45 60, 50 68 C55 60, 65 55, 75 65 C65 72, 55 70, 50 78 C45 70, 35 72, 25 65 Z" fill="#ffffff"/>
-          <circle cx="50" cy="38" r="6" fill="#ffffff"/>
-          <!-- Api Obor Belajar -->
-          <path d="M50 24 Q53 30 50 34 Q47 30 50 24 Z" fill="#ef4444"/>
+        <svg viewBox="0 0 120 140" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="shieldGradF4" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1e3a8a" />
+              <stop offset="100%" stop-color="#172554" />
+            </linearGradient>
+          </defs>
+          <path d="M60 4 C95 4, 114 15, 114 42 C114 85, 78 122, 60 136 C42 122, 6 85, 6 42 C6 15, 25 4, 60 4 Z" fill="url(#shieldGradF4)" stroke="#d97706" stroke-width="3.5" />
+          <polygon points="60,18 63,27 72,27 65,33 67,42 60,37 53,42 55,33 48,27 57,27" fill="#fde047" stroke="#b45309" stroke-width="0.8" />
+          <path d="M32 50 C26 70, 36 96, 60 108" fill="none" stroke="#fbbf24" stroke-width="3" stroke-dasharray="4 2" />
+          <path d="M88 50 C94 70, 84 96, 60 108" fill="none" stroke="#fbbf24" stroke-width="3" stroke-dasharray="4 2" />
+          <polygon points="60,52 40,82 80,82" fill="#22c55e" opacity="0.9" />
+          <path d="M35 88 Q47 84 60 88 T85 88" stroke="#38bdf8" stroke-width="2.5" fill="none" />
+          <path d="M28 112 Q60 106 92 112 L88 122 Q60 116 32 122 Z" fill="#b91c1c" stroke="#fef08a" stroke-width="1" />
+          <text x="60" y="119" text-anchor="middle" font-size="6.5" font-weight="bold" fill="#ffffff" font-family="sans-serif">PEMDA</text>
         </svg>
       </div>
+
+      <!-- Teks Tengah: Identitas Lembaga Dinas -->
       <div class="kop-teks">
         <div class="kop-instansi-1">Pemerintah Kabupaten Batang Hari</div>
         <div class="kop-instansi-2">Dinas Pendidikan dan Kebudayaan</div>
         <div class="kop-sekolah">SMP Negeri Satu Atap Teluk</div>
         <div class="kop-alamat">Jalan Teluk RT. 15, Desa Teluk, Kec. Pemayung, Kab. Batang Hari - Jambi 36657</div>
         <div class="kop-kontak">NPSN: 20202819 · NSS: 201020201004 · Pos-el: smpsatap.teluk@gmail.com</div>
+      </div>
+
+      <!-- Logo Kanan: Tut Wuri Handayani / Lambang Kemendikbudristek -->
+      <div class="kop-logo-kanan">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="46" fill="#0284c7" stroke="#fbbf24" stroke-width="3"/>
+          <path d="M50 16 L22 36 L22 42 L50 62 L78 42 L78 36 Z" fill="#fbbf24"/>
+          <path d="M50 62 L32 76 L32 82 L50 72 L68 82 L68 76 Z" fill="#ffffff"/>
+          <circle cx="50" cy="40" r="7" fill="#dc2626"/>
+        </svg>
       </div>
     </div>
 

@@ -25,8 +25,17 @@ import {
   FlaskConical,
   Info,
   ChevronRight,
-  ArrowRight
+  ChevronDown,
+  ArrowRight,
+  Ban,
+  CalendarDays,
+  SlidersHorizontal
 } from 'lucide-react';
+import { 
+  buildMonthCalendarDays, 
+  checkIndonesianHoliday, 
+  DayCalendarInfo 
+} from '../../utils/holidayHelper';
 
 interface SecretAiGeneratorModalProps {
   isOpen: boolean;
@@ -35,7 +44,9 @@ interface SecretAiGeneratorModalProps {
   onOpenReport?: (month: number, year: number, role: RoleType) => void;
 }
 
-interface EditableTaskTemplate {
+export type ScheduleMode = 'every_workday' | 'specific_days' | 'weekly_rotation';
+
+export interface EditableTaskTemplate {
   id: string;
   enabled: boolean;
   title: string;
@@ -48,6 +59,10 @@ interface EditableTaskTemplate {
   baseTimeEnd: string;   // HH:MM
   isTimeRandomized: boolean; // acak otomatis
   jitterMinutes: number; // toleransi acak (+/- menit)
+  // Pengaturan Jadwal Hari Kerja Mingguan
+  scheduleMode: ScheduleMode;
+  specificDays?: number[]; // 1: Sen, 2: Sel, 3: Rab, 4: Kam, 5: Jum, 6: Sab
+  weeklyRotation?: Record<number, number[]>; // weekNumber (1..5) -> array of dayOfWeek (1..6)
   notes?: string;
 }
 
@@ -56,7 +71,16 @@ const MONTH_NAMES = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
 ];
 
-// Presets bawaan per role yang kaya dan realistis
+const DAY_LABELS = [
+  { day: 1, name: 'Senin', short: 'Sen' },
+  { day: 2, name: 'Selasa', short: 'Sel' },
+  { day: 3, name: 'Rabu', short: 'Rab' },
+  { day: 4, name: 'Kamis', short: 'Kam' },
+  { day: 5, name: 'Jumat', short: 'Jum' },
+  { day: 6, name: 'Sabtu', short: 'Sab' }
+];
+
+// Presets bawaan per role dengan dukungan penjadwalan mingguan berjenjang
 const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
   PENJAGA: [
     {
@@ -71,6 +95,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '07:15',
       isTimeRandomized: true,
       jitterMinutes: 8,
+      scheduleMode: 'every_workday',
       notes: 'Pintu gerbang dan seluruh akses ruang belajar dibuka tepat waktu sebelum jam masuk siswa.'
     },
     {
@@ -85,6 +110,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '10:45',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'every_workday',
       notes: 'Situasi aman terkendali, tamu dinas tercatat rapi di buku ekspedisi tamu.'
     },
     {
@@ -99,6 +125,8 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '14:00',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'specific_days',
+      specificDays: [2, 4, 6], // Selasa, Kamis, Sabtu
       notes: 'Instalasi listrik dan kran air berfungsi normal tanpa kebocoran.'
     },
     {
@@ -113,6 +141,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '16:30',
       isTimeRandomized: true,
       jitterMinutes: 12,
+      scheduleMode: 'every_workday',
       notes: 'Seluruh akses ruangan terkunci rapat, lampu teras dinyalakan, dan gerbang digembok aman.'
     }
   ],
@@ -129,6 +158,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '09:15',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'every_workday',
       notes: 'Surat masuk dinas telah diagendakan dan didisposisikan kepada pimpinan/wakil.'
     },
     {
@@ -143,6 +173,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '11:30',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'every_workday',
       notes: 'Pelayanan administrasi siswa dan orang tua berlangsung tertib dan tuntas.'
     },
     {
@@ -157,6 +188,14 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '14:30',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'weekly_rotation',
+      weeklyRotation: {
+        1: [1, 3], // Minggu 1: Senin, Rabu
+        2: [2, 4], // Minggu 2: Selasa, Kamis
+        3: [1, 3], // Minggu 3: Senin, Rabu
+        4: [2, 4], // Minggu 4: Selasa, Kamis
+        5: [1, 3]  // Minggu 5: Senin, Rabu
+      },
       notes: 'Data berkas telah diverifikasi dan diunggah ke arsip digital kepegawaian.'
     },
     {
@@ -171,6 +210,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '15:45',
       isTimeRandomized: true,
       jitterMinutes: 8,
+      scheduleMode: 'every_workday',
       notes: 'Surat keluar tercatat di Buku Ekspedisi dan tembusan tersimpan rapi.'
     }
   ],
@@ -187,6 +227,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '07:45',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'every_workday',
       notes: 'Ruang kelas dan kantor bersih, wangi, serta siap digunakan untuk kegiatan pembelajaran.'
     },
     {
@@ -201,6 +242,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '10:45',
       isTimeRandomized: true,
       jitterMinutes: 8,
+      scheduleMode: 'every_workday',
       notes: 'Toilet disikat bersih dengan karbol wangi, saluran air lancar tanpa sumbatan.'
     },
     {
@@ -215,6 +257,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '12:45',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'every_workday',
       notes: 'Sampah dipilah antara organik dan anorganik serta dipindahkan ke TPS luar sekolah.'
     },
     {
@@ -229,6 +272,8 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '15:45',
       isTimeRandomized: true,
       jitterMinutes: 12,
+      scheduleMode: 'specific_days',
+      specificDays: [1, 3, 5], // Senin, Rabu, Jumat
       notes: 'Tanaman disiram merata, dedaunan kering dibersihkan dari area lapangan.'
     }
   ],
@@ -245,6 +290,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '11:30',
       isTimeRandomized: true,
       jitterMinutes: 12,
+      scheduleMode: 'every_workday',
       notes: 'Transaksi sirkulasi tercatat di buku peminjaman dan database barcode perpustakaan.'
     },
     {
@@ -259,6 +305,15 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '11:45',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      // Sesuai contoh pengguna: Minggu 1: Sen & Kam; Minggu 2: Rab & Sab, dst.
+      scheduleMode: 'weekly_rotation',
+      weeklyRotation: {
+        1: [1, 4], // Minggu I: Senin & Kamis
+        2: [3, 6], // Minggu II: Rabu & Sabtu
+        3: [1, 4], // Minggu III: Senin & Kamis
+        4: [3, 6], // Minggu IV: Rabu & Sabtu
+        5: [1, 4]  // Minggu V: Senin & Kamis
+      },
       notes: 'Buku telah diregistrasi ke Buku Induk Inventaris dan berstempel kepemilikan sekolah.'
     },
     {
@@ -273,6 +328,8 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '14:15',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'specific_days',
+      specificDays: [2, 5], // Selasa & Jumat
       notes: 'Siswa aktif membaca buku non-pelajaran dan resume bacaan terkumpul rapi.'
     },
     {
@@ -287,6 +344,14 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '15:30',
       isTimeRandomized: true,
       jitterMinutes: 8,
+      scheduleMode: 'weekly_rotation',
+      weeklyRotation: {
+        1: [3, 5], // Minggu 1: Rabu, Jumat
+        2: [1, 4], // Minggu 2: Senin, Kamis
+        3: [3, 5], // Minggu 3: Rabu, Jumat
+        4: [1, 4], // Minggu 4: Senin, Kamis
+        5: [3, 5]  // Minggu 5: Rabu, Jumat
+      },
       notes: 'Koleksi buku rusak ringan telah dilaminasi ulang dan siap dipinjamkan kembali.'
     }
   ],
@@ -303,6 +368,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '08:45',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'every_workday',
       notes: 'Seluruh mikroskop berfungsi dengan fokus pencahayaan jernih.'
     },
     {
@@ -317,6 +383,8 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '11:00',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'specific_days',
+      specificDays: [1, 2, 4], // Senin, Selasa, Kamis
       notes: 'Kegiatan praktikum berjalan lancar tanpa insiden kecelakaan kerja atau kerusakan alat.'
     },
     {
@@ -331,6 +399,7 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '12:45',
       isTimeRandomized: true,
       jitterMinutes: 8,
+      scheduleMode: 'every_workday',
       notes: 'Alat gelas dicuci bersih dengan aquades dan disimpan di lemari kaca tertutup.'
     },
     {
@@ -345,6 +414,14 @@ const DEFAULT_TEMPLATES_BY_ROLE: Record<RoleType, EditableTaskTemplate[]> = {
       baseTimeEnd: '14:45',
       isTimeRandomized: true,
       jitterMinutes: 10,
+      scheduleMode: 'weekly_rotation',
+      weeklyRotation: {
+        1: [5], // Jumat
+        2: [5], // Jumat
+        3: [5], // Jumat
+        4: [5], // Jumat
+        5: [5]  // Jumat
+      },
       notes: 'Bahan kimia tersimpan sesuai standar MSDS dengan label peringatan jelas.'
     }
   ]
@@ -364,7 +441,6 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
     deleteMultipleTasks, 
     saveMonthlyReport, 
     generateMonthlyReportFromTasks,
-    monthlyReports,
     setActiveNavTab
   } = useApp();
 
@@ -380,6 +456,11 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
   const [workdayMode, setWorkdayMode] = useState<'senin-sabtu' | 'senin-jumat'>('senin-sabtu');
   const [overwriteMode, setOverwriteMode] = useState<'overwrite' | 'append'>('overwrite');
   const [syncToReport, setSyncToReport] = useState<boolean>(true);
+
+  // Locked dates state (Set of date strings 'YYYY-MM-DD' locked by user or holidays)
+  const [lockedDates, setLockedDates] = useState<Set<string>>(new Set());
+  const [showCalendarView, setShowCalendarView] = useState<boolean>(true);
+  const [expandedScheduleTaskId, setExpandedScheduleTaskId] = useState<string | null>(null);
 
   // Task templates being edited by user
   const [taskTemplates, setTaskTemplates] = useState<EditableTaskTemplate[]>(() => {
@@ -401,14 +482,15 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
     monthName: string;
     year: number;
     roleName: string;
+    holidayCount: number;
+    lockedCount: number;
   } | null>(null);
 
-  // Verifikasi Kode Rahasia
+  // Verifikasi Kode Rahasia (Wajib: "ARIF SETIAWAN")
   const handleVerifyPasscode = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCode = passcodeInput.trim().toUpperCase();
     
-    // Kode tersembunyi wajib: "ARIF SETIAWAN"
     if (cleanCode === 'ARIF SETIAWAN') {
       setIsUnlocked(true);
       setAuthError(null);
@@ -427,6 +509,75 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
     setTaskTemplates(prev => prev.map(t => t.id === id ? { ...t, [field]: val } : t));
   };
 
+  // Toggle day in specificDays
+  const handleToggleSpecificDay = (templateId: string, dayNum: number) => {
+    setTaskTemplates(prev => prev.map(t => {
+      if (t.id !== templateId) return t;
+      const current = t.specificDays || [1, 2, 3, 4, 5, 6];
+      const next = current.includes(dayNum) 
+        ? current.filter(d => d !== dayNum) 
+        : [...current, dayNum].sort((a, b) => a - b);
+      return { ...t, specificDays: next.length > 0 ? next : [dayNum] };
+    }));
+  };
+
+  // Toggle day in weeklyRotation for a specific week
+  const handleToggleWeeklyRotationDay = (templateId: string, weekNum: number, dayNum: number) => {
+    setTaskTemplates(prev => prev.map(t => {
+      if (t.id !== templateId) return t;
+      const currentRotation = t.weeklyRotation || { 1: [1, 4], 2: [3, 6], 3: [1, 4], 4: [3, 6], 5: [1, 4] };
+      const currentDays = currentRotation[weekNum] || [];
+      const nextDays = currentDays.includes(dayNum)
+        ? currentDays.filter(d => d !== dayNum)
+        : [...currentDays, dayNum].sort((a, b) => a - b);
+      return {
+        ...t,
+        weeklyRotation: {
+          ...currentRotation,
+          [weekNum]: nextDays.length > 0 ? nextDays : [dayNum]
+        }
+      };
+    }));
+  };
+
+  // Apply quick preset to weekly rotation
+  const handleApplyRotationPreset = (templateId: string, presetType: 'sen_kam_rab_sab' | 'sen_jum' | 'sel_kam') => {
+    setTaskTemplates(prev => prev.map(t => {
+      if (t.id !== templateId) return t;
+      let newRotation: Record<number, number[]>;
+      if (presetType === 'sen_kam_rab_sab') {
+        newRotation = {
+          1: [1, 4], // Minggu 1: Senin, Kamis
+          2: [3, 6], // Minggu 2: Rabu, Sabtu
+          3: [1, 4], // Minggu 3: Senin, Kamis
+          4: [3, 6], // Minggu 4: Rabu, Sabtu
+          5: [1, 4]  // Minggu 5: Senin, Kamis
+        };
+      } else if (presetType === 'sen_jum') {
+        newRotation = {
+          1: [1, 5],
+          2: [1, 5],
+          3: [1, 5],
+          4: [1, 5],
+          5: [1, 5]
+        };
+      } else {
+        newRotation = {
+          1: [2, 4],
+          2: [2, 4],
+          3: [2, 4],
+          4: [2, 4],
+          5: [2, 4]
+        };
+      }
+      return {
+        ...t,
+        scheduleMode: 'weekly_rotation',
+        weeklyRotation: newRotation
+      };
+    }));
+  };
+
   // Add new custom task
   const handleAddCustomTask = () => {
     const newT: EditableTaskTemplate = {
@@ -441,6 +592,7 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
       baseTimeEnd: '09:00',
       isTimeRandomized: true,
       jitterMinutes: 8,
+      scheduleMode: 'every_workday',
       notes: 'Terlaksana dengan baik sesuai instruksi kepala sekolah.'
     };
     setTaskTemplates(prev => [...prev, newT]);
@@ -456,30 +608,81 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
     setTaskTemplates(JSON.parse(JSON.stringify(DEFAULT_TEMPLATES_BY_ROLE[targetRole] || [])));
   };
 
-  // Generate All Days in Month excluding Sundays (and Saturdays if 5-day mode)
+  // Build calendar days using the holidayHelper
+  const monthCalendarDays = useMemo(() => {
+    return buildMonthCalendarDays(selectedYear, selectedMonth, workdayMode, lockedDates);
+  }, [selectedYear, selectedMonth, workdayMode, lockedDates]);
+
+  // Active workdays (ready to generate tasks)
   const activeWorkdays = useMemo(() => {
-    const days: string[] = [];
-    const dateObj = new Date(selectedYear, selectedMonth - 1, 1);
-    while (dateObj.getMonth() === selectedMonth - 1) {
-      const dayOfWeek = dateObj.getDay(); // 0 is Sunday, 6 is Saturday
-      const isSunday = dayOfWeek === 0;
-      const isSaturday = dayOfWeek === 6;
+    return monthCalendarDays.filter(d => d.isActiveWorkday);
+  }, [monthCalendarDays]);
 
-      let isValidWorkday = !isSunday;
-      if (workdayMode === 'senin-jumat' && isSaturday) {
-        isValidWorkday = false;
-      }
+  // Statistics of the month
+  const calendarStats = useMemo(() => {
+    let active = 0;
+    let sundays = 0;
+    let holidays = 0;
+    let locked = 0;
 
-      if (isValidWorkday) {
-        const y = dateObj.getFullYear();
-        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const d = String(dateObj.getDate()).padStart(2, '0');
-        days.push(`${y}-${m}-${d}`);
+    monthCalendarDays.forEach(d => {
+      if (d.isActiveWorkday) active++;
+      else if (d.isSunday) sundays++;
+      else if (d.isNationalHoliday) holidays++;
+      else if (d.isUserLocked) locked++;
+    });
+
+    return { active, sundays, holidays, locked };
+  }, [monthCalendarDays]);
+
+  // Toggle lock on a specific date
+  const handleToggleLockDate = (dateStr: string) => {
+    setLockedDates(prev => {
+      const next = new Set(prev);
+      if (next.has(dateStr)) {
+        next.delete(dateStr);
+      } else {
+        next.add(dateStr);
       }
-      dateObj.setDate(dateObj.getDate() + 1);
+      return next;
+    });
+  };
+
+  // Quick Action: Kunci Tanggal Libur Awal Puasa / Idul Fitri yang ada di bulan ini
+  const handleLockRamadanHolidays = () => {
+    const toLock: string[] = [];
+    monthCalendarDays.forEach(d => {
+      const holiday = checkIndonesianHoliday(d.dateStr);
+      if (holiday && (holiday.type === 'puasa_ramadhan' || holiday.name.toLowerCase().includes('puasa') || holiday.name.toLowerCase().includes('idul fitri'))) {
+        toLock.push(d.dateStr);
+      }
+    });
+
+    if (toLock.length === 0) {
+      // Jika tidak ada data spesifik, tawarkan penguncian 3 hari pertama puasa
+      const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+      // Kunci 3 hari tanggal awal (contoh: tgl 1, 2, 3) jika dipilih pengguna
+      const sampleLock = [`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`, `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-02`];
+      setLockedDates(prev => {
+        const next = new Set(prev);
+        sampleLock.forEach(s => next.add(s));
+        return next;
+      });
+      alert(`Berhasil mengunci tanggal libur khusus awal Ramadhan/puasa pada awal bulan.`);
+    } else {
+      setLockedDates(prev => {
+        const next = new Set(prev);
+        toLock.forEach(d => next.add(d));
+        return next;
+      });
+      alert(`Berhasil mengunci ${toLock.length} tanggal libur puasa/Idul Fitri di bulan ${MONTH_NAMES[selectedMonth - 1]}.`);
     }
-    return days;
-  }, [selectedYear, selectedMonth, workdayMode]);
+  };
+
+  // Quick Action: Buka semua kunci tanggal
+  const handleUnlockAll = () => {
+    setLockedDates(new Set());
+  };
 
   // Smart Randomizer for time with realistic human fluctuation
   const randomizeTimes = (baseStart: string, baseEnd: string, jitterMinutes: number) => {
@@ -508,11 +711,16 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
     }
   };
 
-  // EXECUTE GENERATION
+  // EXECUTE GENERATION DENGAN JADWAL HARI & PENGECUALIAN LIBUR RESMI
   const handleExecuteGeneration = async () => {
     const enabledTemplates = taskTemplates.filter(t => t.enabled);
     if (enabledTemplates.length === 0) {
       alert('Pilih minimal satu tugas operasional untuk digenerate.');
+      return;
+    }
+
+    if (activeWorkdays.length === 0) {
+      alert('Tidak ada hari kerja aktif yang tersedia di bulan ini karena seluruh tanggal merupakan hari libur/terkunci.');
       return;
     }
 
@@ -538,8 +746,29 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
 
       const generatedTasks: Omit<any, 'id'>[] = [];
 
-      activeWorkdays.forEach((dateStr) => {
+      // Iterasi HANYA pada hari kerja aktif (Libur nasional, hari Minggu, dan tanggal terkunci otomatis dilewati)
+      activeWorkdays.forEach((dayInfo) => {
         enabledTemplates.forEach((tpl) => {
+          // Evaluasi aturan hari pelaksanaan tugas:
+          let shouldExecute = true;
+
+          if (tpl.scheduleMode === 'specific_days') {
+            const allowedDays = tpl.specificDays || [1, 2, 3, 4, 5, 6];
+            shouldExecute = allowedDays.includes(dayInfo.dayOfWeek);
+          } else if (tpl.scheduleMode === 'weekly_rotation') {
+            const rotation = tpl.weeklyRotation || { 
+              1: [1, 4], 
+              2: [3, 6], 
+              3: [1, 4], 
+              4: [3, 6], 
+              5: [1, 4] 
+            };
+            const allowedDays = rotation[dayInfo.weekOfMonth] || rotation[1] || [1, 4];
+            shouldExecute = allowedDays.includes(dayInfo.dayOfWeek);
+          }
+
+          if (!shouldExecute) return; // Lewati hari ini untuk tugas ini!
+
           let timeStart = tpl.baseTimeStart;
           let timeEnd = tpl.baseTimeEnd;
 
@@ -551,7 +780,7 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
 
           generatedTasks.push({
             role: targetRole,
-            date: dateStr,
+            date: dayInfo.dateStr,
             category: tpl.category,
             taskType: tpl.taskType,
             title: tpl.title,
@@ -596,7 +825,9 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
         totalTasks: generatedTasks.length,
         monthName: MONTH_NAMES[selectedMonth - 1],
         year: selectedYear,
-        roleName: roleLabels[targetRole]
+        roleName: roleLabels[targetRole],
+        holidayCount: calendarStats.holidays,
+        lockedCount: calendarStats.locked
       });
 
     } catch (err: any) {
@@ -630,7 +861,7 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
               Kecerdasan Tersembunyi
             </h2>
             <p className="text-slate-600 text-xs sm:text-sm mt-1.5 leading-relaxed">
-              Fitur cerdas ini digunakan sewaktu-waktu untuk membuat laporan bulanan dadakan atau secara instan pada semua layanan. Masukkan kode otorisasi resmi untuk melanjutkan.
+              Fitur cerdas ini digunakan sewaktu-waktu untuk membuat laporan bulanan dadakan atau secara instan pada semua layanan dengan penyesuaian kalender libur nasional dan rotasi hari kerja realistis. Masukkan kode otorisasi resmi untuk melanjutkan.
             </p>
 
             <form onSubmit={handleVerifyPasscode} className="w-full mt-6 space-y-4">
@@ -649,72 +880,79 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
               </div>
 
               {authError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-semibold flex items-center gap-2 text-left animate-shake">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2 text-left animate-shake">
                   <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
-                  <span>{authError}</span>
+                  <span className="font-semibold">{authError}</span>
                 </div>
               )}
 
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex items-center gap-2 pt-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                  className="w-1/3 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-5 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold rounded-xl text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="w-2/3 py-3 px-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold rounded-2xl text-xs sm:text-sm shadow-lg shadow-indigo-600/25 transition cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Unlock className="w-4 h-4" />
-                  <span>Buka Akses</span>
+                  <span>Buka Akses Cerdas</span>
                 </button>
               </div>
             </form>
           </div>
         ) : generationSummary ? (
           /* ===================================================================
-             FASE 3: RINGKASAN KEBERHASILAN GENERATE
+             FASE 3: RINGKASAN HASIL GENERASI SUKSES
              =================================================================== */
-          <div className="p-8 sm:p-12 text-center max-w-xl mx-auto my-auto flex flex-col items-center">
-            <div className="w-20 h-20 rounded-3xl bg-emerald-500 text-white flex items-center justify-center shadow-xl shadow-emerald-500/25 mb-5 animate-scaleIn">
-              <CheckCircle2 className="w-12 h-12" />
+          <div className="p-6 sm:p-10 flex flex-col items-center justify-center text-center max-w-lg mx-auto my-auto space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="w-20 h-20 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center border-4 border-emerald-200 shadow-xl shadow-emerald-500/10">
+              <CheckCircle2 className="w-10 h-10" />
             </div>
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Generate Instan Berhasil</span>
+            <div>
+              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold uppercase tracking-wider">
+                Berhasil Dibuat Secara Instan!
+              </span>
+              <h3 className="text-2xl font-black text-slate-900 mt-2">
+                Lapor Bulanan Siap Dicetak
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1">
+                Kecerdasan tersembunyi telah berhasil menyusun seluruh rincian tugas operasional dan menyinkronkan Laporan Bulanan resmi.
+              </p>
             </div>
 
-            <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-              Lapor Bulanan & Logbook Selesai Disusun!
-            </h3>
-            <p className="text-slate-600 text-xs sm:text-sm mt-2 leading-relaxed">
-              Sistem kecerdasan telah berhasil memetakan seluruh tugas harian operasional dengan pengacakan jam natural dan menyusun dokumen laporan bulanan resmi secara otomatis.
-            </p>
-
-            {/* Matrix Badge Result */}
-            <div className="grid grid-cols-2 gap-3 w-full my-6 text-left">
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                <span className="text-[11px] text-slate-500 font-semibold block">Layanan / Akun</span>
-                <span className="font-bold text-slate-900 text-sm">{generationSummary.roleName}</span>
+            <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Layanan Operasional:</span>
+                <span className="font-bold text-slate-900">{generationSummary.roleName}</span>
               </div>
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                <span className="text-[11px] text-slate-500 font-semibold block">Periode Laporan</span>
-                <span className="font-bold text-slate-900 text-sm">{generationSummary.monthName} {generationSummary.year}</span>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Periode Pelaksanaan:</span>
+                <span className="font-bold text-indigo-700">
+                  {generationSummary.monthName} {generationSummary.year}
+                </span>
               </div>
-              <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-2xl">
-                <span className="text-[11px] text-indigo-700 font-semibold block">Total Hari Kerja Aktif</span>
-                <span className="font-black text-indigo-950 text-base">{generationSummary.totalDays} Hari Operasional</span>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Hari Kerja Aktif:</span>
+                <span className="font-bold text-emerald-700">{generationSummary.totalDays} Hari Kerja</span>
               </div>
-              <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl">
-                <span className="text-[11px] text-emerald-700 font-semibold block">Total Tugas Harian Tercatat</span>
-                <span className="font-black text-emerald-950 text-base">{generationSummary.totalTasks} Logbook Kegiatan</span>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500">Libur Nasional / Terkunci Dikecualikan:</span>
+                <span className="font-bold text-rose-700">
+                  {generationSummary.holidayCount + generationSummary.lockedCount} Hari Libur (Tidak Ada Log)
+                </span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500">Total Tugas Terjadwal:</span>
+                <span className="font-bold text-blue-700">{generationSummary.totalTasks} Tugas Operasional</span>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full pt-2">
               <button
                 type="button"
                 onClick={() => {
@@ -759,7 +997,7 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    Otorisasi Terverifikasi: <strong>ARIF SETIAWAN</strong> · Otomatisasi Logbook Harian & Rekap Lapor Bulanan
+                    Otorisasi Terverifikasi: <strong>ARIF SETIAWAN</strong> · Otomatisasi Logbook Harian & Rekap Lapor Bulanan Realistis
                   </p>
                 </div>
               </div>
@@ -818,73 +1056,206 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
                 </div>
               </div>
 
-              {/* 2. Pengaturan Periode & Hari Kerja */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Bulan Laporan</span>
-                  </label>
-                  <select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
-                  >
-                    {MONTH_NAMES.map((name, idx) => (
-                      <option key={idx + 1} value={idx + 1}>
-                        Bulan {idx + 1} - {name}
-                      </option>
-                    ))}
-                  </select>
+              {/* 2. Pengaturan Periode & Kalender Hari Libur Nasional & Tanggal Terkunci */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Bulan Laporan</span>
+                    </label>
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
+                    >
+                      {MONTH_NAMES.map((name, idx) => (
+                        <option key={idx + 1} value={idx + 1}>
+                          Bulan {idx + 1} - {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Tahun Anggaran</span>
+                    </label>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
+                    >
+                      {[2024, 2025, 2026, 2027, 2028].map((y) => (
+                        <option key={y} value={y}>
+                          Tahun {y}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <Settings2 className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Sistem Hari Kerja</span>
+                    </label>
+                    <select
+                      value={workdayMode}
+                      onChange={(e) => setWorkdayMode(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="senin-sabtu">Senin s/d Sabtu (6 Hari Kerja)</option>
+                      <option value="senin-jumat">Senin s/d Jumat (5 Hari Kerja)</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Tahun Anggaran</span>
-                  </label>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
-                  >
-                    {[2025, 2026, 2027].map((y) => (
-                      <option key={y} value={y}>
-                        Tahun {y}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Sub-panel Kalender Nasional & Tanggal Terkunci (Libur Puasa / Hari Kerja) */}
+                <div className="pt-3 border-t border-slate-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="w-4 h-4 text-rose-600" />
+                      <span className="text-xs font-bold text-slate-800">
+                        Kalender Nasional & Tanggal Libur/Terkunci ({MONTH_NAMES[selectedMonth - 1]} {selectedYear})
+                      </span>
+                    </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                    <Settings2 className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Hari Kerja Aktif</span>
-                  </label>
-                  <select
-                    value={workdayMode}
-                    onChange={(e) => setWorkdayMode(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="senin-sabtu">Senin s/d Sabtu (6 Hari Kerja)</option>
-                    <option value="senin-jumat">Senin s/d Jumat (5 Hari Kerja)</option>
-                  </select>
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">
-                    * Hari Minggu otomatis dikecualikan ({activeWorkdays.length} hari aktif)
-                  </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleLockRamadanHolidays}
+                        className="px-2.5 py-1 text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                        title="Kunci hari libur khusus puasa ramadhan / idul fitri"
+                      >
+                        <Lock className="w-3 h-3 text-amber-700" />
+                        <span>Kunci Libur Puasa / Hari Raya</span>
+                      </button>
+
+                      {lockedDates.size > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleUnlockAll}
+                          className="px-2.5 py-1 text-[11px] font-semibold bg-white text-slate-600 border border-slate-300 hover:bg-slate-100 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <Unlock className="w-3 h-3 text-slate-500" />
+                          <span>Buka Semua ({lockedDates.size})</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCalendarView(!showCalendarView)}
+                        className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>{showCalendarView ? 'Sembunyikan Kalender' : 'Tampilkan Kalender'}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showCalendarView ? 'rotate-180' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary badges */}
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold mb-3">
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                      <span>Hari Kerja Aktif: <strong>{calendarStats.active} hari</strong> (Dibuatkan Log Tugas)</span>
+                    </span>
+                    <span className="px-2.5 py-1 bg-slate-100 text-slate-700 border border-slate-300 rounded-lg flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                      <span>Hari Minggu: <strong>{calendarStats.sundays} hari</strong></span>
+                    </span>
+                    {calendarStats.holidays > 0 && (
+                      <span className="px-2.5 py-1 bg-rose-50 text-rose-800 border border-rose-300 rounded-lg flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-600"></span>
+                        <span>Libur Nasional: <strong>{calendarStats.holidays} hari</strong></span>
+                      </span>
+                    )}
+                    {calendarStats.locked > 0 && (
+                      <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-300 rounded-lg flex items-center gap-1.5">
+                        <Lock className="w-3 h-3 text-amber-600" />
+                        <span>Terkunci Pengguna: <strong>{calendarStats.locked} hari</strong></span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Interactive Date Grid */}
+                  {showCalendarView && (
+                    <div className="bg-white border border-slate-200 rounded-xl p-3">
+                      <p className="text-[10.5px] text-slate-500 mb-2">
+                        💡 <strong>Petunjuk:</strong> Klik pada kartu tanggal untuk <strong>MENGUNCI (LOCK)</strong> atau <strong>MEMBUKA (UNLOCK)</strong>. Sistem otomatis tidak akan membuat tugas harian pada tanggal merah, hari Minggu, dan tanggal yang dikunci.
+                      </p>
+
+                      <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-7 gap-1.5 max-h-56 overflow-y-auto p-1">
+                        {monthCalendarDays.map((d) => {
+                          const isClickable = !d.isSunday && !d.isNationalHoliday;
+                          return (
+                            <button
+                              key={d.dateStr}
+                              type="button"
+                              onClick={() => isClickable && handleToggleLockDate(d.dateStr)}
+                              disabled={!isClickable}
+                              className={`p-2 rounded-xl text-left border transition relative flex flex-col justify-between ${
+                                d.isSunday
+                                  ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed'
+                                  : d.isNationalHoliday
+                                  ? 'bg-rose-50 border-rose-200 text-rose-800 cursor-not-allowed'
+                                  : d.isUserLocked
+                                  ? 'bg-amber-100 border-amber-400 text-amber-950 font-bold ring-2 ring-amber-400/40 cursor-pointer'
+                                  : 'bg-emerald-50/70 border-emerald-200 hover:border-emerald-400 text-emerald-950 cursor-pointer'
+                              }`}
+                              title={
+                                d.isNationalHoliday 
+                                  ? `Libur Nasional: ${d.holidayName}` 
+                                  : d.isSunday 
+                                  ? 'Hari Minggu (Libur)' 
+                                  : d.isUserLocked 
+                                  ? 'Dikunci (Klik untuk membuka)' 
+                                  : 'Hari Kerja Aktif (Klik untuk mengunci)'
+                              }
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-xs">{d.dayNumber}</span>
+                                <span className="text-[9.5px] font-semibold uppercase">{d.dayName.substring(0, 3)}</span>
+                              </div>
+
+                              <div className="mt-1">
+                                {d.isSunday ? (
+                                  <span className="text-[9px] text-slate-500 font-mono">Minggu</span>
+                                ) : d.isNationalHoliday ? (
+                                  <span className="text-[9px] font-bold text-rose-700 truncate block">
+                                    {d.holidayName || 'Libur'}
+                                  </span>
+                                ) : d.isUserLocked ? (
+                                  <span className="text-[9px] text-amber-800 font-bold flex items-center gap-0.5">
+                                    <Lock className="w-2.5 h-2.5" />
+                                    <span>Terkunci</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] text-emerald-700 font-semibold flex items-center gap-0.5">
+                                    <Check className="w-2.5 h-2.5" />
+                                    <span>Kerja</span>
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* 3. Pengaturan Tugas Harian Operasional (Sesuai Kehendak Pengguna) */}
+              {/* 3. Pengaturan Rincian Tugas Operasional & Penjadwalan Waktu Hari */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                       <Shuffle className="w-3.5 h-3.5 text-blue-600" />
-                      <span>2. Rincian Tugas Operasional yang Diinginkan Pengguna:</span>
+                      <span>2. Rincian Tugas Operasional & Pengaturan Waktu Hari:</span>
                     </label>
                     <p className="text-[11px] text-slate-500">
-                      Tentukan tugas, volume pekerjaan, jam buka/tutup, dan sistem pengacakan jam otomatis harian.
+                      Sesuaikan tugas, jam buka/tutup, pengacakan otomatis, dan rotasi hari kerja (misal: Senin & Kamis pada Minggu I, Rabu & Sabtu pada Minggu II).
                     </p>
                   </div>
                   
@@ -895,7 +1266,7 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
                       className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" />
-                      <span>Muat Preset</span>
+                      <span>Muat Preset Standar</span>
                     </button>
                     <button
                       type="button"
@@ -909,198 +1280,383 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
                 </div>
 
                 <div className="space-y-3">
-                  {taskTemplates.map((tpl, index) => (
-                    <div 
-                      key={tpl.id}
-                      className={`p-4 rounded-2xl border transition-all ${
-                        tpl.enabled 
-                          ? 'bg-white border-slate-300 shadow-xs' 
-                          : 'bg-slate-50/70 border-slate-200 opacity-60'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3 mb-2.5">
-                        <div className="flex items-center gap-2.5 flex-1">
-                          <input
-                            type="checkbox"
-                            checked={tpl.enabled}
-                            onChange={() => toggleTemplate(tpl.id)}
-                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                          />
-                          <span className="w-6 h-6 rounded-full bg-slate-100 font-bold text-slate-700 text-xs flex items-center justify-center shrink-0">
-                            {index + 1}
-                          </span>
-                          <input
-                            type="text"
-                            value={tpl.title}
-                            onChange={(e) => updateTemplateField(tpl.id, 'title', e.target.value)}
-                            placeholder="Judul rincian tugas..."
-                            className="flex-1 px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
+                  {taskTemplates.map((tpl, index) => {
+                    const isScheduleExpanded = expandedScheduleTaskId === tpl.id;
+                    const rotation = tpl.weeklyRotation || { 
+                      1: [1, 4], 
+                      2: [3, 6], 
+                      3: [1, 4], 
+                      4: [3, 6], 
+                      5: [1, 4] 
+                    };
+                    const specific = tpl.specificDays || [1, 2, 3, 4, 5, 6];
 
-                        <div className="flex items-center gap-1.5">
-                          <select
-                            value={tpl.taskType}
-                            onChange={(e) => updateTemplateField(tpl.id, 'taskType', e.target.value)}
-                            className="px-2 py-1 bg-slate-100 border border-slate-300 rounded-lg text-[10px] font-bold text-slate-700"
-                          >
-                            <option value="pokok">Tupoksi Pokok</option>
-                            <option value="tambahan">Tugas Tambahan</option>
-                          </select>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTemplate(tpl.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
-                            title="Hapus tugas"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Detail Parameters */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1 border-t border-slate-100">
-                        {/* Lokasi & Area */}
-                        <div>
-                          <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">Lokasi Pelaksanaan</label>
-                          <input
-                            type="text"
-                            value={tpl.location}
-                            onChange={(e) => updateTemplateField(tpl.id, 'location', e.target.value)}
-                            className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[11px]"
-                          />
-                        </div>
-
-                        {/* Volume Target */}
-                        <div>
-                          <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">Target & Satuan Volume</label>
-                          <input
-                            type="text"
-                            value={tpl.volumeUnit}
-                            onChange={(e) => updateTemplateField(tpl.id, 'volumeUnit', e.target.value)}
-                            className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium"
-                          />
-                        </div>
-
-                        {/* Pengaturan Jam & Pengacakan Otomatis */}
-                        <div className="bg-blue-50/60 p-2 rounded-xl border border-blue-200/60">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold text-blue-900 flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-blue-600" />
-                              <span>Jam Dasar Pelaksanaan</span>
+                    return (
+                      <div 
+                        key={tpl.id}
+                        className={`p-4 rounded-2xl border transition-all ${
+                          tpl.enabled 
+                            ? 'bg-white border-slate-300 shadow-xs' 
+                            : 'bg-slate-50/70 border-slate-200 opacity-60'
+                        }`}
+                      >
+                        {/* Header bar tugas */}
+                        <div className="flex items-start justify-between gap-3 mb-2.5">
+                          <div className="flex items-center gap-2.5 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={tpl.enabled}
+                              onChange={() => toggleTemplate(tpl.id)}
+                              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <span className="w-6 h-6 rounded-full bg-slate-100 font-bold text-slate-700 text-xs flex items-center justify-center shrink-0">
+                              {index + 1}
                             </span>
-                            <label className="flex items-center gap-1 text-[9.5px] font-bold text-indigo-700 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={tpl.isTimeRandomized}
-                                onChange={(e) => updateTemplateField(tpl.id, 'isTimeRandomized', e.target.checked)}
-                                className="w-3 h-3 rounded text-indigo-600"
-                              />
-                              <span>Acak Jam Otomatis</span>
-                            </label>
+                            <input
+                              type="text"
+                              value={tpl.title}
+                              onChange={(e) => updateTemplateField(tpl.id, 'title', e.target.value)}
+                              placeholder="Judul rincian tugas..."
+                              className="flex-1 px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                            />
                           </div>
 
                           <div className="flex items-center gap-1.5">
-                            <input
-                              type="time"
-                              value={tpl.baseTimeStart}
-                              onChange={(e) => updateTemplateField(tpl.id, 'baseTimeStart', e.target.value)}
-                              className="w-20 px-1.5 py-0.5 bg-white border border-blue-300 rounded font-mono text-[11px] font-bold"
-                            />
-                            <span className="text-slate-400 text-xs">-</span>
-                            <input
-                              type="time"
-                              value={tpl.baseTimeEnd}
-                              onChange={(e) => updateTemplateField(tpl.id, 'baseTimeEnd', e.target.value)}
-                              className="w-20 px-1.5 py-0.5 bg-white border border-blue-300 rounded font-mono text-[11px] font-bold"
-                            />
-                            {tpl.isTimeRandomized && (
-                              <span className="text-[9.5px] text-indigo-600 font-semibold italic ml-auto">
-                                ± {tpl.jitterMinutes || 8} mnt
-                              </span>
-                            )}
+                            <select
+                              value={tpl.taskType}
+                              onChange={(e) => updateTemplateField(tpl.id, 'taskType', e.target.value)}
+                              className="px-2 py-1 bg-slate-100 border border-slate-300 rounded-lg text-[10px] font-bold text-slate-700"
+                            >
+                              <option value="pokok">Tupoksi Pokok</option>
+                              <option value="tambahan">Tugas Tambahan</option>
+                            </select>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTemplate(tpl.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                              title="Hapus tugas"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
+
+                        {/* Detail Lokasi, Volume, dan Jam Dasar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1 border-t border-slate-100">
+                          {/* Lokasi & Area */}
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">Lokasi Pelaksanaan</label>
+                            <input
+                              type="text"
+                              value={tpl.location}
+                              onChange={(e) => updateTemplateField(tpl.id, 'location', e.target.value)}
+                              className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[11px]"
+                            />
+                          </div>
+
+                          {/* Volume Target */}
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">Target & Satuan Volume</label>
+                            <input
+                              type="text"
+                              value={tpl.volumeUnit}
+                              onChange={(e) => updateTemplateField(tpl.id, 'volumeUnit', e.target.value)}
+                              className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium"
+                            />
+                          </div>
+
+                          {/* Pengaturan Jam & Pengacakan Otomatis */}
+                          <div className="bg-blue-50/60 p-2 rounded-xl border border-blue-200/60">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-bold text-blue-900 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-blue-600" />
+                                <span>Jam Dasar Pelaksanaan</span>
+                              </span>
+                              <label className="flex items-center gap-1 text-[9.5px] font-bold text-indigo-700 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={tpl.isTimeRandomized}
+                                  onChange={(e) => updateTemplateField(tpl.id, 'isTimeRandomized', e.target.checked)}
+                                  className="w-3 h-3 rounded text-indigo-600"
+                                />
+                                <span>Acak Jam Otomatis</span>
+                              </label>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={tpl.baseTimeStart}
+                                onChange={(e) => updateTemplateField(tpl.id, 'baseTimeStart', e.target.value)}
+                                className="w-20 px-1.5 py-0.5 bg-white border border-blue-300 rounded font-mono text-[11px] font-bold"
+                              />
+                              <span className="text-slate-400 text-xs">-</span>
+                              <input
+                                type="time"
+                                value={tpl.baseTimeEnd}
+                                onChange={(e) => updateTemplateField(tpl.id, 'baseTimeEnd', e.target.value)}
+                                className="w-20 px-1.5 py-0.5 bg-white border border-blue-300 rounded font-mono text-[11px] font-bold"
+                              />
+                              {tpl.isTimeRandomized && (
+                                <span className="text-[9.5px] text-indigo-600 font-semibold italic ml-auto">
+                                  ± {tpl.jitterMinutes || 8} mnt
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Pengaturan Jadwal Waktu Hari (Setiap Hari / Hari Tertentu / Rotasi Mingguan) */}
+                        <div className="mt-2.5 pt-2 border-t border-slate-100">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10.5px] font-bold text-slate-700 flex items-center gap-1">
+                                <SlidersHorizontal className="w-3 h-3 text-indigo-600" />
+                                <span>Jadwal Hari Kerja:</span>
+                              </span>
+                              <div className="flex items-center gap-1 text-[10px]">
+                                {[
+                                  { mode: 'every_workday' as ScheduleMode, label: 'Setiap Hari Kerja' },
+                                  { mode: 'specific_days' as ScheduleMode, label: 'Hari Tertentu' },
+                                  { mode: 'weekly_rotation' as ScheduleMode, label: 'Rotasi Mingguan (Realistis)' }
+                                ].map((sm) => (
+                                  <button
+                                    key={sm.mode}
+                                    type="button"
+                                    onClick={() => updateTemplateField(tpl.id, 'scheduleMode', sm.mode)}
+                                    className={`px-2 py-0.5 rounded-md font-bold transition cursor-pointer ${
+                                      tpl.scheduleMode === sm.mode
+                                        ? 'bg-indigo-600 text-white shadow-2xs'
+                                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                    }`}
+                                  >
+                                    {sm.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setExpandedScheduleTaskId(isScheduleExpanded ? null : tpl.id)}
+                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline flex items-center gap-0.5 cursor-pointer"
+                            >
+                              <span>{isScheduleExpanded ? 'Tutup Detail Hari' : 'Atur Hari'}</span>
+                              <ChevronDown className={`w-3 h-3 transition-transform ${isScheduleExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                          </div>
+
+                          {/* Tampilan Ringkas Hari Aktif */}
+                          {!isScheduleExpanded && (
+                            <div className="mt-1 text-[10px] text-slate-500 font-medium">
+                              {tpl.scheduleMode === 'every_workday' && (
+                                <span className="text-emerald-700">✓ Dilaksanakan pada seluruh hari kerja aktif ({workdayMode === 'senin-sabtu' ? 'Senin - Sabtu' : 'Senin - Jumat'}).</span>
+                              )}
+                              {tpl.scheduleMode === 'specific_days' && (
+                                <span>
+                                  Hari tetap: <strong>{DAY_LABELS.filter(d => specific.includes(d.day)).map(d => d.name).join(', ')}</strong>
+                                </span>
+                              )}
+                              {tpl.scheduleMode === 'weekly_rotation' && (
+                                <span className="text-indigo-800">
+                                  Rotasi Mingguan: M1 ({DAY_LABELS.filter(d => (rotation[1] || []).includes(d.day)).map(d => d.short).join(',')}), M2 ({DAY_LABELS.filter(d => (rotation[2] || []).includes(d.day)).map(d => d.short).join(',')}), M3 ({DAY_LABELS.filter(d => (rotation[3] || []).includes(d.day)).map(d => d.short).join(',')}), M4 ({DAY_LABELS.filter(d => (rotation[4] || []).includes(d.day)).map(d => d.short).join(',')})
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Detail Penjadwalan Expanded */}
+                          {isScheduleExpanded && (
+                            <div className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                              {tpl.scheduleMode === 'every_workday' && (
+                                <p className="text-[11px] text-slate-600">
+                                  Tugas ini akan dijalankan pada <strong>seluruh hari kerja aktif</strong> dalam bulan berjalan ({workdayMode === 'senin-sabtu' ? 'Senin s/d Sabtu' : 'Senin s/d Jumat'}), kecuali hari Minggu, libur nasional, dan tanggal yang dikunci.
+                                </p>
+                              )}
+
+                              {tpl.scheduleMode === 'specific_days' && (
+                                <div>
+                                  <label className="block text-[10.5px] font-bold text-slate-700 mb-1">
+                                    Pilih Hari Pelaksanaan Tetap (Berlaku Setiap Minggu):
+                                  </label>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {DAY_LABELS.map((d) => {
+                                      const isChecked = specific.includes(d.day);
+                                      return (
+                                        <button
+                                          key={d.day}
+                                          type="button"
+                                          onClick={() => handleToggleSpecificDay(tpl.id, d.day)}
+                                          className={`px-3 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                                            isChecked
+                                              ? 'bg-indigo-600 text-white border-indigo-700'
+                                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                                          }`}
+                                        >
+                                          {d.name}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {tpl.scheduleMode === 'weekly_rotation' && (
+                                <div className="space-y-2">
+                                  <div className="flex flex-wrap items-center justify-between gap-1">
+                                    <span className="text-[10.5px] font-bold text-slate-800">
+                                      Atur Hari Pelaksanaan per Minggu (Realita Kerja Dinas):
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleApplyRotationPreset(tpl.id, 'sen_kam_rab_sab')}
+                                        className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 hover:bg-indigo-200 text-indigo-900 rounded"
+                                        title="Minggu 1 & 3: Sen, Kam. Minggu 2 & 4: Rab, Sab"
+                                      >
+                                        Preset Sen-Kam & Rab-Sab
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleApplyRotationPreset(tpl.id, 'sen_jum')}
+                                        className="px-2 py-0.5 text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-800 rounded"
+                                      >
+                                        Senin & Jumat
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-1.5 bg-white p-2.5 border border-slate-200 rounded-lg">
+                                    {[
+                                      { week: 1, label: 'Minggu I (Tgl 1 - 7)' },
+                                      { week: 2, label: 'Minggu II (Tgl 8 - 14)' },
+                                      { week: 3, label: 'Minggu III (Tgl 15 - 21)' },
+                                      { week: 4, label: 'Minggu IV (Tgl 22 - 28)' },
+                                      { week: 5, label: 'Minggu V (Tgl 29 - Akhir)' }
+                                    ].map((w) => {
+                                      const activeWeekDays = rotation[w.week] || [];
+                                      return (
+                                        <div key={w.week} className="flex flex-wrap items-center justify-between gap-2 py-1 border-b last:border-0 border-slate-100 text-[11px]">
+                                          <span className="font-bold text-slate-700 w-44">{w.label}:</span>
+                                          <div className="flex items-center gap-1 flex-wrap">
+                                            {DAY_LABELS.map((d) => {
+                                              const isChecked = activeWeekDays.includes(d.day);
+                                              return (
+                                                <button
+                                                  key={d.day}
+                                                  type="button"
+                                                  onClick={() => handleToggleWeeklyRotationDay(tpl.id, w.week, d.day)}
+                                                  className={`px-2 py-0.5 rounded text-[10.5px] font-semibold border transition cursor-pointer ${
+                                                    isChecked
+                                                      ? 'bg-indigo-600 text-white border-indigo-700'
+                                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                                  }`}
+                                                >
+                                                  {d.short}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* 4. Opsi Penanganan Data & Sinkronisasi Lapor Bulanan */}
-              <div className="p-4 bg-indigo-50/50 border border-indigo-200 rounded-2xl space-y-2 text-xs">
-                <span className="font-bold text-indigo-950 block">Opsi Pembuatan Laporan Instan:</span>
-                
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+              {/* 4. Opsi Eksekusi & Integrasi Laporan Bulanan */}
+              <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
+                <span className="text-xs font-bold text-indigo-950 uppercase tracking-wider block">
+                  3. Opsi Penyusunan Laporan & Sinkronisasi Dokumen:
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <label className="flex items-start gap-2.5 p-3 bg-white rounded-xl border border-indigo-100 cursor-pointer shadow-2xs">
                     <input
                       type="radio"
                       name="overwriteMode"
-                      value="overwrite"
                       checked={overwriteMode === 'overwrite'}
                       onChange={() => setOverwriteMode('overwrite')}
-                      className="text-indigo-600"
+                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
                     />
-                    <span>Gantikan / timpa logbook tugas bulan ini (Disarankan)</span>
+                    <div>
+                      <span className="font-bold text-slate-900 block">Timpa Jurnal Bulan Ini (Direkomendasikan)</span>
+                      <span className="text-[11px] text-slate-500">
+                        Menghapus data lama bulan {MONTH_NAMES[selectedMonth - 1]} {selectedYear} untuk peran ini dan menggantinya dengan jurnal bersih terstruktur.
+                      </span>
+                    </div>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <label className="flex items-start gap-2.5 p-3 bg-white rounded-xl border border-indigo-100 cursor-pointer shadow-2xs">
                     <input
                       type="radio"
                       name="overwriteMode"
-                      value="append"
                       checked={overwriteMode === 'append'}
                       onChange={() => setOverwriteMode('append')}
-                      className="text-indigo-600"
+                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
                     />
-                    <span>Tambahkan ke logbook yang sudah ada</span>
+                    <div>
+                      <span className="font-bold text-slate-900 block">Tambahkan ke Jurnal yang Ada</span>
+                      <span className="text-[11px] text-slate-500">
+                        Mempertahankan jurnal lama dan menambahkan tugas operasional baru.
+                      </span>
+                    </div>
                   </label>
                 </div>
 
-                <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-800 pt-1">
-                  <input
-                    type="checkbox"
-                    checked={syncToReport}
-                    onChange={(e) => setSyncToReport(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600"
-                  />
-                  <span>Otomatis susun dan sahkan Laporan Bulanan (KPI 100% Tercapai & Siap Cetak Langsung)</span>
-                </label>
+                <div className="pt-2 border-t border-indigo-100 flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-indigo-950">
+                    <input
+                      type="checkbox"
+                      checked={syncToReport}
+                      onChange={(e) => setSyncToReport(e.target.checked)}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>Otomatis Sinkronkan & Sahkan Laporan Bulanan (Approval Status: Disahkan Kepala Sekolah)</span>
+                  </label>
+                </div>
               </div>
 
             </div>
 
             {/* Modal Footer */}
-            <div className="shrink-0 p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+            <div className="shrink-0 px-6 py-4 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs text-slate-600">
-                Akan membuat: <strong className="text-slate-900">{activeWorkdays.length * taskTemplates.filter(t => t.enabled).length} kegiatan</strong> ({activeWorkdays.length} hari aktif)
+                Total akan digenerate: <strong>{activeWorkdays.length} hari kerja</strong> · Peran: <strong>{targetRole}</strong>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition cursor-pointer"
                 >
                   Tutup
                 </button>
-
                 <button
                   type="button"
                   onClick={handleExecuteGeneration}
                   disabled={isGenerating}
-                  className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow-lg shadow-indigo-600/25 flex items-center gap-2 transition disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 disabled:opacity-50 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-blue-600/20 transition cursor-pointer"
                 >
                   {isGenerating ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Sedang Menyusun Data...</span>
+                      <span>Sedang Menyusun Laporan...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-4 h-4 text-amber-300" />
-                      <span>Generate Lapor Bulanan Instan</span>
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>Generate Laporan Bulanan Instan</span>
                     </>
                   )}
                 </button>
@@ -1108,7 +1664,6 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
             </div>
           </>
         )}
-
       </div>
     </div>
   );

@@ -153,11 +153,16 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
           ${leftLogo ? `
             <img src="${leftLogo}" alt="Logo Pemda" style="max-height: 80px; max-width: 80px; object-fit: contain;">
           ` : `
-            <svg viewBox="0 0 100 120" width="68" height="82" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M50 5 L90 25 L90 75 L50 115 L10 75 L10 25 Z" fill="#1e3a8a" stroke="#fbbf24" stroke-width="4"/>
-              <circle cx="50" cy="50" r="24" fill="#fbbf24"/>
-              <path d="M50 32 L54 44 L66 44 L56 52 L60 64 L50 56 L40 64 L44 52 L34 44 L46 44 Z" fill="#1e3a8a"/>
-              <path d="M25 82 Q50 95 75 82" stroke="#ffffff" stroke-width="3" fill="none"/>
+            <svg viewBox="0 0 120 140" width="70" height="82" xmlns="http://www.w3.org/2000/svg">
+              <path d="M60 4 C95 4, 114 15, 114 42 C114 85, 78 122, 60 136 C42 122, 6 85, 6 42 C6 15, 25 4, 60 4 Z" fill="#1e3a8a" stroke="#d97706" stroke-width="3.5"/>
+              <path d="M60 10 C90 10, 107 19, 107 43 C107 81, 75 115, 60 128 C45 115, 13 81, 13 43 C13 19, 30 10, 60 10 Z" fill="none" stroke="#fef08a" stroke-width="1.2"/>
+              <polygon points="60,18 63,27 72,27 65,33 67,42 60,37 53,42 55,33 48,27 57,27" fill="#fde047" stroke="#b45309" stroke-width="0.8"/>
+              <path d="M32 50 C26 70, 36 96, 60 108" fill="none" stroke="#fbbf24" stroke-width="3" stroke-dasharray="4 2"/>
+              <path d="M88 50 C94 70, 84 96, 60 108" fill="none" stroke="#fbbf24" stroke-width="3" stroke-dasharray="4 2"/>
+              <polygon points="60,52 40,82 80,82" fill="#22c55e" opacity="0.9"/>
+              <polygon points="60,60 48,82 72,82" fill="#ffffff" opacity="0.7"/>
+              <path d="M28 112 Q60 106 92 112 L88 122 Q60 116 32 122 Z" fill="#b91c1c" stroke="#fef08a" stroke-width="1"/>
+              <text x="60" y="119" text-anchor="middle" font-size="6.5" font-weight="bold" fill="#ffffff" font-family="sans-serif">PEMDA</text>
             </svg>
           `}
         </div>
@@ -188,11 +193,13 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
           ${rightLogo ? `
             <img src="${rightLogo}" alt="Logo Sekolah" style="max-height: 80px; max-width: 80px; object-fit: contain;">
           ` : `
-            <svg viewBox="0 0 100 100" width="66" height="66" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="50" cy="50" r="46" fill="#0284c7" stroke="#fbbf24" stroke-width="3"/>
-              <path d="M50 16 L22 36 L22 42 L50 62 L78 42 L78 36 Z" fill="#fbbf24"/>
-              <path d="M50 62 L32 76 L32 82 L50 72 L68 82 L68 76 Z" fill="#ffffff"/>
-              <circle cx="50" cy="40" r="7" fill="#dc2626"/>
+            <svg viewBox="0 0 120 140" width="70" height="82" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="60,6 112,44 92,126 28,126 8,44" fill="#0284c7" stroke="#fbbf24" stroke-width="3.5"/>
+              <polygon points="60,13 105,47 87,120 33,120 15,47" fill="none" stroke="#ffffff" stroke-width="1.2"/>
+              <path d="M60 46 C42 46, 26 62, 28 88 C38 82, 48 80, 60 84 C72 80, 82 82, 92 88 C94 62, 78 46, 60 46 Z" fill="#f59e0b" stroke="#fef08a" stroke-width="1.2"/>
+              <path d="M60 28 C64 36, 68 40, 68 46 C68 50, 64 54, 60 54 C56 54, 52 50, 52 46 C52 40, 56 36, 60 28 Z" fill="#ef4444" stroke="#fde047" stroke-width="1"/>
+              <path d="M60 88 C48 82, 34 84, 26 94 L26 98 C34 88, 48 86, 60 92 C72 86, 86 88, 94 98 L94 94 C86 84, 72 82, 60 88 Z" fill="#ffffff" stroke="#0f172a" stroke-width="0.8"/>
+              <text x="60" y="122" text-anchor="middle" font-size="6.5" font-weight="bold" fill="#ffffff" font-family="sans-serif">TUT WURI</text>
             </svg>
           `}
         </div>

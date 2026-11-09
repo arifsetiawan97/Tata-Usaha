@@ -1116,18 +1116,36 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
       <body>
         <table class="header-table">
           <tr>
-            <td style="width: 80px; text-align: center;">
-              ${schoolConfig.logoKopKiri || schoolConfig.logoKabupatenUrl ? `<img src="${schoolConfig.logoKopKiri || schoolConfig.logoKabupatenUrl}" width="70" height="85" />` : ''}
+            <td style="width: 80px; text-align: center; vertical-align: middle;">
+              ${(schoolConfig.logoKopKiri || schoolConfig.logoKabupatenUrl) ? `
+                <img src="${schoolConfig.logoKopKiri || schoolConfig.logoKabupatenUrl}" width="70" height="85" style="object-fit: contain;" />
+              ` : `
+                <svg viewBox="0 0 120 140" width="60" height="75" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M60 4 C95 4, 114 15, 114 42 C114 85, 78 122, 60 136 C42 122, 6 85, 6 42 C6 15, 25 4, 60 4 Z" fill="#1e3a8a" stroke="#d97706" stroke-width="3"/>
+                  <polygon points="60,18 63,27 72,27 65,33 67,42 60,37 53,42 55,33 48,27 57,27" fill="#fde047"/>
+                  <path d="M28 112 Q60 106 92 112 L88 122 Q60 116 32 122 Z" fill="#b91c1c"/>
+                  <text x="60" y="119" text-anchor="middle" font-size="7" font-weight="bold" fill="#ffffff" font-family="sans-serif">PEMDA</text>
+                </svg>
+              `}
             </td>
-            <td style="text-align: center;">
+            <td style="text-align: center; vertical-align: middle;">
               <div style="font-size: 11pt; font-weight: bold;">${(schoolConfig.pemerintahDaerah || 'PEMERINTAH DAERAH').toUpperCase()}</div>
               <div style="font-size: 11pt; font-weight: bold;">${(schoolConfig.dinasPendidikan || 'DINAS PENDIDIKAN').toUpperCase()}</div>
               <div style="font-size: 14pt; font-weight: bold; margin: 3px 0;">${(schoolConfig.namaSekolah || 'SATUAN PENDIDIKAN').toUpperCase()}</div>
               <div style="font-size: 9pt;">Alamat: ${schoolConfig.alamat || ''} ${schoolConfig.desaKecamatan || ''} ${schoolConfig.kabupatenKota || ''} | Telp: ${schoolConfig.telepon || '-'}</div>
               <div style="font-size: 9pt;">NPSN: ${schoolConfig.npsn || '-'} | NSS: ${schoolConfig.nss || '-'}</div>
             </td>
-            <td style="width: 80px; text-align: center;">
-              ${schoolConfig.logoKopKanan || schoolConfig.logoSekolahUrl ? `<img src="${schoolConfig.logoKopKanan || schoolConfig.logoSekolahUrl}" width="70" height="85" />` : ''}
+            <td style="width: 80px; text-align: center; vertical-align: middle;">
+              ${(schoolConfig.logoKopKanan || schoolConfig.logoSekolahUrl) ? `
+                <img src="${schoolConfig.logoKopKanan || schoolConfig.logoSekolahUrl}" width="70" height="85" style="object-fit: contain;" />
+              ` : `
+                <svg viewBox="0 0 100 100" width="60" height="60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="50" cy="50" r="46" fill="#0284c7" stroke="#fbbf24" stroke-width="3"/>
+                  <path d="M50 16 L22 36 L22 42 L50 62 L78 42 L78 36 Z" fill="#fbbf24"/>
+                  <path d="M50 62 L32 76 L32 82 L50 72 L68 82 L68 76 Z" fill="#ffffff"/>
+                  <circle cx="50" cy="40" r="7" fill="#dc2626"/>
+                </svg>
+              `}
             </td>
           </tr>
         </table>
