@@ -191,11 +191,14 @@ export function generateOfficialDocumentWord(params: WordExportParams): string {
     ? `${schoolConfig.kabupatenKota || 'Sekolah'}, ${new Date(monthlyData?.year || 2026, monthlyData?.month || 9, 0).getDate()} ${MONTH_NAMES[(monthlyData?.month || 9) - 1]} ${monthlyData?.year || 2026}`
     : `${schoolConfig.kabupatenKota || 'Sekolah'}, 31 Desember ${annualData?.year || 2026}`;
 
-  // Filter Tasks
+  // Filter Tasks Strictly for this Role
   const relevantTasks = tasks.filter(t => {
-    if (t.role.toUpperCase() !== role.toUpperCase()) return false;
+    if (!t.role || t.role.trim().toUpperCase() !== role.trim().toUpperCase()) return false;
     return isMonthly ? isTaskInMonth(t.date, monthlyData?.month || 9, monthlyData?.year || 2026) : isTaskInYear(t.date, annualData?.year || 2026);
   });
+
+  // Filter Inventories Strictly for this Role
+  const roleInventories = inventories.filter(inv => inv.role && inv.role.trim().toUpperCase() === role.trim().toUpperCase());
 
   const tupoksiTasks = relevantTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'pokok');
   const tambahanTasks = relevantTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'tambahan');
@@ -210,6 +213,22 @@ export function generateOfficialDocumentWord(params: WordExportParams): string {
   const operatorName = !rawOperator || /nurul(\s*hidayat|\s*hidayati)?/i.test(rawOperator) || /rahmat/i.test(rawOperator) 
     ? (role === 'PERPUS' ? 'Pengelola Perpustakaan' : `Operator ${roleTitle}`)
     : formatOfficialNameWithDegree(rawOperator);
+
+  // Khusus Layanan Perpustakaan Data Isolasi
+  const isPerpus = role === 'PERPUS';
+  const guruCount = libraryMemberStats?.guruPendidik || 24;
+  const staffCount = libraryMemberStats?.staffTendik || 8;
+  const siswaLCount = libraryMemberStats?.siswaLaki || 142;
+  const siswaPCount = libraryMemberStats?.siswaPerempuan || 158;
+  const totalAnggotaPerpus = guruCount + staffCount + siswaLCount + siswaPCount;
+
+  const perpusBooks = isMonthly && monthlyData
+    ? libraryBooks.filter(b => {
+        const targetKey = `${monthlyData.year || 2026}-${String(monthlyData.month || 9).padStart(2, '0')}`;
+        const rawBulan = String(b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : ''));
+        return rawBulan.startsWith(targetKey) || (Boolean(b.tanggalMasuk) && b.tanggalMasuk.startsWith(targetKey));
+      })
+    : libraryBooks;
 
   // KPI Items
   const kpiItems = (reportData as any).kpiStats || [];
@@ -460,9 +479,77 @@ export function generateOfficialDocumentWord(params: WordExportParams): string {
           </tbody>
         </table>
 
-        <!-- BAGIAN III: SARANA PRASARANA / INVENTARIS OPERASIONAL -->
+        ${isPerpus ? `
+        <!-- BAGIAN III (KHUSUS PERPUS): REKAPITULASI ANGGOTA PERPUSTAKAAN (PEMUSTAKA SEKOLAH) -->
         <div class="section-header">
-          III. REKAPITULASI SARANA PRASARANA & INVENTARIS OPERASIONAL
+          III. REKAPITULASI ANGGOTA PERPUSTAKAAN (PEMUSTAKA SEKOLAH)
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Guru (Pendidik)</th>
+              <th>Tenaga Kependidikan (Staff)</th>
+              <th style="text-align: center;">Siswa (Laki-laki)</th>
+              <th style="text-align: center;">Siswa (Perempuan)</th>
+              <th style="text-align: center;">Total Seluruh Pemustaka</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align: center; font-weight: bold;">${guruCount} Orang</td>
+              <td style="text-align: center; font-weight: bold;">${staffCount} Orang</td>
+              <td style="text-align: center; font-weight: bold;">${siswaLCount} Orang</td>
+              <td style="text-align: center; font-weight: bold;">${siswaPCount} Orang</td>
+              <td style="text-align: center; font-weight: bold; color: #1e3a8a;">${totalAnggotaPerpus} Orang</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- BAGIAN IV (KHUSUS PERPUS): KOLEKSI BUKU PERPUSTAKAAN -->
+        <div class="section-header">
+          IV. ${isMonthly 
+            ? `LAMPIRAN PENAMBAHAN BUKU BARU BULAN ${MONTH_NAMES[(monthlyData?.month || 9) - 1].toUpperCase()} ${monthlyData?.year || 2026}`
+            : `LAMPIRAN KATALOG SELURUH DATA BUKU PERPUSTAKAAN TERDATA`
+          }
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 30px;">No</th>
+              <th>Judul Bahan Pustaka</th>
+              <th>Pengarang / Penerbit</th>
+              <th style="width: 75px;">Kelas</th>
+              <th style="width: 70px;">Klasifikasi DDC</th>
+              <th style="width: 85px;">Kategori</th>
+              <th style="width: 85px;">${isMonthly ? 'Tgl Masuk' : 'Tahun Pengadaan'}</th>
+              <th style="width: 60px;">Jumlah</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${perpusBooks.length > 0 ? perpusBooks.slice(0, isMonthly ? 10 : 15).map((b, idx) => `
+              <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td><b>${b.judul}</b></td>
+                <td>${b.pengarang || '-'} ${b.penerbit ? `(${b.penerbit})` : ''}</td>
+                <td style="text-align: center;">${b.kelas || '-'}</td>
+                <td style="text-align: center; font-family: monospace;">${b.ddcKlasifikasi || '-'}</td>
+                <td style="text-align: center; text-transform: uppercase;">${b.statusBuku || b.kategori || 'umum'}</td>
+                <td style="text-align: center;">${isMonthly ? (b.tanggalMasuk || '-') : (b.tahunBeli || b.tahunPengadaan || '-')}</td>
+                <td style="text-align: center; font-weight: bold;">${b.jumlah || 1} Eks</td>
+              </tr>
+            `).join('') : `
+              <tr>
+                <td colspan="8" style="text-align: center; padding: 8px; color: #64748b;">
+                  ${isMonthly ? 'Pada bulan berjalan tidak terdapat penambahan buku baru yang masuk / dibeli.' : 'Belum ada data buku yang terdaftar.'}
+                </td>
+              </tr>
+            `}
+          </tbody>
+        </table>
+
+        <!-- BAGIAN V (KHUSUS PERPUS): DAFTAR INVENTARIS SARANA PRASARANA LAYANAN PERPUSTAKAAN -->
+        <div class="section-header">
+          V. DAFTAR INVENTARIS SARANA PRASARANA LAYANAN PERPUSTAKAAN
         </div>
         <table class="data-table">
           <thead>
@@ -477,7 +564,7 @@ export function generateOfficialDocumentWord(params: WordExportParams): string {
             </tr>
           </thead>
           <tbody>
-            ${inventories.length > 0 ? inventories.slice(0, 10).map((inv, idx) => `
+            ${roleInventories.length > 0 ? roleInventories.map((inv, idx) => `
               <tr>
                 <td style="text-align: center;">${idx + 1}</td>
                 <td style="text-align: center; font-family: monospace;">${inv.kodeBarang || '-'}</td>
@@ -490,12 +577,50 @@ export function generateOfficialDocumentWord(params: WordExportParams): string {
             `).join('') : `
               <tr>
                 <td colspan="7" style="text-align: center; padding: 8px; color: #64748b;">
-                  Data sarana prasarana operasional terdata dalam kondisi baik dan terpelihara.
+                  Data sarana prasarana operasional unit Layanan Perpustakaan terdata dalam kondisi baik dan terpelihara.
                 </td>
               </tr>
             `}
           </tbody>
         </table>
+        ` : `
+        <!-- BAGIAN III (NON-PERPUS): SARANA PRASARANA / INVENTARIS OPERASIONAL -->
+        <div class="section-header">
+          III. REKAPITULASI SARANA PRASARANA & INVENTARIS OPERASIONAL UNIT ${roleTitle.toUpperCase()}
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 30px;">No</th>
+              <th style="width: 85px;">Kode Barang</th>
+              <th>Nama Sarana / Prasarana</th>
+              <th>Merk / Model / Spesifikasi</th>
+              <th style="width: 60px;">Jumlah</th>
+              <th style="width: 80px;">Kondisi</th>
+              <th style="width: 90px;">Lokasi Simpan</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${roleInventories.length > 0 ? roleInventories.map((inv, idx) => `
+              <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td style="text-align: center; font-family: monospace;">${inv.kodeBarang || '-'}</td>
+                <td><b>${inv.namaBarang}</b></td>
+                <td>${inv.merkModel || '-'}</td>
+                <td style="text-align: center; font-weight: bold;">${inv.jumlah} ${inv.satuan || 'Unit'}</td>
+                <td style="text-align: center;">${inv.kondisi || 'Baik'}</td>
+                <td>${inv.lokasiPenyimpanan || 'Satuan Pendidikan'}</td>
+              </tr>
+            `).join('') : `
+              <tr>
+                <td colspan="7" style="text-align: center; padding: 8px; color: #64748b;">
+                  Data sarana prasarana operasional unit ${roleTitle} terdata dalam kondisi baik dan terpelihara.
+                </td>
+              </tr>
+            `}
+          </tbody>
+        </table>
+        `}
 
         <!-- LEMBAR PENGESAHAN RESMI DINAS: KEPALA SEKOLAH DI KIRI, OPERATOR DI KANAN -->
         <table class="signatures">

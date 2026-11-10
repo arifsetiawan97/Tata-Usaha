@@ -101,7 +101,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
 
   // Relevant tasks for this report using robust string date parsing
   const relevantTasks = tasks.filter(t => {
-    if (t.role.toUpperCase() !== role.toUpperCase()) return false;
+    if (!t.role || t.role.trim().toUpperCase() !== role.trim().toUpperCase()) return false;
     if (isMonthly && monthlyData) {
       return isTaskInMonth(t.date, monthlyData.month, monthlyData.year);
     }
@@ -120,7 +120,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
   const roleTupoksiList = tupoksiDefinitions?.[role]?.tupoksiList || OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tupoksiList || [];
   const roleTambahanList = tupoksiDefinitions?.[role]?.tugasTambahanList || OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tugasTambahanList || [];
 
-  const roleInventories = inventories.filter(inv => inv.role === role);
+  const roleInventories = inventories.filter(inv => inv.role && inv.role.trim().toUpperCase() === role.trim().toUpperCase());
   const tasksWithPhotos = relevantTasks.filter(t => !!t.photoUrl);
 
   const isAnnual = !isMonthly;

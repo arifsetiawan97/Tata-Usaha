@@ -591,10 +591,10 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         reportType: 'annual',
         reportData: reportState,
         schoolConfig,
-        tasks,
-        inventories,
-        libraryBooks,
-        libraryMemberStats
+        tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
+        inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
+        libraryBooks: effectiveRole === 'PERPUS' ? libraryBooks : [],
+        libraryMemberStats: effectiveRole === 'PERPUS' ? libraryMemberStats : undefined
       });
       const filename = `Laporan_Tahunan_${effectiveRole}_${selectedYear}.doc`;
       downloadWordBlob(docHtml, filename);

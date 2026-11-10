@@ -679,11 +679,11 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
         reportType: 'monthly',
         reportData: reportState,
         schoolConfig,
-        tasks,
-        inventories,
+        tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
+        inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         tupoksiDefinitions,
-        libraryBooks,
-        libraryMemberStats
+        libraryBooks: effectiveRole === 'PERPUS' ? libraryBooks : [],
+        libraryMemberStats: effectiveRole === 'PERPUS' ? libraryMemberStats : undefined
       });
       const filename = `Laporan_Bulanan_${effectiveRole}_${selectedYear}_${String(selectedMonth).padStart(2, '0')}.doc`;
       downloadWordBlob(docHtml, filename);

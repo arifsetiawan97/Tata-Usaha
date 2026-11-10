@@ -136,7 +136,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
 
   // Relevant tasks for this report using robust string date parsing
   const relevantTasks = tasks.filter(t => {
-    if (t.role.toUpperCase() !== role.toUpperCase()) return false;
+    if (!t.role || t.role.trim().toUpperCase() !== role.trim().toUpperCase()) return false;
     if (isMonthly && monthlyData) {
       return isTaskInMonth(t.date, monthlyData.month, monthlyData.year);
     }
@@ -443,13 +443,13 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         reportType,
         reportData,
         schoolConfig,
-        tasks,
-        inventories,
+        tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === role.trim().toUpperCase()),
+        inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === role.trim().toUpperCase()),
         tupoksiDefinitions,
         manualDate,
         nomorSurat,
-        libraryBooks,
-        libraryMemberStats
+        libraryBooks: role === 'PERPUS' ? libraryBooks : [],
+        libraryMemberStats: role === 'PERPUS' ? libraryMemberStats : undefined
       });
 
       const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
@@ -476,13 +476,13 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         reportType,
         reportData,
         schoolConfig,
-        tasks,
-        inventories,
+        tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === role.trim().toUpperCase()),
+        inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === role.trim().toUpperCase()),
         tupoksiDefinitions,
         manualDate,
         nomorSurat,
-        libraryBooks,
-        libraryMemberStats
+        libraryBooks: role === 'PERPUS' ? libraryBooks : [],
+        libraryMemberStats: role === 'PERPUS' ? libraryMemberStats : undefined
       });
 
       const filename = `${isMonthly ? 'Laporan_Bulanan' : 'Laporan_Tahunan'}_${role}_${new Date().toISOString().split('T')[0]}.doc`;
@@ -704,7 +704,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                 subsequentTaskChunks.push(remainingTasks.slice(i, i + tasksPerPageSubsequent));
               }
             }
-            const roleInventories = inventories.filter(inv => inv.role === role);
+            const roleInventories = inventories.filter(inv => inv.role && inv.role.trim().toUpperCase() === role.trim().toUpperCase());
             const tasksWithPhotos = relevantTasks.filter(t => !!t.photoUrl);
             const totalPages = 1 + subsequentTaskChunks.length + 1 + 1; // Lembar 1 + N Task Sheets + Lampiran Sarpras & Foto + Lembar Pengesahan
 

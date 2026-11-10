@@ -117,8 +117,10 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
     keterangan: ''
   });
 
+  const isMatchingRole = (r?: string) => (r || '').trim().toUpperCase() === effectiveRole.trim().toUpperCase();
+
   const roleInventories = inventories.filter(item => {
-    if (item.role !== effectiveRole) return false;
+    if (!isMatchingRole(item.role)) return false;
     if (filterKondisi !== 'all' && item.kondisi !== filterKondisi) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -132,10 +134,10 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
     return true;
   });
 
-  const countBaik = inventories.filter(i => i.role === effectiveRole && i.kondisi === 'Baik').length;
-  const countRusakRingan = inventories.filter(i => i.role === effectiveRole && i.kondisi === 'Rusak Ringan').length;
-  const countRusakBerat = inventories.filter(i => i.role === effectiveRole && i.kondisi === 'Rusak Berat').length;
-  const totalBarang = inventories.filter(i => i.role === effectiveRole).length;
+  const countBaik = inventories.filter(i => isMatchingRole(i.role) && i.kondisi === 'Baik').length;
+  const countRusakRingan = inventories.filter(i => isMatchingRole(i.role) && i.kondisi === 'Rusak Ringan').length;
+  const countRusakBerat = inventories.filter(i => isMatchingRole(i.role) && i.kondisi === 'Rusak Berat').length;
+  const totalBarang = inventories.filter(i => isMatchingRole(i.role)).length;
 
   const handleOpenAdd = () => {
     setEditingItem(null);
