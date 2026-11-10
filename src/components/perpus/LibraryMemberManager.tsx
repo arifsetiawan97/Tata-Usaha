@@ -31,6 +31,10 @@ import {
   exportMembersToExcel, 
   parseMemberExcelFile 
 } from '../../utils/excelHelper';
+import { 
+  generateLibraryMemberReportWord, 
+  downloadWordBlob 
+} from '../../utils/wordExport';
 
 export const LibraryMemberManager: React.FC = () => {
   const { 
@@ -866,6 +870,35 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
     URL.revokeObjectURL(url);
   };
 
+  // Fungsi Unduh Dokumen Word (.doc) Standar Resmi Microsoft Word
+  const handleDownloadMemberReportWord = () => {
+    try {
+      const docHtml = generateLibraryMemberReportWord({
+        schoolConfig,
+        libraryMembers,
+        memberStats: {
+          total: grandTotal,
+          siswaCount: totalSiswa,
+          guruCount: totalGuru,
+          staffCount: totalStaff,
+          lakiCount: siswaLakiCount + guruLakiCount + staffLakiCount,
+          perempuanCount: siswaPerempuanCount + guruPerempuanCount + staffPerempuanCount,
+          aktifCount: registeredSiswaCount + registeredGuruCount + registeredStaffCount,
+          nonaktifCount: 0,
+          tamatCount: libraryMembers.filter(m => (m.status || '').toLowerCase() === 'tamat' || (m.status || '').toLowerCase() === 'alumni').length
+        },
+        nomorDokumen: printNomorDokumen,
+        manualDate: printManualDate,
+        includeFullList: printContentMode === 'full'
+      });
+
+      const filename = `Laporan_Rekap_Anggota_Perpustakaan_${new Date().toISOString().slice(0, 10)}.doc`;
+      downloadWordBlob(docHtml, filename);
+    } catch (err) {
+      console.error('Download Word error:', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner */}
@@ -948,10 +981,19 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
 
             <button
               onClick={() => setIsPrintModalOpen(true)}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white font-medium rounded-xl text-xs sm:text-sm flex items-center gap-2 backdrop-blur-sm border border-white/20 transition"
+              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white font-medium rounded-xl text-xs sm:text-sm flex items-center gap-2 backdrop-blur-sm border border-white/20 transition cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>Cetak Rekap Anggota</span>
+            </button>
+
+            <button
+              onClick={handleDownloadMemberReportWord}
+              className="px-3.5 py-2.5 bg-blue-600/30 hover:bg-blue-600/50 active:bg-blue-600/70 text-white font-semibold rounded-xl text-xs sm:text-sm flex items-center gap-2 backdrop-blur-sm border border-blue-400/40 transition shadow-sm cursor-pointer"
+              title="Unduh langsung Rekapitulasi Anggota Perpustakaan dalam format Microsoft Word (.doc)"
+            >
+              <FileText className="w-4 h-4 text-blue-200" />
+              <span>Unduh (.doc)</span>
             </button>
           </div>
         </div>
@@ -2039,7 +2081,18 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                   <span>Edit Tanggal</span>
                 </button>
 
-                {/* 4. Tombol Unduh File HTML Mandiri */}
+                {/* 4a. Tombol Unduh File Word (.doc) Mandiri */}
+                <button
+                  type="button"
+                  onClick={handleDownloadMemberReportWord}
+                  className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer border border-blue-500"
+                  title="Unduh dokumen lengkap sebagai file Microsoft Word (.doc) resmi"
+                >
+                  <FileText className="w-3.5 h-3.5 text-blue-200" />
+                  <span>Unduh (.doc)</span>
+                </button>
+
+                {/* 4b. Tombol Unduh File HTML Mandiri */}
                 <button
                   type="button"
                   onClick={handleDownloadMemberReportHtml}
@@ -2352,6 +2405,15 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadMemberReportWord}
+                  className="px-4 py-1.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer border border-blue-500"
+                  title="Unduh dokumen lengkap sebagai file Microsoft Word (.doc)"
+                >
+                  <FileText className="w-3.5 h-3.5 text-blue-200" />
+                  <span>Unduh Word (.doc)</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleDownloadMemberReportHtml}

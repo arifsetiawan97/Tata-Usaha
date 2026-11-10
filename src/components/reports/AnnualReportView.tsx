@@ -39,6 +39,7 @@ import {
   Percent,
   Target
 } from 'lucide-react';
+import { generateOfficialDocumentWord, downloadWordBlob } from '../../utils/wordExport';
 
 interface AnnualReportViewProps {
   onOpenPrint: (reportType: 'monthly' | 'annual', data: any, options?: { autoPrint?: boolean }) => void;
@@ -583,6 +584,26 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
     setReportState(prev => ({ ...prev, solutions: (prev.solutions || []).filter((_, i) => i !== index) }));
   };
 
+  // Unduh dokumen Lapor Tahunan dalam format Microsoft Word (.doc)
+  const handleDownloadWord = () => {
+    try {
+      const docHtml = generateOfficialDocumentWord({
+        reportType: 'annual',
+        reportData: reportState,
+        schoolConfig,
+        tasks,
+        inventories,
+        libraryBooks,
+        libraryMemberStats
+      });
+      const filename = `Laporan_Tahunan_${effectiveRole}_${selectedYear}.doc`;
+      downloadWordBlob(docHtml, filename);
+      showNotification('Dokumen Laporan Tahunan (.doc) resmi berhasil diunduh!');
+    } catch (err) {
+      console.error('Download Word error:', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -684,6 +705,17 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
           >
             <Eye className="w-3.5 h-3.5 text-sky-400" />
             <span>Pratinjau / Pengesahan</span>
+          </button>
+
+          {/* Unduh Word (.doc) Langsung */}
+          <button
+            type="button"
+            onClick={handleDownloadWord}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-700 hover:bg-blue-600 rounded-lg transition-colors shadow-xs border border-blue-500 cursor-pointer"
+            title="Download Laporan Tahunan ini langsung dalam format Microsoft Word (.doc)"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-200" />
+            <span>Unduh (.doc)</span>
           </button>
 
           {/* Archive Annual Report */}

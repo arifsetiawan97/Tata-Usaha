@@ -6,6 +6,7 @@ import { InventoryTable } from '../common/InventoryTable';
 import { MonthlyReport, AnnualReport, RoleType } from '../../types';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { generateOfficialDocumentHtml } from '../../utils/htmlExport';
+import { generateOfficialDocumentWord, downloadWordBlob } from '../../utils/wordExport';
 import { 
   isTaskInMonth, 
   isTaskInYear, 
@@ -468,6 +469,32 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     }
   };
 
+  // 3b. Download Official Microsoft Word (.doc) Document
+  const handleDownloadWord = () => {
+    try {
+      const docHtml = generateOfficialDocumentWord({
+        reportType,
+        reportData,
+        schoolConfig,
+        tasks,
+        inventories,
+        tupoksiDefinitions,
+        manualDate,
+        nomorSurat,
+        libraryBooks,
+        libraryMemberStats
+      });
+
+      const filename = `${isMonthly ? 'Laporan_Bulanan' : 'Laporan_Tahunan'}_${role}_${new Date().toISOString().split('T')[0]}.doc`;
+      downloadWordBlob(docHtml, filename);
+
+      setDownloadSuccess('Dokumen resmi Microsoft Word (.doc) berhasil diunduh!');
+      setTimeout(() => setDownloadSuccess(null), 3500);
+    } catch (err) {
+      console.error('Download Word error:', err);
+    }
+  };
+
   // 4. Archive Document into Audit Repository
   const handleArchive = () => {
     const doc = archiveReport(reportType, reportData);
@@ -594,6 +621,17 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                 <span>Simpan PDF</span>
               </>
             )}
+          </button>
+
+          {/* UNDUH WORD (.DOC) */}
+          <button
+            type="button"
+            onClick={handleDownloadWord}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-blue-700 hover:bg-blue-600 active:scale-95 text-white rounded-lg transition-all shadow-md border border-blue-500 cursor-pointer"
+            title="Download berkas Microsoft Word (.doc) berstandar resmi"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-200" />
+            <span>Unduh (.doc)</span>
           </button>
 
           {/* UNDUH HTML */}

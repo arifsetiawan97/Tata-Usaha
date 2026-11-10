@@ -47,6 +47,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { SecretAiGeneratorModal } from '../common/SecretAiGeneratorModal';
+import { generateOfficialDocumentWord, downloadWordBlob } from '../../utils/wordExport';
 
 interface MonthlyReportViewProps {
   onOpenPrint: (reportType: 'monthly' | 'annual', data: any, options?: { autoPrint?: boolean }) => void;
@@ -671,6 +672,27 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
     setReportState(prev => ({ ...prev, solutions: prev.solutions.filter((_, i) => i !== index) }));
   };
 
+  // Unduh dokumen Lapor Bulanan dalam format Microsoft Word (.doc)
+  const handleDownloadWord = () => {
+    try {
+      const docHtml = generateOfficialDocumentWord({
+        reportType: 'monthly',
+        reportData: reportState,
+        schoolConfig,
+        tasks,
+        inventories,
+        tupoksiDefinitions,
+        libraryBooks,
+        libraryMemberStats
+      });
+      const filename = `Laporan_Bulanan_${effectiveRole}_${selectedYear}_${String(selectedMonth).padStart(2, '0')}.doc`;
+      downloadWordBlob(docHtml, filename);
+      showNotification('Dokumen Laporan Bulanan (.doc) resmi berhasil diunduh!');
+    } catch (err) {
+      console.error('Download Word error:', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Bar */}
@@ -808,6 +830,17 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
           >
             <Eye className="w-3.5 h-3.5 text-sky-400" />
             <span>Pratinjau / Pengesahan</span>
+          </button>
+
+          {/* Unduh Word (.doc) Langsung */}
+          <button
+            type="button"
+            onClick={handleDownloadWord}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-700 hover:bg-blue-600 rounded-lg transition-colors shadow-xs border border-blue-500 cursor-pointer"
+            title="Download Laporan Bulanan ini langsung dalam format Microsoft Word (.doc)"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-200" />
+            <span>Unduh (.doc)</span>
           </button>
 
           {/* Archive Report */}
