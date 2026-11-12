@@ -173,20 +173,16 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const registeredSiswaLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L' && m.status !== 'tamat' && m.status !== 'alumni').length;
   const registeredSiswaPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P' && m.status !== 'tamat' && m.status !== 'alumni').length;
 
-  const guruLaki = (registeredGuruLaki + registeredGuruPerempuan > 0) ? registeredGuruLaki : (libraryMemberStats?.guruLaki ?? 10);
-  const guruPerempuan = (registeredGuruLaki + registeredGuruPerempuan > 0) ? registeredGuruPerempuan : (libraryMemberStats?.guruPerempuan ?? 14);
-  const totalGuru = (libraryMemberStats?.guruPendidik && libraryMemberStats.guruPendidik > 0 && registeredGuruLaki + registeredGuruPerempuan === 0)
-    ? libraryMemberStats.guruPendidik
-    : (guruLaki + guruPerempuan);
+  const guruLaki = Math.max(registeredGuruLaki, libraryMemberStats?.guruLaki || 0);
+  const guruPerempuan = Math.max(registeredGuruPerempuan, libraryMemberStats?.guruPerempuan || 0);
+  const totalGuru = Math.max(libraryMemberStats?.guruPendidik || 0, guruLaki + guruPerempuan);
 
-  const staffLaki = (registeredStaffLaki + registeredStaffPerempuan > 0) ? registeredStaffLaki : (libraryMemberStats?.staffLaki ?? 5);
-  const staffPerempuan = (registeredStaffLaki + registeredStaffPerempuan > 0) ? registeredStaffPerempuan : (libraryMemberStats?.staffPerempuan ?? 3);
-  const totalStaff = (libraryMemberStats?.staffTendik && libraryMemberStats.staffTendik > 0 && registeredStaffLaki + registeredStaffPerempuan === 0)
-    ? libraryMemberStats.staffTendik
-    : (staffLaki + staffPerempuan);
+  const staffLaki = Math.max(registeredStaffLaki, libraryMemberStats?.staffLaki || 0);
+  const staffPerempuan = Math.max(registeredStaffPerempuan, libraryMemberStats?.staffPerempuan || 0);
+  const totalStaff = Math.max(libraryMemberStats?.staffTendik || 0, staffLaki + staffPerempuan);
 
-  const siswaLaki = (libraryMemberStats?.siswaLaki && libraryMemberStats.siswaLaki > 0) ? libraryMemberStats.siswaLaki : (registeredSiswaLaki > 0 ? registeredSiswaLaki : 142);
-  const siswaPerempuan = (libraryMemberStats?.siswaPerempuan && libraryMemberStats.siswaPerempuan > 0) ? libraryMemberStats.siswaPerempuan : (registeredSiswaPerempuan > 0 ? registeredSiswaPerempuan : 158);
+  const siswaLaki = Math.max(registeredSiswaLaki, libraryMemberStats?.siswaLaki || 0);
+  const siswaPerempuan = Math.max(registeredSiswaPerempuan, libraryMemberStats?.siswaPerempuan || 0);
   const totalSiswa = siswaLaki + siswaPerempuan;
   const totalAnggotaPerpus = totalGuru + totalStaff + totalSiswa;
 

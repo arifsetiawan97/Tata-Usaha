@@ -75,6 +75,7 @@ export const LibraryMemberManager: React.FC = () => {
   const [isParsingExcel, setIsParsingExcel] = useState(false);
   const [excelFileName, setExcelFileName] = useState('');
   const [activeCardMember, setActiveCardMember] = useState<LibraryMemberItem | null>(null);
+  const [successNotification, setSuccessNotification] = useState<string | null>(null);
 
   // Print Customization States (Kertas F4/A4, Edit Tanggal Manual, Mode Lengkap/Ringkasan)
   const [printPaperSize, setPrintPaperSize] = useState<'F4' | 'A4'>('F4');
@@ -177,20 +178,21 @@ export const LibraryMemberManager: React.FC = () => {
     ? libraryMemberStats.staffTendik
     : (staffLakiCount + staffPerempuanCount);
 
-  const siswaLakiCount = libraryMemberStats.siswaLaki || 0;
-  const siswaPerempuanCount = libraryMemberStats.siswaPerempuan || 0;
-  const totalSiswa = siswaLakiCount + siswaPerempuanCount;
-  const grandTotal = totalSiswa + totalGuru + totalStaff;
-
   // Registered members count in directory
   const registeredGuruCount = libraryMembers.filter(m => getMemberTypeUpper(m) === 'GURU').length;
   const registeredStaffCount = libraryMembers.filter(m => getMemberTypeUpper(m) === 'STAFF').length;
   const registeredSiswaCount = libraryMembers.filter(m => getMemberTypeUpper(m) === 'SISWA').length;
   const registeredTamatCount = libraryMembers.filter(m => m.status === 'tamat' || m.status === 'alumni').length;
+  const registeredSiswaLaki = libraryMembers.filter(m => getMemberTypeUpper(m) === 'SISWA' && m.jenisKelamin === 'L').length;
+  const registeredSiswaPerempuan = libraryMembers.filter(m => getMemberTypeUpper(m) === 'SISWA' && m.jenisKelamin === 'P').length;
+
+  const siswaLakiCount = Math.max(libraryMemberStats.siswaLaki || 0, registeredSiswaLaki);
+  const siswaPerempuanCount = Math.max(libraryMemberStats.siswaPerempuan || 0, registeredSiswaPerempuan);
+  const totalSiswa = siswaLakiCount + siswaPerempuanCount;
+  const grandTotal = totalSiswa + totalGuru + totalStaff;
 
   // Open Add Modal
   const handleOpenAdd = (typeDefault: 'GURU' | 'STAFF' | 'SISWA' = 'SISWA') => {
-    const year = new Date().getFullYear();
     const prefix = typeDefault === 'GURU' ? 'ANG-G' : typeDefault === 'STAFF' ? 'ANG-ST' : 'ANG-SW';
     const num = libraryMembers.filter(m => getMemberTypeUpper(m) === typeDefault).length + 1;
     
@@ -214,10 +216,13 @@ export const LibraryMemberManager: React.FC = () => {
     e.preventDefault();
     if (!formData.nama?.trim()) return;
 
+    const newMemberName = formData.nama.trim();
+    const newMemberType = (formData.tipeAnggota || 'SISWA') as any;
+
     addLibraryMember({
       nomorAnggota: formData.nomorAnggota || `ANG-${Date.now().toString().slice(-4)}`,
-      nama: formData.nama.trim(),
-      tipeAnggota: (formData.tipeAnggota || 'SISWA') as any,
+      nama: newMemberName,
+      tipeAnggota: newMemberType,
       kelasAtauJabatan: formData.kelasAtauJabatan || '-',
       nomorIdentitas: formData.nomorIdentitas || '',
       jenisKelamin: formData.jenisKelamin || 'L',
@@ -227,6 +232,11 @@ export const LibraryMemberManager: React.FC = () => {
       telepon: formData.telepon || '',
       keterangan: formData.keterangan || ''
     });
+
+    setSuccessNotification(`Anggota baru "${newMemberName}" (${newMemberType}) berhasil didaftarkan! Total pemustaka perpustakaan di sistem otomatis bertambah menjadi ${grandTotal + 1} orang.`);
+    setTimeout(() => {
+      setSuccessNotification(null);
+    }, 6000);
 
     setIsAddModalOpen(false);
   };
@@ -253,6 +263,11 @@ export const LibraryMemberManager: React.FC = () => {
       tanggalTerdaftar: formData.tanggalBergabung || activeMember.tanggalTerdaftar
     });
 
+    setSuccessNotification(`Data anggota "${formData.nama.trim()}" berhasil diperbarui dan disinkronkan ke sistem.`);
+    setTimeout(() => {
+      setSuccessNotification(null);
+    }, 5000);
+
     setIsEditModalOpen(false);
     setActiveMember(null);
   };
@@ -266,9 +281,14 @@ export const LibraryMemberManager: React.FC = () => {
   // Confirm Delete Member
   const handleConfirmDelete = () => {
     if (activeMember) {
+      const deletedName = activeMember.nama;
       deleteLibraryMember(activeMember.id);
       setIsDeleteModalOpen(false);
       setActiveMember(null);
+      setSuccessNotification(`Anggota "${deletedName}" telah dihapus. Sistem secara otomatis memperbarui rekapitulasi data anggota.`);
+      setTimeout(() => {
+        setSuccessNotification(null);
+      }, 5000);
     }
   };
 
@@ -1040,6 +1060,30 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
           </div>
         </div>
       </div>
+
+      {/* Alert Notifikasi Pembaruan Otomatis Sistem */}
+      {successNotification && (
+        <div className="p-4 bg-emerald-50 border-2 border-emerald-300 text-emerald-950 text-xs sm:text-sm font-semibold rounded-2xl flex items-center justify-between gap-3 shadow-md animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-emerald-950">{successNotification}</p>
+              <p className="text-[11px] text-emerald-700 font-normal mt-0.5">
+                Data anggota baru telah tersimpan di direktori sistem dan jumlah rekapitulasi langsung bertambah secara otomatis.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessNotification(null)}
+            className="p-1 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* METRIC CARDS 4 KATEGORI: TOTAL, GURU, STAFF, SISWA (LENGKAP RINCIAN GENDER L/P & STATUS TAMAT) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

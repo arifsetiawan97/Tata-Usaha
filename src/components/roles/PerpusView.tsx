@@ -39,6 +39,7 @@ export const PerpusView: React.FC = () => {
     inventories, 
     setRoleSubTab, 
     libraryBooks, 
+    libraryMembers,
     libraryMemberStats 
   } = useApp();
   const [activeCategory, setActiveCategory] = useState<string>('semua');
@@ -189,13 +190,17 @@ export const PerpusView: React.FC = () => {
               Jumlah Anggota Perpustakaan
             </h3>
             <p className="text-xs text-blue-100/70 leading-relaxed">
-              Pendataan terpisah pemustaka: Guru ({libraryMemberStats?.guruPendidik || 0}), Staff ({libraryMemberStats?.staffTendik || 0}), dan Siswa ({(libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0)}), dilengkapi cetak kartu anggota.
+              Pendataan terpisah pemustaka: Guru ({Math.max(libraryMemberStats?.guruPendidik || 0, libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU').length)}), Staff ({Math.max(libraryMemberStats?.staffTendik || 0, libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF').length)}), dan Siswa ({Math.max((libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0), libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA').length)}), dilengkapi cetak kartu anggota.
             </p>
           </div>
 
           <div className="mt-4 pt-3 border-t border-blue-800/60 flex items-center justify-between">
             <span className="text-xs text-blue-200 font-semibold">
-              Total {(libraryMemberStats?.guruPendidik || 0) + (libraryMemberStats?.staffTendik || 0) + (libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0)} anggota
+              Total {
+                Math.max(libraryMemberStats?.guruPendidik || 0, libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU').length) +
+                Math.max(libraryMemberStats?.staffTendik || 0, libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF').length) +
+                Math.max((libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0), libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA').length)
+              } anggota
             </span>
             <button
               type="button"

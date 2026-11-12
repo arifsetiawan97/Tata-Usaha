@@ -1186,22 +1186,164 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Handlers Anggota Perpustakaan
   const addLibraryMember = (member: Omit<LibraryMemberItem, 'id'>) => {
     const id = `mem-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    const newMember: LibraryMemberItem = { ...member, id };
+    const newMember: LibraryMemberItem = { 
+      ...member, 
+      id,
+      tanggalBergabung: member.tanggalBergabung || new Date().toISOString().split('T')[0],
+      tanggalTerdaftar: member.tanggalTerdaftar || member.tanggalBergabung || new Date().toISOString().split('T')[0]
+    };
+
     setLibraryMembers(prev => [newMember, ...prev]);
+
+    // Sinkronisasi otomatis rekapitulasi data anggota ke sistem secara real-time
+    const t = String(member.tipeAnggota || 'SISWA').toUpperCase();
+    const isP = member.jenisKelamin === 'P';
+    const today = new Date().toISOString().split('T')[0];
+
+    setLibraryMemberStats(prev => {
+      const next: LibraryMemberStats = {
+        siswaLaki: Number(prev.siswaLaki) || 0,
+        siswaPerempuan: Number(prev.siswaPerempuan) || 0,
+        guruPendidik: Number(prev.guruPendidik) || 0,
+        guruLaki: Number(prev.guruLaki) || 0,
+        guruPerempuan: Number(prev.guruPerempuan) || 0,
+        staffTendik: Number(prev.staffTendik) || 0,
+        staffLaki: Number(prev.staffLaki) || 0,
+        staffPerempuan: Number(prev.staffPerempuan) || 0,
+        lastUpdated: today
+      };
+
+      if (t === 'GURU') {
+        next.guruPendidik = (next.guruPendidik || 0) + 1;
+        if (isP) {
+          next.guruPerempuan = (next.guruPerempuan || 0) + 1;
+        } else {
+          next.guruLaki = (next.guruLaki || 0) + 1;
+        }
+      } else if (t === 'STAFF') {
+        next.staffTendik = (next.staffTendik || 0) + 1;
+        if (isP) {
+          next.staffPerempuan = (next.staffPerempuan || 0) + 1;
+        } else {
+          next.staffLaki = (next.staffLaki || 0) + 1;
+        }
+      } else {
+        // SISWA
+        if (isP) {
+          next.siswaPerempuan = (next.siswaPerempuan || 0) + 1;
+        } else {
+          next.siswaLaki = (next.siswaLaki || 0) + 1;
+        }
+      }
+
+      return next;
+    });
   };
 
   const updateLibraryMember = (id: string, updated: Partial<LibraryMemberItem>) => {
-    setLibraryMembers(prev => prev.map(m => m.id === id ? { ...m, ...updated } : m));
+    setLibraryMembers(prev => {
+      const target = prev.find(m => m.id === id);
+      if (!target) return prev;
+
+      // Adjust stats if category or gender changed
+      const oldType = String(target.tipeAnggota || 'SISWA').toUpperCase();
+      const newType = String(updated.tipeAnggota || target.tipeAnggota || 'SISWA').toUpperCase();
+      const oldGender = target.jenisKelamin;
+      const newGender = updated.jenisKelamin || target.jenisKelamin;
+
+      if (oldType !== newType || oldGender !== newGender) {
+        setLibraryMemberStats(s => {
+          const next = { ...s, lastUpdated: new Date().toISOString().split('T')[0] };
+          // Kurangi dari kategori lama
+          if (oldType === 'GURU') {
+            next.guruPendidik = Math.max(0, (next.guruPendidik || 0) - 1);
+            if (oldGender === 'P') next.guruPerempuan = Math.max(0, (next.guruPerempuan || 0) - 1);
+            else next.guruLaki = Math.max(0, (next.guruLaki || 0) - 1);
+          } else if (oldType === 'STAFF') {
+            next.staffTendik = Math.max(0, (next.staffTendik || 0) - 1);
+            if (oldGender === 'P') next.staffPerempuan = Math.max(0, (next.staffPerempuan || 0) - 1);
+            else next.staffLaki = Math.max(0, (next.staffLaki || 0) - 1);
+          } else {
+            if (oldGender === 'P') next.siswaPerempuan = Math.max(0, (next.siswaPerempuan || 0) - 1);
+            else next.siswaLaki = Math.max(0, (next.siswaLaki || 0) - 1);
+          }
+          // Tambahkan ke kategori baru
+          if (newType === 'GURU') {
+            next.guruPendidik = (next.guruPendidik || 0) + 1;
+            if (newGender === 'P') next.guruPerempuan = (next.guruPerempuan || 0) + 1;
+            else next.guruLaki = (next.guruLaki || 0) + 1;
+          } else if (newType === 'STAFF') {
+            next.staffTendik = (next.staffTendik || 0) + 1;
+            if (newGender === 'P') next.staffPerempuan = (next.staffPerempuan || 0) + 1;
+            else next.staffLaki = (next.staffLaki || 0) + 1;
+          } else {
+            if (newGender === 'P') next.siswaPerempuan = (next.siswaPerempuan || 0) + 1;
+            else next.siswaLaki = (next.siswaLaki || 0) + 1;
+          }
+          return next;
+        });
+      }
+
+      return prev.map(m => m.id === id ? { ...m, ...updated } : m);
+    });
   };
 
   const deleteLibraryMember = (id: string) => {
-    setLibraryMembers(prev => prev.filter(m => m.id !== id));
+    setLibraryMembers(prev => {
+      const target = prev.find(m => m.id === id);
+      if (target) {
+        const t = String(target.tipeAnggota || 'SISWA').toUpperCase();
+        const isP = target.jenisKelamin === 'P';
+        setLibraryMemberStats(s => {
+          const next = { ...s, lastUpdated: new Date().toISOString().split('T')[0] };
+          if (t === 'GURU') {
+            next.guruPendidik = Math.max(0, (next.guruPendidik || 0) - 1);
+            if (isP) next.guruPerempuan = Math.max(0, (next.guruPerempuan || 0) - 1);
+            else next.guruLaki = Math.max(0, (next.guruLaki || 0) - 1);
+          } else if (t === 'STAFF') {
+            next.staffTendik = Math.max(0, (next.staffTendik || 0) - 1);
+            if (isP) next.staffPerempuan = Math.max(0, (next.staffPerempuan || 0) - 1);
+            else next.staffLaki = Math.max(0, (next.staffLaki || 0) - 1);
+          } else {
+            if (isP) next.siswaPerempuan = Math.max(0, (next.siswaPerempuan || 0) - 1);
+            else next.siswaLaki = Math.max(0, (next.siswaLaki || 0) - 1);
+          }
+          return next;
+        });
+      }
+      return prev.filter(m => m.id !== id);
+    });
   };
 
   const deleteMultipleLibraryMembers = (ids: string[]) => {
     if (!ids || ids.length === 0) return;
     const idSet = new Set(ids);
-    setLibraryMembers(prev => prev.filter(m => !idSet.has(m.id)));
+    setLibraryMembers(prev => {
+      const targets = prev.filter(m => idSet.has(m.id));
+      if (targets.length > 0) {
+        setLibraryMemberStats(s => {
+          const next = { ...s, lastUpdated: new Date().toISOString().split('T')[0] };
+          targets.forEach(target => {
+            const t = String(target.tipeAnggota || 'SISWA').toUpperCase();
+            const isP = target.jenisKelamin === 'P';
+            if (t === 'GURU') {
+              next.guruPendidik = Math.max(0, (next.guruPendidik || 0) - 1);
+              if (isP) next.guruPerempuan = Math.max(0, (next.guruPerempuan || 0) - 1);
+              else next.guruLaki = Math.max(0, (next.guruLaki || 0) - 1);
+            } else if (t === 'STAFF') {
+              next.staffTendik = Math.max(0, (next.staffTendik || 0) - 1);
+              if (isP) next.staffPerempuan = Math.max(0, (next.staffPerempuan || 0) - 1);
+              else next.staffLaki = Math.max(0, (next.staffLaki || 0) - 1);
+            } else {
+              if (isP) next.siswaPerempuan = Math.max(0, (next.siswaPerempuan || 0) - 1);
+              else next.siswaLaki = Math.max(0, (next.siswaLaki || 0) - 1);
+            }
+          });
+          return next;
+        });
+      }
+      return prev.filter(m => !idSet.has(m.id));
+    });
   };
 
   const importLibraryMembers = (members: Omit<LibraryMemberItem, 'id'>[]) => {
