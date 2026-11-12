@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import { SecretAiGeneratorModal } from '../common/SecretAiGeneratorModal';
 import { generateOfficialDocumentWord, downloadWordBlob } from '../../utils/wordExport';
+import { createOfficialDocumentDocx, downloadDocxFile } from '../../utils/docxExport';
 
 interface MonthlyReportViewProps {
   onOpenPrint: (reportType: 'monthly' | 'annual', data: any, options?: { autoPrint?: boolean }) => void;
@@ -693,6 +694,29 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
     }
   };
 
+  // Unduh dokumen Lapor Bulanan format asli Microsoft Word (.docx) berstandar resmi (Top 3cm, Left 4cm, Bottom 3cm, Right 3cm)
+  const handleDownloadDocx = async () => {
+    try {
+      showNotification('Sedang menyusun dokumen asli Microsoft Word (.docx)...');
+      const doc = createOfficialDocumentDocx({
+        reportType: 'monthly',
+        reportData: reportState,
+        schoolConfig,
+        tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
+        inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
+        tupoksiDefinitions,
+        libraryBooks: effectiveRole === 'PERPUS' ? libraryBooks : [],
+        libraryMemberStats: effectiveRole === 'PERPUS' ? libraryMemberStats : undefined
+      });
+      const filename = `Laporan_Bulanan_${effectiveRole}_${selectedYear}_${String(selectedMonth).padStart(2, '0')}.docx`;
+      await downloadDocxFile(doc, filename);
+      showNotification('Dokumen asli Microsoft Word (.docx) berstandar dinas berhasil diunduh!');
+    } catch (err) {
+      console.error('Download DOCX error:', err);
+      showNotification('Gagal mengunduh dokumen .docx');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Bar */}
@@ -836,11 +860,22 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
           <button
             type="button"
             onClick={handleDownloadWord}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-700 hover:bg-blue-600 rounded-lg transition-colors shadow-xs border border-blue-500 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-700 hover:bg-blue-600 rounded-lg transition-colors shadow-xs border border-blue-500 cursor-pointer"
             title="Download Laporan Bulanan ini langsung dalam format Microsoft Word (.doc)"
           >
             <FileText className="w-3.5 h-3.5 text-blue-200" />
             <span>Unduh (.doc)</span>
+          </button>
+
+          {/* Unduh Native Microsoft Word (.docx) */}
+          <button
+            type="button"
+            onClick={handleDownloadDocx}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-700 hover:bg-indigo-600 rounded-lg transition-colors shadow-xs border border-indigo-400 cursor-pointer ring-1 ring-indigo-300/50"
+            title="Download Laporan Bulanan ini dalam format dokumen asli Microsoft Word (.docx) Standar Dinas (A4, 3-4-3-3 cm, TNR)"
+          >
+            <FileCheck2 className="w-3.5 h-3.5 text-indigo-200" />
+            <span>Unduh (.docx)</span>
           </button>
 
           {/* Archive Report */}

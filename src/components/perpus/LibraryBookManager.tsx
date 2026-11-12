@@ -34,6 +34,10 @@ import {
   exportBooksToExcel, 
   parseBookExcelFile 
 } from '../../utils/excelHelper';
+import { 
+  createLibraryBooksDocx, 
+  downloadDocxFile 
+} from '../../utils/docxExport';
 
 const MONTH_NAMES = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -1236,6 +1240,49 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  // Download Standalone Native Document File (.docx) Standar Resmi Dinas (Top 3cm, Left 4cm, Bottom 3cm, Right 3cm)
+  const handleDownloadBeritaAcaraDocx = async () => {
+    try {
+      const monthLabel = formatMonthLabel(selectedMonth);
+      const docTitle = 
+        printDocType === 'berita_acara'
+          ? `BERITA ACARA PENERIMAAN & PENGADAAN BUKU PERPUSTAKAAN`
+          : printDocType === 'tahun_beli'
+          ? `LAPORAN INVENTARIS BUKU BERDASARKAN TAHUN PEMBELIAN ${printYearFilter !== 'all' ? printYearFilter : 'KESELURUHAN'}`
+          : printDocType === 'tanggal_masuk'
+          ? `LAPORAN PENERIMAAN BUKU PERPUSTAKAAN TANGGAL ${printDateFilter || 'SEMUA TANGGAL'}`
+          : `KATALOG LENGKAP BUKU INVENTARIS PERPUSTAKAAN SEKOLAH`;
+
+      const docSubtitle = 
+        printDocType === 'berita_acara'
+          ? `Periode Pengadaan: ${monthLabel} · Total: ${printBooks.length} Judul (${printViewStats.totalCopies} Eks)`
+          : printDocType === 'tahun_beli'
+          ? `Tahun Anggaran / Pembelian: ${printYearFilter !== 'all' ? printYearFilter : 'Semua Tahun'} · Total: ${printBooks.length} Judul (${printViewStats.totalCopies} Eks)`
+          : printDocType === 'tanggal_masuk'
+          ? `Tanggal Masuk Tercatat: ${printDateFilter || 'Semua Tanggal'} · Total: ${printBooks.length} Judul (${printViewStats.totalCopies} Eks)`
+          : `Koleksi Terdata Keseluruhan · Total: ${printBooks.length} Judul (${printViewStats.totalCopies} Eks)`;
+
+      const nomorSurat = 
+        printDocType === 'berita_acara'
+          ? `421.2/BA-BUKU/${selectedMonth !== 'all' ? selectedMonth.replace('-', '/') : new Date().getFullYear()}/PERPUS`
+          : `421.2/INV-BUKU/${new Date().getFullYear()}/PERPUS`;
+
+      const doc = createLibraryBooksDocx({
+        schoolConfig,
+        books: printBooks,
+        docTitle,
+        docSubtitle,
+        nomorSurat,
+        manualDate: `${schoolConfig.kabupatenKota || 'Batang Hari'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`
+      });
+
+      const filename = `Dokumen_Perpustakaan_${printDocType}_${new Date().toISOString().split('T')[0]}.docx`;
+      await downloadDocxFile(doc, filename);
+    } catch (err) {
+      console.error('Download DOCX error:', err);
+    }
   };
 
   const rawKepsekNama = schoolConfig.kepalaSekolah?.nama || '';
@@ -3073,9 +3120,19 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                   type="button"
                   onClick={handleDownloadBeritaAcaraDoc}
                   className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer"
+                  title="Unduh dokumen dalam format Microsoft Word (.doc)"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Unduh (.doc)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadBeritaAcaraDocx}
+                  className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer border border-indigo-400 ring-1 ring-indigo-300/40"
+                  title="Unduh dokumen asli Microsoft Word (.docx) Standar Dinas (A4, 3-4-3-3 cm, TNR)"
+                >
+                  <FileText className="w-3.5 h-3.5 text-indigo-200" />
+                  <span>Unduh (.docx)</span>
                 </button>
                 <button
                   type="button"

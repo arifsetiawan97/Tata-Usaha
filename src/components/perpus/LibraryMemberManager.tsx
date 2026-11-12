@@ -35,6 +35,10 @@ import {
   generateLibraryMemberReportWord, 
   downloadWordBlob 
 } from '../../utils/wordExport';
+import { 
+  createLibraryMemberReportDocx, 
+  downloadDocxFile 
+} from '../../utils/docxExport';
 
 export const LibraryMemberManager: React.FC = () => {
   const { 
@@ -899,6 +903,35 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
     }
   };
 
+  // Fungsi Unduh Dokumen Word (.docx) Asli Berstandar Resmi Dinas (Top 3cm, Left 4cm, Bottom 3cm, Right 3cm)
+  const handleDownloadMemberReportDocx = async () => {
+    try {
+      const doc = createLibraryMemberReportDocx({
+        schoolConfig,
+        libraryMembers,
+        memberStats: {
+          siswaLaki: siswaLakiCount,
+          siswaPerempuan: siswaPerempuanCount,
+          guruPendidik: totalGuru,
+          guruLaki: guruLakiCount,
+          guruPerempuan: guruPerempuanCount,
+          staffTendik: totalStaff,
+          staffLaki: staffLakiCount,
+          staffPerempuan: staffPerempuanCount,
+          lastUpdated: new Date().toISOString()
+        },
+        nomorDokumen: printNomorDokumen,
+        manualDate: printManualDate,
+        includeFullList: printContentMode === 'full'
+      });
+
+      const filename = `Laporan_Rekap_Anggota_Perpustakaan_${new Date().toISOString().slice(0, 10)}.docx`;
+      await downloadDocxFile(doc, filename);
+    } catch (err) {
+      console.error('Download DOCX error:', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner */}
@@ -994,6 +1027,15 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
             >
               <FileText className="w-4 h-4 text-blue-200" />
               <span>Unduh (.doc)</span>
+            </button>
+
+            <button
+              onClick={handleDownloadMemberReportDocx}
+              className="px-3.5 py-2.5 bg-indigo-600/40 hover:bg-indigo-600/60 active:bg-indigo-600/80 text-white font-semibold rounded-xl text-xs sm:text-sm flex items-center gap-2 backdrop-blur-sm border border-indigo-400/50 transition shadow-sm cursor-pointer ring-1 ring-indigo-300/40"
+              title="Unduh Rekapitulasi Anggota Perpustakaan dalam dokumen asli Microsoft Word (.docx) Standar Resmi Dinas"
+            >
+              <FileText className="w-4 h-4 text-indigo-200" />
+              <span>Unduh (.docx)</span>
             </button>
           </div>
         </div>
@@ -2090,6 +2132,17 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                 >
                   <FileText className="w-3.5 h-3.5 text-blue-200" />
                   <span>Unduh (.doc)</span>
+                </button>
+
+                {/* 4a2. Tombol Unduh Native Microsoft Word (.docx) */}
+                <button
+                  type="button"
+                  onClick={handleDownloadMemberReportDocx}
+                  className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow transition cursor-pointer border border-indigo-500 ring-1 ring-indigo-300/40"
+                  title="Unduh dokumen asli Microsoft Word (.docx) Standar Dinas (A4, 3-4-3-3 cm, TNR)"
+                >
+                  <FileText className="w-3.5 h-3.5 text-indigo-200" />
+                  <span>Unduh (.docx)</span>
                 </button>
 
                 {/* 4b. Tombol Unduh File HTML Mandiri */}

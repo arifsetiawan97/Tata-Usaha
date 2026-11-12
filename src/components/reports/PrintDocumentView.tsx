@@ -7,6 +7,7 @@ import { MonthlyReport, AnnualReport, RoleType } from '../../types';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { generateOfficialDocumentHtml } from '../../utils/htmlExport';
 import { generateOfficialDocumentWord, downloadWordBlob } from '../../utils/wordExport';
+import { createOfficialDocumentDocx, downloadDocxFile } from '../../utils/docxExport';
 import { 
   isTaskInMonth, 
   isTaskInYear, 
@@ -133,6 +134,8 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [archivedSuccess, setArchivedSuccess] = useState<string | null>(null);
   const [mobileFitScale, setMobileFitScale] = useState(false);
+  const [printLayoutMode, setPrintLayoutMode] = useState<'compact' | 'segmented'>('compact');
+  const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
 
   // Relevant tasks for this report using robust string date parsing
   const relevantTasks = tasks.filter(t => {
@@ -495,6 +498,35 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     }
   };
 
+  // 3c. Download Native Microsoft Word (.docx) Document
+  const handleDownloadDocx = async () => {
+    setIsGeneratingDocx(true);
+    try {
+      const doc = createOfficialDocumentDocx({
+        reportType,
+        reportData,
+        schoolConfig,
+        tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === role.trim().toUpperCase()),
+        inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === role.trim().toUpperCase()),
+        tupoksiDefinitions,
+        manualDate,
+        nomorSurat,
+        libraryBooks: role === 'PERPUS' ? libraryBooks : [],
+        libraryMemberStats: role === 'PERPUS' ? libraryMemberStats : undefined
+      });
+
+      const filename = `${isMonthly ? 'Laporan_Bulanan' : 'Laporan_Tahunan'}_${role}_${new Date().toISOString().split('T')[0]}.docx`;
+      await downloadDocxFile(doc, filename);
+
+      setDownloadSuccess('Dokumen asli Microsoft Word (.docx) berstandar resmi (A4, 3-4-3-3 cm) berhasil diunduh!');
+      setTimeout(() => setDownloadSuccess(null), 3500);
+    } catch (err) {
+      console.error('Download DOCX error:', err);
+    } finally {
+      setIsGeneratingDocx(false);
+    }
+  };
+
   // 4. Archive Document into Audit Repository
   const handleArchive = () => {
     const doc = archiveReport(reportType, reportData);
@@ -623,14 +655,35 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
             )}
           </button>
 
+          {/* UNDUH WORD NATIVE (.DOCX) - RESMI */}
+          <button
+            type="button"
+            onClick={handleDownloadDocx}
+            disabled={isGeneratingDocx}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-lg transition-all shadow-md border border-blue-400 cursor-pointer disabled:opacity-50"
+            title="Download berkas asli Microsoft Word (.docx) dengan margin 3-4-3-3 cm, Times New Roman, dan spasi 1.15"
+          >
+            {isGeneratingDocx ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Membuat...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-blue-200" />
+                <span>Unduh (.docx)</span>
+              </>
+            )}
+          </button>
+
           {/* UNDUH WORD (.DOC) */}
           <button
             type="button"
             onClick={handleDownloadWord}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-blue-700 hover:bg-blue-600 active:scale-95 text-white rounded-lg transition-all shadow-md border border-blue-500 cursor-pointer"
-            title="Download berkas Microsoft Word (.doc) berstandar resmi"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-lg transition-all border border-slate-600 cursor-pointer"
+            title="Download berkas Microsoft Word (.doc) alternatif"
           >
-            <FileText className="w-3.5 h-3.5 text-blue-200" />
+            <FileText className="w-3.5 h-3.5 text-blue-300" />
             <span>Unduh (.doc)</span>
           </button>
 
@@ -653,7 +706,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
             title="Simpan dokumen ke Lemari Arsip Pemeriksaan / Audit"
           >
             <Archive className="w-3.5 h-3.5 text-amber-200" />
-            <span>Arsipkan Dokumen</span>
+            <span>Arsipkan</span>
           </button>
         </div>
       </div>
@@ -673,16 +726,55 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         </div>
       )}
 
-      {/* Mobile Fit Helper Bar */}
-      <div className="no-print flex items-center justify-between bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg text-xs text-amber-800 sm:hidden">
-        <span className="text-[11px]">Tampilan Kertas A4 Kedinasan:</span>
+      {/* Helper Bar: Pilihan Mode Cetak (Padat & Terisi Penuh vs Per Lembar Terpisah) */}
+      <div className="no-print flex flex-wrap items-center justify-between gap-2.5 p-3 bg-slate-100 border border-slate-300 rounded-xl text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-bold text-slate-800 flex items-center gap-1">
+            <Printer className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Format Cetak Langsung:</span>
+          </span>
+          <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setPrintLayoutMode('compact')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-md text-xs font-black transition-all cursor-pointer ${
+                printLayoutMode === 'compact'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Mode Cetak Padat: Seluruh halaman kertas terisi penuh tanpa terpotong atau menyisakan ruang kosong yang lebar"
+            >
+              <Check className={`w-3.5 h-3.5 ${printLayoutMode === 'compact' ? 'inline' : 'hidden'}`} />
+              <span>Padat & Terisi Penuh (Hemat Kertas)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrintLayoutMode('segmented')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                printLayoutMode === 'segmented'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Mode Per Lembar Terpisah: Menampilkan halaman terpisah dengan lembar lampiran mandiri"
+            >
+              <Check className={`w-3.5 h-3.5 ${printLayoutMode === 'segmented' ? 'inline' : 'hidden'}`} />
+              <span>Per Lembar Terpisah</span>
+            </button>
+          </div>
+          <span className="text-[11px] text-slate-500 hidden md:inline">
+            {printLayoutMode === 'compact'
+              ? '✨ Seluruh tugas & sarpras mengalir rapi mengisi halaman pertama & kedua secara penuh tanpa kekosongan kertas.'
+              : 'Format lembar terpisah per bab.'}
+          </span>
+        </div>
+
         <button
           type="button"
           onClick={() => setMobileFitScale(!mobileFitScale)}
-          className="flex items-center gap-1 font-bold text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded text-[10px]"
+          className="flex items-center gap-1 font-bold text-amber-900 bg-amber-200/80 hover:bg-amber-300/80 px-2.5 py-1 rounded text-[11px] cursor-pointer transition-colors"
         >
-          {mobileFitScale ? <Monitor className="w-3 h-3" /> : <Smartphone className="w-3 h-3" />}
-          <span>{mobileFitScale ? 'Ukuran Penuh (Geser)' : 'Sesuaikan Lebar Layar'}</span>
+          {mobileFitScale ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
+          <span>{mobileFitScale ? 'Ukuran A4 Asli' : 'Paskan Layar'}</span>
         </button>
       </div>
 
@@ -708,6 +800,514 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
             const tasksWithPhotos = relevantTasks.filter(t => !!t.photoUrl);
             const totalPages = 1 + subsequentTaskChunks.length + 1 + 1; // Lembar 1 + N Task Sheets + Lampiran Sarpras & Foto + Lembar Pengesahan
 
+            // ========================================================
+            // MODE 1: FORMAT CETAK LANGSUNG: PADAT & TERISI PENUH (SEAMLESS CONTINUOUS)
+            // Mengisi halaman 1, 2, dst secara penuh tanpa kekosongan dan tanpa split paksa
+            // ========================================================
+            if (printLayoutMode === 'compact') {
+              return (
+                <>
+                  <div className="no-print flex items-center justify-between text-xs text-slate-500 font-semibold px-2 mb-1">
+                    <span className="flex items-center gap-1.5 text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Format Cetak Langsung: Padat & Terisi Penuh (Tanpa Halaman Kosong / Hemat Kertas)</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400">Standar Resmi Dinas Pendidikan</span>
+                  </div>
+
+                  <div 
+                    className={`print-page print-continuous bg-white border border-slate-300 shadow-xl rounded-xl p-5 sm:p-8 text-slate-900 leading-normal print:border-none print:shadow-none print:p-0 print:m-0 print:rounded-none w-full ${
+                      mobileFitScale ? 'w-full text-[11px]' : 'min-w-[720px] sm:min-w-0'
+                    }`}
+                    style={{ boxSizing: 'border-box' }}
+                  >
+                    {/* KOP SURAT RESMI 3 KOLOM */}
+                    <KopSurat config={schoolConfig} isPrintVersion={true} />
+
+                    {/* DOKUMEN HEADING */}
+                    <div className="text-center my-2.5 break-inside-avoid">
+                      <h2 className="text-sm sm:text-base font-extrabold uppercase tracking-wide text-slate-950">
+                        {isMonthly 
+                          ? `LAPORAN BULANAN KINERJA OPERATOR LAYANAN OPERASIONAL`
+                          : `LAPORAN TAHUNAN KINERJA OPERATOR LAYANAN OPERASIONAL`
+                        }
+                      </h2>
+                      <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 mt-0.5">
+                        BIDANG: {roleTitle.toUpperCase()}
+                      </h3>
+                      <p className="text-xs font-semibold text-slate-700 mt-0.5">
+                        {isMonthly 
+                          ? `Periode: Bulan ${MONTH_NAMES[(monthlyData?.month || 9) - 1]} Tahun ${monthlyData?.year || 2026}`
+                          : `Tahun Anggaran: ${annualData?.year || 2026}`
+                        }
+                      </p>
+                      <div className="flex items-center justify-center gap-2 mt-1">
+                        <p className="text-[11px] font-mono text-slate-700">
+                          Nomor: <span className="font-bold text-slate-950">{nomorSurat}</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempNomorSurat(nomorSurat);
+                            setIsEditNomorModalOpen(true);
+                          }}
+                          className="no-print inline-flex items-center gap-1 text-[10px] text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded cursor-pointer transition-colors shadow-xs"
+                          title="Klik untuk mengubah nomor surat resmi"
+                        >
+                          <Edit3 className="w-2.5 h-2.5" />
+                          <span>Ubah No. Surat</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* IDENTITAS PELAKSANA TUGAS */}
+                    <div className="my-2 p-2.5 bg-slate-50 border border-slate-300 rounded text-xs break-inside-avoid print:bg-transparent print:border-black">
+                      <table className="w-full border-none">
+                        <tbody>
+                          <tr>
+                            <td className="w-40 sm:w-48 font-semibold border-none py-0.5">Nama Petugas Pelaksana</td>
+                            <td className="w-4 border-none py-0.5">:</td>
+                            <td className="font-bold border-none py-0.5">{displayOperatorNama}</td>
+                          </tr>
+                          <tr>
+                            <td className="font-semibold border-none py-0.5">NIP / NIPPK</td>
+                            <td className="border-none py-0.5">:</td>
+                            <td className="border-none py-0.5">{displayOperatorNip}</td>
+                          </tr>
+                          <tr>
+                            <td className="font-semibold border-none py-0.5">Jabatan / Satuan Tugas</td>
+                            <td className="border-none py-0.5">:</td>
+                            <td className="border-none py-0.5">{operator.jabatan}</td>
+                          </tr>
+                          <tr>
+                            <td className="font-semibold border-none py-0.5">Unit Kerja / Sekolah</td>
+                            <td className="border-none py-0.5">:</td>
+                            <td className="border-none py-0.5">{schoolConfig.namaSekolah}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* RINGKASAN EKSEKUTIF KINERJA */}
+                    <div className="my-2 text-xs break-inside-avoid">
+                      <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-0.5 mb-1.5 print:border-black">
+                        I. RINGKASAN EKSEKUTIF KINERJA & CAPAIAN TARGET OPERASIONAL ({roleTitle.toUpperCase()})
+                      </h4>
+                      <p className="text-justify leading-relaxed text-slate-800 indent-6">
+                        {reportData.summary}
+                      </p>
+
+                      {/* CAPAIAN / MILESTONES */}
+                      <div className="mt-2.5">
+                        <p className="font-semibold text-slate-900 mb-1">
+                          Rincian Capaian Indikator Kinerja yang Terlaksana ({roleTitle}):
+                        </p>
+                        <ol className="list-decimal pl-5 space-y-1 text-slate-800">
+                          {isMonthly ? (
+                            monthlyData?.achievements.map((item, idx) => (
+                              <li key={idx} className="leading-snug">{item}</li>
+                            ))
+                          ) : (
+                            annualData?.annualMilestones.map((item, idx) => (
+                              <li key={idx} className="leading-snug">{item}</li>
+                            ))
+                          )}
+                        </ol>
+                      </div>
+
+                      {/* KENDALA & SOLUSI */}
+                      {isMonthly && monthlyData && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-2.5 pt-1.5 border-t border-slate-200">
+                          <div>
+                            <p className="font-semibold text-slate-900 mb-1">Kendala / Hambatan di Lapangan:</p>
+                            <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                              {monthlyData.obstacles.map((obs, idx) => (
+                                <li key={idx}>{obs}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-900 mb-1">Solusi & Upaya Pemecahan Masalah:</p>
+                            <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                              {monthlyData.solutions.map((sol, idx) => (
+                                <li key={idx}>{sol}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+
+                      {!isMonthly && annualData && (
+                        <div className="mt-2.5 pt-1.5 border-t border-slate-200 space-y-2">
+                          {annualData.obstacles && annualData.obstacles.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                              <div>
+                                <p className="font-semibold text-slate-900 mb-1">Evaluasi Kendala / Hambatan Lapangan Terakumulasi:</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                                  {annualData.obstacles.map((obs, idx) => (
+                                    <li key={idx}>{obs}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div>
+                                <p className="font-semibold text-slate-900 mb-1">Solusi & Mitigasi Kendala:</p>
+                                <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                                  {(annualData.solutions || []).map((sol, idx) => (
+                                    <li key={idx}>{sol}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-semibold text-slate-900 mb-1">Rekomendasi Rencana Strategis & Kebutuhan Operasional:</p>
+                            <ul className="list-disc pl-4 space-y-0.5 text-slate-700">
+                              {annualData.strategicRecommendations.map((rec, idx) => (
+                                <li key={idx}>{rec}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* STANDAR TUPOKSI DAN TUGAS TAMBAHAN */}
+                    <div className="mt-2 pt-1.5 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                      <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-0.5 mb-1.5 print:border-black">
+                        II. STANDAR TUGAS POKOK (TUPOKSI) DAN TUGAS TAMBAHAN LAYANAN OPERASIONAL
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div className="p-2 bg-slate-50 border border-slate-300 rounded print:border-black print:bg-transparent">
+                          <p className="font-bold text-slate-900 mb-1 flex items-center justify-between text-[10.5px]">
+                            <span>A. Tugas Pokok (Tupoksi Standar):</span>
+                            <span className="font-mono text-[9.5px] text-blue-800 font-bold">({tupoksiCompleted.length}/{tupoksiTasks.length} Tuntas)</span>
+                          </p>
+                          <ul className="list-disc pl-3.5 space-y-0.5 text-slate-800 text-[9.5px]">
+                            {roleTupoksiList.map((item, idx) => (
+                              <li key={idx} className="leading-tight">{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="p-2 bg-slate-50 border border-slate-300 rounded print:border-black print:bg-transparent">
+                          <p className="font-bold text-slate-900 mb-1 flex items-center justify-between text-[10.5px]">
+                            <span>B. Tugas Tambahan & Insidental:</span>
+                            <span className="font-mono text-[9.5px] text-amber-800 font-bold">({tambahanCompleted.length}/{tambahanTasks.length} Tuntas)</span>
+                          </p>
+                          <ul className="list-disc pl-3.5 space-y-0.5 text-slate-800 text-[9.5px]">
+                            {roleTambahanList.map((item, idx) => (
+                              <li key={idx} className="leading-tight">{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* MATRIKS TARGET OPERASIONAL & INDIKATOR KINERJA KUNCI (KPI) */}
+                    <div className="mt-2 pt-1.5 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                      <div className="flex justify-between items-center mb-1">
+                        <h4 className="font-bold text-xs text-slate-900 uppercase">
+                          MATRIKS TARGET OPERASIONAL & INDIKATOR KINERJA KUNCI (KPI) - {roleTitle.toUpperCase()}
+                        </h4>
+                        <span className="font-mono text-[9.5px] text-slate-600">
+                          Standar Tata Kelola Satdik
+                        </span>
+                      </div>
+                      <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
+                        <thead>
+                          <tr className="bg-slate-100 font-bold border-b border-slate-400 print:bg-slate-200">
+                            <th className="py-1 px-1.5 border border-slate-400 w-16 text-center">Kode</th>
+                            <th className="py-1 px-1.5 border border-slate-400">Indikator Kinerja Kunci (KPI)</th>
+                            <th className="py-1 px-1.5 border border-slate-400 w-36">Target Kerja</th>
+                            <th className="py-1 px-1.5 border border-slate-400 w-44">Realisasi Lapangan</th>
+                            <th className="py-1 px-1.5 border border-slate-400 w-16 text-center">Satuan</th>
+                            <th className="py-1 px-1.5 border border-slate-400 w-16 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {printKpis.map((kpi, idx) => (
+                            <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/60 print:bg-transparent' : ''}>
+                              <td className="py-1 px-1.5 border border-slate-300 font-mono text-center font-bold text-slate-700">{kpi.code}</td>
+                              <td className="py-1 px-1.5 border border-slate-300 font-semibold text-slate-900">{kpi.name}</td>
+                              <td className="py-1 px-1.5 border border-slate-300 text-slate-700">{kpi.target}</td>
+                              <td className="py-1 px-1.5 border border-slate-300 font-semibold text-slate-800">{kpi.realization}</td>
+                              <td className="py-1 px-1.5 border border-slate-300 text-center text-slate-600">{kpi.unit}</td>
+                              <td className="py-1 px-1.5 border border-slate-300 text-center font-bold text-emerald-800">
+                                {kpi.status === 'tercapai' ? 'Tercapai' : 'Proses'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* DATA REKAPITULASI ANGGOTA PERPUSTAKAAN (IF PERPUS) */}
+                    {isPerpus && (
+                      <div className="mt-2 pt-1.5 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                        <div className="flex justify-between items-center mb-1">
+                          <h4 className="font-bold text-xs text-slate-900 uppercase">
+                            III. DATA REKAPITULASI ANGGOTA PERPUSTAKAAN (PEMUSTAKA SEKOLAH)
+                          </h4>
+                          <span className="font-mono text-[10px] font-bold text-slate-800">
+                            Total: {totalAnggotaPerpus} Orang
+                          </span>
+                        </div>
+                        <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10.5px]">
+                          <thead>
+                            <tr className="bg-slate-100 font-bold border-b border-slate-400 print:bg-slate-200">
+                              <th className="py-1 px-2 border border-slate-400">Guru (Pendidik)</th>
+                              <th className="py-1 px-2 border border-slate-400">Tenaga Kependidikan (Staff/TU)</th>
+                              <th className="py-1 px-2 border border-slate-400 text-center">Siswa Laki-laki</th>
+                              <th className="py-1 px-2 border border-slate-400 text-center">Siswa Perempuan</th>
+                              <th className="py-1 px-2 border border-slate-400 text-center font-bold">Total Seluruh Anggota</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td className="py-1 px-2 border border-slate-300">
+                                <span className="font-bold block text-slate-900">{totalGuru} orang</span>
+                                <span className="text-[9.5px] text-slate-600 font-mono">
+                                  (L: {guruLaki}, P: {guruPerempuan})
+                                </span>
+                              </td>
+                              <td className="py-1 px-2 border border-slate-300">
+                                <span className="font-bold block text-slate-900">{totalStaff} orang</span>
+                                <span className="text-[9.5px] text-slate-600 font-mono">
+                                  (L: {staffLaki}, P: {staffPerempuan})
+                                </span>
+                              </td>
+                              <td className="py-1 px-2 text-center border border-slate-300 font-semibold">{siswaLaki} orang</td>
+                              <td className="py-1 px-2 text-center border border-slate-300 font-semibold">{siswaPerempuan} orang</td>
+                              <td className="py-1 px-2 text-center font-bold border border-slate-300 text-blue-900 font-mono">{totalAnggotaPerpus} orang</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* REKAPITULASI TUGAS: TAMPILAN TAHUNAN (PERSENTASE & VOLUME PER BULAN) ATAU BULANAN (RINCIAN LENGKAP HARIAN) */}
+                    {isAnnual ? (
+                      /* LAPOR TAHUNAN: REKAPITULASI & PERSENTASE KINERJA OPERASIONAL PER BULAN */
+                      <div className="mt-2.5 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black">
+                        <div className="flex justify-between items-center mb-1">
+                          <h4 className="font-bold text-xs text-slate-900 uppercase">
+                            {isPerpus ? 'IV.' : 'III.'} REKAPITULASI & PERSENTASE KINERJA OPERASIONAL PER BULAN (TUGAS POKOK & TUGAS TAMBAHAN)
+                          </h4>
+                          <span className="font-mono text-[9.5px] text-slate-600">
+                            Tahun Anggaran {annualData?.year || 2026} (12 Bulan Pelaksanaan)
+                          </span>
+                        </div>
+                        <p className="text-[9.5px] text-slate-500 mb-1 leading-tight">
+                          Rekapitulasi volume realisasi tugas kedinasan per bulan yang disesuaikan menurut bagian Tugas Pokok dan Tugas Tambahan beserta persentase capaian operasional:
+                        </p>
+
+                        <div className="w-full overflow-hidden">
+                          <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[9.5px]">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200 print:border-black">
+                                <th className="py-1 px-1 text-center w-6 border border-slate-400 print:border-black">No</th>
+                                <th className="py-1 px-1.5 w-20 border border-slate-400 print:border-black font-bold">Bulan</th>
+                                <th className="py-1 px-2 border border-slate-400 print:border-black min-w-[200px]">Realisasi Tugas Pokok & Volume Hasil</th>
+                                <th className="py-1 px-2 border border-slate-400 print:border-black min-w-[180px]">Realisasi Tugas Tambahan & Volume Hasil</th>
+                                <th className="py-1 px-1 text-center border border-slate-400 print:border-black w-12 whitespace-nowrap">Kegiatan</th>
+                                <th className="py-1 px-1 text-center border border-slate-400 print:border-black w-12 whitespace-nowrap">Tuntas</th>
+                                <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black w-14 whitespace-nowrap font-bold">Capaian</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {annualPerformance.items.map((item, idx) => (
+                                <tr key={item.monthIndex} className="border-b border-slate-300 print:border-black">
+                                  <td className="py-0.5 px-1 text-center font-mono border border-slate-300 print:border-black">{idx + 1}</td>
+                                  <td className="py-0.5 px-1.5 font-semibold text-slate-900 border border-slate-300 print:border-black whitespace-nowrap">{item.monthName}</td>
+                                  <td className="py-0.5 px-2 text-[9px] leading-tight text-slate-800 border border-slate-300 print:border-black">
+                                    {item.tupoksiSummary}
+                                  </td>
+                                  <td className="py-0.5 px-2 text-[9px] leading-tight text-slate-700 border border-slate-300 print:border-black">
+                                    {item.tambahanSummary}
+                                  </td>
+                                  <td className="py-0.5 px-1 text-center font-mono border border-slate-300 print:border-black">{item.totalTasks}</td>
+                                  <td className="py-0.5 px-1 text-center font-mono border border-slate-300 print:border-black text-emerald-800 font-semibold">{item.completedTasks}</td>
+                                  <td className="py-0.5 px-1.5 text-center font-mono font-bold text-emerald-700 border border-slate-300 print:border-black">
+                                    {item.percentage}%
+                                  </td>
+                                </tr>
+                              ))}
+                              <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-400 print:bg-slate-200 print:border-black text-[9.5px]">
+                                <td colSpan={2} className="py-1 px-1.5 text-center font-bold">TOTAL TAHUNAN</td>
+                                <td className="py-1 px-2 text-[9px]">
+                                  Total {annualPerformance.totalTupoksi} Kegiatan Tugas Pokok Terlaksana
+                                </td>
+                                <td className="py-1 px-2 text-[9px]">
+                                  Total {annualPerformance.totalTambahan} Kegiatan Tugas Tambahan Terlaksana
+                                </td>
+                                <td className="py-1 px-1 text-center font-mono">{annualPerformance.totalTasks}</td>
+                                <td className="py-1 px-1 text-center font-mono text-emerald-800">{annualPerformance.totalCompleted}</td>
+                                <td className="py-1 px-1.5 text-center font-mono text-emerald-900 font-black">
+                                  {annualPerformance.averagePercentage.toFixed(1)}%
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      /* LAPOR BULANAN: REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL LENGKAP SECARA KONTINU (TANPA TERPOTONG) */
+                      <div className="mt-2.5 pt-2 border-t border-slate-300 text-xs print:border-black">
+                        <div className="flex justify-between items-center mb-1 break-inside-avoid">
+                          <h4 className="font-bold text-xs text-slate-900 uppercase">
+                            {isPerpus ? 'IV.' : 'III.'} REKAPITULASI RINCIAN TUGAS HARIAN OPERASIONAL YANG DILAKSANAKAN
+                          </h4>
+                          <span className="font-mono text-[9.5px] text-slate-600">
+                            {relevantTasks.length} Tugas Tercatat Lengkap
+                          </span>
+                        </div>
+
+                        <div className="w-full overflow-hidden">
+                          <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200 print:border-black">
+                                <th className="py-1 px-1.5 text-center w-7 border border-slate-400 print:border-black">No</th>
+                                <th className="py-1 px-1.5 w-20 border border-slate-400 print:border-black">Tanggal</th>
+                                <th className="py-1 px-1.5 w-22 border border-slate-400 print:border-black">Klasifikasi</th>
+                                <th className="py-1 px-2 border border-slate-400 print:border-black">Uraian Tugas Kedinasan</th>
+                                <th className="py-1 px-1.5 border border-slate-400 print:border-black">Lokasi</th>
+                                <th className="py-1 px-1.5 text-center border border-slate-400 print:border-black whitespace-nowrap">Waktu</th>
+                                <th className="py-1 px-1 text-center w-12 border border-slate-400 print:border-black">Volume</th>
+                                <th className="py-1 px-1.5 text-center w-14 border border-slate-400 print:border-black">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {relevantTasks.length > 0 ? (
+                                relevantTasks.map((task, idx) => {
+                                  const isTupoksi = task.taskType !== 'tambahan';
+                                  return (
+                                    <tr 
+                                      key={task.id || idx} 
+                                      className={`border-b border-slate-300 print:border-black break-inside-avoid ${
+                                        idx % 2 === 1 ? 'bg-slate-50/50 print:bg-transparent' : ''
+                                      }`}
+                                    >
+                                      <td className="py-1 px-1.5 text-center font-mono border border-slate-300 print:border-black">{idx + 1}</td>
+                                      <td className="py-1 px-1.5 border border-slate-300 print:border-black whitespace-nowrap font-mono text-[9.5px]">
+                                        {task.date}
+                                      </td>
+                                      <td className="py-1 px-1.5 border border-slate-300 print:border-black">
+                                        <span className={`inline-block px-1 py-0.5 rounded text-[8.5px] font-bold ${
+                                          isTupoksi 
+                                            ? 'bg-blue-100 text-blue-900 print:bg-transparent print:text-black' 
+                                            : 'bg-amber-100 text-amber-900 print:bg-transparent print:text-black'
+                                        }`}>
+                                          {isTupoksi ? 'Tugas Pokok' : 'Tugas Tambahan'}
+                                        </span>
+                                      </td>
+                                      <td className="py-1 px-2 border border-slate-300 print:border-black">
+                                        <span className="font-semibold text-slate-900 block leading-tight">{task.title}</span>
+                                        {task.description && (
+                                          <span className="text-[9px] text-slate-600 block mt-0.5 leading-snug">{task.description}</span>
+                                        )}
+                                      </td>
+                                      <td className="py-1 px-1.5 border border-slate-300 print:border-black text-[9.5px] text-slate-700">
+                                        {task.location || 'Lingkungan Sekolah'}
+                                      </td>
+                                      <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black whitespace-nowrap font-mono text-[9px]">
+                                        {task.timeStart || '07.00'} - {task.timeEnd || '08.00'}
+                                      </td>
+                                      <td className="py-1 px-1 text-center font-mono border border-slate-300 print:border-black text-[9px]">
+                                        {task.volumeUnit || '1 keg.'}
+                                      </td>
+                                      <td className="py-1 px-1.5 text-center border border-slate-300 print:border-black">
+                                        <span className="text-[8.5px] font-bold text-emerald-800 print:text-black">
+                                          {task.status === 'selesai' ? 'Tuntas 100%' : 'Terlaksana'}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              ) : (
+                                <tr>
+                                  <td colSpan={8} className="py-3 text-center text-slate-500 italic border border-slate-300">
+                                    Belum ada data rincian tugas operasional untuk periode ini.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* LAMPIRAN SARANA & PRASARANA OPERASIONAL (ISOLASI DATA PER LAYANAN) */}
+                    {roleInventories.length > 0 && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-300 text-xs print:border-black">
+                        <div className="flex justify-between items-center mb-1 break-inside-avoid">
+                          <h4 className="font-bold text-xs text-slate-900 uppercase">
+                            {isAnnual ? (isPerpus ? 'V.' : 'IV.') : (isPerpus ? 'V.' : 'IV.')} DAFTAR SARANA & PRASARANA OPERASIONAL ({roleTitle.toUpperCase()})
+                          </h4>
+                          <span className="font-mono text-[9.5px] text-slate-600">
+                            {roleInventories.length} Barang Terdata
+                          </span>
+                        </div>
+                        <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[9.5px]">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200">
+                              <th className="py-1 px-1 text-center w-6 border border-slate-400">No</th>
+                              <th className="py-1 px-1.5 border border-slate-400 w-24">Kode Barang</th>
+                              <th className="py-1 px-2 border border-slate-400">Nama Sarana / Prasarana</th>
+                              <th className="py-1 px-1.5 border border-slate-400">Lokasi / Ruang</th>
+                              <th className="py-1 px-1 text-center border border-slate-400 w-12">Jumlah</th>
+                              <th className="py-1 px-1.5 text-center border border-slate-400 w-16">Kondisi</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {roleInventories.map((inv, idx) => (
+                              <tr key={inv.id || idx} className="border-b border-slate-300 print:border-black break-inside-avoid">
+                                <td className="py-0.5 px-1 text-center font-mono border border-slate-300">{idx + 1}</td>
+                                <td className="py-0.5 px-1.5 font-mono border border-slate-300">{inv.kodeBarang || '-'}</td>
+                                <td className="py-0.5 px-2 font-semibold text-slate-900 border border-slate-300">{inv.namaBarang}</td>
+                                <td className="py-0.5 px-1.5 border border-slate-300">{inv.lokasiPenyimpanan || '-'}</td>
+                                <td className="py-0.5 px-1 text-center font-mono border border-slate-300">{inv.jumlah} {inv.satuan}</td>
+                                <td className="py-0.5 px-1.5 text-center font-semibold border border-slate-300">
+                                  <span className={inv.kondisi === 'Baik' ? 'text-emerald-800' : 'text-amber-800'}>
+                                    {inv.kondisi}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* LEMBAR PENGESAHAN RESMI (TANDA TANGAN & STEMPEL - DIJAMIN UTUH TANPA TERPOTONG) */}
+                    <div className="mt-3 pt-2 border-t-2 border-slate-400 print:border-black break-inside-avoid">
+                      <div className="text-center mb-2">
+                        <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-950 underline decoration-1 underline-offset-2">
+                          LEMBAR PENGESAHAN KEDINASAN RESMI
+                        </h4>
+                        <p className="text-[10px] text-slate-600 mt-0.5">
+                          Laporan kinerja ini telah diperiksa, diverifikasi, dan disahkan secara berjenjang oleh Kepala Sekolah dan Pengelola Layanan.
+                        </p>
+                      </div>
+                      <OfficialApprovalSheet
+                        config={schoolConfig}
+                        role={role}
+                        manualDate={manualDate}
+                        onDateChange={(d) => setManualDate(d)}
+                        isPrintVersion={false}
+                      />
+                    </div>
+
+                    {/* FOOTER RESMI */}
+                    <div className="pt-3 mt-2 border-t border-slate-200 text-center text-[10px] text-slate-400 font-mono break-inside-avoid">
+                      <span>{schoolConfig.namaSekolah} · Laporan Kinerja Resmi {roleTitle} · {isMonthly ? `Bulan ${MONTH_NAMES[(monthlyData?.month || 9) - 1]} ${monthlyData?.year || 2026}` : `Tahun ${annualData?.year || 2026}`} · Dokumen Akuntabilitas Kedinasan</span>
+                    </div>
+                  </div>
+                </>
+              );
+            }
+
+            // ========================================================
+            // MODE 2: FORMAT LEMBAR TERPISAH (PAGINATED SEGMENTED)
+            // ========================================================
             return (
               <>
                 {/* ========================================================
