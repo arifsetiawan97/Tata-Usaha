@@ -15,7 +15,7 @@ import {
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from '../../utils/taskClassification';
 import { calculateAnnualPerformanceSummary } from '../../utils/annualPerformanceHelper';
-import { formatOfficialNameWithDegree } from '../../utils/formatters';
+import { formatOfficialNameWithDegree, formatOfficialNipOrPppk, isMemberJoinedInMonth } from '../../utils/formatters';
 import { 
   Printer, 
   Download, 
@@ -95,8 +95,10 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     : formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama);
 
   const displayKepsekNip = isDefaultOrDummyKepsek || !schoolConfig.kepalaSekolah?.nip || /19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip)
-    ? (schoolConfig.kepalaSekolah?.nip && !/19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip) ? schoolConfig.kepalaSekolah.nip : 'NIP. .................................................')
-    : (schoolConfig.kepalaSekolah.nip.startsWith('NIP') ? schoolConfig.kepalaSekolah.nip : `NIP. ${schoolConfig.kepalaSekolah.nip}`);
+    ? (schoolConfig.kepalaSekolah?.nip && !/19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip)
+        ? formatOfficialNipOrPppk(schoolConfig.kepalaSekolah.nip, { defaultPrefix: 'NIP.' })
+        : 'NIP. .................................................')
+    : formatOfficialNipOrPppk(schoolConfig.kepalaSekolah.nip, { defaultPrefix: 'NIP.' });
 
   const isDefaultOrDummyOperator = !operator?.nama || 
     /nurul(\s*hidayat|\s*hidayati)?/i.test(operator.nama) || 
@@ -108,8 +110,10 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     : formatOfficialNameWithDegree(operator.nama);
 
   const displayOperatorNip = isDefaultOrDummyOperator || !operator?.nip || /19920815\s*202321\s*2\s*024/.test(operator.nip)
-    ? (operator?.nip && !/19920815\s*202321\s*2\s*024/.test(operator.nip) ? operator.nip : 'NIP / NIPPK. .................................................')
-    : (operator.nip.startsWith('NIP') ? operator.nip : `NIP / NIPPK. ${operator.nip}`);
+    ? (operator?.nip && !/19920815\s*202321\s*2\s*024/.test(operator.nip)
+        ? formatOfficialNipOrPppk(operator.nip, { defaultPrefix: 'NIP.' })
+        : 'NIP / NIPPK. .................................................')
+    : formatOfficialNipOrPppk(operator.nip, { defaultPrefix: 'NIP.' });
 
   const isMonthly = reportType === 'monthly';
   const monthlyData = isMonthly ? (reportData as MonthlyReport) : null;
@@ -185,6 +189,15 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const siswaPerempuan = Math.max(registeredSiswaPerempuan, libraryMemberStats?.siswaPerempuan || 0);
   const totalSiswa = siswaLaki + siswaPerempuan;
   const totalAnggotaPerpus = totalGuru + totalStaff + totalSiswa;
+
+  const monthlyNewMembers = useMemo(() => {
+    if (!isPerpus) return [];
+    if (isMonthly && monthlyData) {
+      return libraryMembers.filter(m => isMemberJoinedInMonth(m, monthlyData.year, monthlyData.month));
+    }
+    const yrStr = String(annualData?.year || new Date().getFullYear());
+    return libraryMembers.filter(m => (m.tanggalBergabung || m.tanggalTerdaftar || '').trim().startsWith(yrStr));
+  }, [isPerpus, isMonthly, monthlyData, annualData?.year, libraryMembers]);
 
   const printKpis = (isMonthly && monthlyData?.customKPIs && monthlyData.customKPIs.length > 0)
     ? monthlyData.customKPIs
@@ -448,6 +461,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         manualDate,
         nomorSurat,
         libraryBooks: role === 'PERPUS' ? libraryBooks : [],
+        libraryMembers: role === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: role === 'PERPUS' ? libraryMemberStats : undefined
       });
 
@@ -481,6 +495,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         manualDate,
         nomorSurat,
         libraryBooks: role === 'PERPUS' ? libraryBooks : [],
+        libraryMembers: role === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: role === 'PERPUS' ? libraryMemberStats : undefined
       });
 
@@ -498,7 +513,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const handleDownloadDocx = async () => {
     setIsGeneratingDocx(true);
     try {
-      const doc = createOfficialDocumentDocx({
+      const doc = await createOfficialDocumentDocx({
         reportType,
         reportData,
         schoolConfig,
@@ -508,6 +523,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         manualDate,
         nomorSurat,
         libraryBooks: role === 'PERPUS' ? libraryBooks : [],
+        libraryMembers: role === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: role === 'PERPUS' ? libraryMemberStats : undefined
       });
 
@@ -1077,6 +1093,53 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                             </tr>
                           </tbody>
                         </table>
+
+                        {(monthlyNewMembers.length > 0 || isMonthly) && (
+                          <div className="mt-2">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="font-bold text-[10px] text-slate-800">
+                                {isMonthly && monthlyData
+                                  ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[monthlyData.month - 1]} ${monthlyData.year} (${monthlyNewMembers.length} Orang):`
+                                  : `Rekapitulasi Penambahan Anggota Baru Tahun ${annualYear} (${monthlyNewMembers.length} Orang):`
+                                }
+                              </span>
+                            </div>
+                            <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[9.5px]">
+                              <thead>
+                                <tr className="bg-slate-100 font-bold border-b border-slate-400 print:bg-slate-200">
+                                  <th className="py-0.5 px-1 text-center w-6 border border-slate-400">No</th>
+                                  <th className="py-0.5 px-1.5 w-20 border border-slate-400 text-center">No. Anggota</th>
+                                  <th className="py-0.5 px-1.5 border border-slate-400">Nama Lengkap</th>
+                                  <th className="py-0.5 px-1.5 w-20 border border-slate-400 text-center">Kategori</th>
+                                  <th className="py-0.5 px-1.5 w-24 border border-slate-400">Kelas / Jabatan</th>
+                                  <th className="py-0.5 px-1 w-8 border border-slate-400 text-center">L/P</th>
+                                  <th className="py-0.5 px-1.5 w-20 border border-slate-400 text-center">Tgl Daftar</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {monthlyNewMembers.length > 0 ? (
+                                  monthlyNewMembers.map((m, idx) => (
+                                    <tr key={m.id || idx} className="border-b border-slate-300">
+                                      <td className="py-0.5 px-1 text-center font-mono border border-slate-300">{idx + 1}</td>
+                                      <td className="py-0.5 px-1.5 text-center font-mono border border-slate-300">{m.nomorAnggota || '-'}</td>
+                                      <td className="py-0.5 px-1.5 font-semibold border border-slate-300">{m.nama}</td>
+                                      <td className="py-0.5 px-1.5 text-center border border-slate-300">{m.tipeAnggota === 'GURU' ? 'Pendidik' : m.tipeAnggota === 'STAFF' ? 'Tendik' : 'Siswa'}</td>
+                                      <td className="py-0.5 px-1.5 border border-slate-300">{m.kelasAtauJabatan || '-'}</td>
+                                      <td className="py-0.5 px-1 text-center font-bold border border-slate-300">{m.jenisKelamin || 'L'}</td>
+                                      <td className="py-0.5 px-1.5 text-center font-mono border border-slate-300">{m.tanggalBergabung || m.tanggalTerdaftar || '-'}</td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr>
+                                    <td colSpan={7} className="py-1.5 text-center text-slate-500 italic border border-slate-300">
+                                      Tidak terdapat penambahan anggota baru pada bulan {MONTH_NAMES[(monthlyData?.month || 1) - 1]} {monthlyData?.year || 2026}.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1587,6 +1650,53 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                               </tr>
                             </tbody>
                           </table>
+
+                          {(monthlyNewMembers.length > 0 || isMonthly) && (
+                            <div className="mt-2">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-[10px] text-slate-800">
+                                  {isMonthly && monthlyData
+                                    ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[monthlyData.month - 1]} ${monthlyData.year} (${monthlyNewMembers.length} Orang):`
+                                    : `Rekapitulasi Penambahan Anggota Baru Tahun ${annualYear} (${monthlyNewMembers.length} Orang):`
+                                  }
+                                </span>
+                              </div>
+                              <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[9.5px]">
+                                <thead>
+                                  <tr className="bg-slate-100 font-bold border-b border-slate-400 print:bg-slate-200">
+                                    <th className="py-0.5 px-1 text-center w-6 border border-slate-400">No</th>
+                                    <th className="py-0.5 px-1.5 w-20 border border-slate-400 text-center">No. Anggota</th>
+                                    <th className="py-0.5 px-1.5 border border-slate-400">Nama Lengkap</th>
+                                    <th className="py-0.5 px-1.5 w-20 border border-slate-400 text-center">Kategori</th>
+                                    <th className="py-0.5 px-1.5 w-24 border border-slate-400">Kelas / Jabatan</th>
+                                    <th className="py-0.5 px-1 w-8 border border-slate-400 text-center">L/P</th>
+                                    <th className="py-0.5 px-1.5 w-20 border border-slate-400 text-center">Tgl Daftar</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {monthlyNewMembers.length > 0 ? (
+                                    monthlyNewMembers.map((m, idx) => (
+                                      <tr key={m.id || idx} className="border-b border-slate-300">
+                                        <td className="py-0.5 px-1 text-center font-mono border border-slate-300">{idx + 1}</td>
+                                        <td className="py-0.5 px-1.5 text-center font-mono border border-slate-300">{m.nomorAnggota || '-'}</td>
+                                        <td className="py-0.5 px-1.5 font-semibold border border-slate-300">{m.nama}</td>
+                                        <td className="py-0.5 px-1.5 text-center border border-slate-300">{m.tipeAnggota === 'GURU' ? 'Pendidik' : m.tipeAnggota === 'STAFF' ? 'Tendik' : 'Siswa'}</td>
+                                        <td className="py-0.5 px-1.5 border border-slate-300">{m.kelasAtauJabatan || '-'}</td>
+                                        <td className="py-0.5 px-1 text-center font-bold border border-slate-300">{m.jenisKelamin || 'L'}</td>
+                                        <td className="py-0.5 px-1.5 text-center font-mono border border-slate-300">{m.tanggalBergabung || m.tanggalTerdaftar || '-'}</td>
+                                      </tr>
+                                    ))
+                                  ) : (
+                                    <tr>
+                                      <td colSpan={7} className="py-1.5 text-center text-slate-500 italic border border-slate-300">
+                                        Tidak terdapat penambahan anggota baru pada bulan {MONTH_NAMES[(monthlyData?.month || 1) - 1]} {monthlyData?.year || 2026}.
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                         </div>
                       )}
 

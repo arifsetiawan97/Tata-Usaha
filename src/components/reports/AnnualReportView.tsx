@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { generateOfficialDocumentWord, downloadWordBlob } from '../../utils/wordExport';
 import { createOfficialDocumentDocx, downloadDocxFile } from '../../utils/docxExport';
+import { generateOfficialDocumentHtml } from '../../utils/htmlExport';
 
 interface AnnualReportViewProps {
   onOpenPrint: (reportType: 'monthly' | 'annual', data: any, options?: { autoPrint?: boolean }) => void;
@@ -113,7 +114,9 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
     archiveReport,
     inventories,
     schoolConfig,
+    tupoksiDefinitions,
     libraryBooks,
+    libraryMembers,
     libraryMemberStats
   } = useApp();
 
@@ -595,7 +598,9 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         schoolConfig,
         tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
+        tupoksiDefinitions,
         libraryBooks: effectiveRole === 'PERPUS' ? libraryBooks : [],
+        libraryMembers: effectiveRole === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: effectiveRole === 'PERPUS' ? libraryMemberStats : undefined
       });
       const filename = `Laporan_Tahunan_${effectiveRole}_${selectedYear}.doc`;
@@ -610,13 +615,15 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
   const handleDownloadDocx = async () => {
     try {
       showNotification('Sedang menyusun dokumen asli Microsoft Word (.docx)...');
-      const doc = createOfficialDocumentDocx({
+      const doc = await createOfficialDocumentDocx({
         reportType: 'annual',
         reportData: reportState,
         schoolConfig,
         tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
+        tupoksiDefinitions,
         libraryBooks: effectiveRole === 'PERPUS' ? libraryBooks : [],
+        libraryMembers: effectiveRole === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: effectiveRole === 'PERPUS' ? libraryMemberStats : undefined
       });
       const filename = `Laporan_Tahunan_${effectiveRole}_${selectedYear}.docx`;
@@ -625,6 +632,35 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
     } catch (err) {
       console.error('Download DOCX error:', err);
       showNotification('Gagal mengunduh dokumen .docx');
+    }
+  };
+
+  // Unduh dokumen Lapor Tahunan format HTML mandiri
+  const handleDownloadHtml = () => {
+    try {
+      const fullHtml = generateOfficialDocumentHtml({
+        reportType: 'annual',
+        reportData: reportState,
+        schoolConfig,
+        tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
+        inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
+        tupoksiDefinitions,
+        libraryBooks: effectiveRole === 'PERPUS' ? libraryBooks : [],
+        libraryMembers: effectiveRole === 'PERPUS' ? libraryMembers : [],
+        libraryMemberStats: effectiveRole === 'PERPUS' ? libraryMemberStats : undefined
+      });
+      const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Laporan_Tahunan_${effectiveRole}_${selectedYear}.html`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showNotification('Dokumen HTML resmi Laporan Tahunan berhasil diunduh!');
+    } catch (err) {
+      console.error('Download HTML error:', err);
     }
   };
 
@@ -751,6 +787,17 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
           >
             <FileCheck2 className="w-3.5 h-3.5 text-indigo-200" />
             <span>Unduh (.docx)</span>
+          </button>
+
+          {/* Unduh HTML Mandiri */}
+          <button
+            type="button"
+            onClick={handleDownloadHtml}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors shadow-xs border border-emerald-400 cursor-pointer"
+            title="Download Laporan Tahunan ini sebagai dokumen HTML standar cetak"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-100" />
+            <span>Unduh HTML</span>
           </button>
 
           {/* Archive Annual Report */}

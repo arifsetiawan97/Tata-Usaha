@@ -1,4 +1,4 @@
-import { SchoolConfig, MonthlyReport, AnnualReport, RoleType, TaskLog, InventoryItem, TupoksiDefinitionsMap, LibraryBookItem, LibraryMemberStats } from '../types';
+import { SchoolConfig, MonthlyReport, AnnualReport, RoleType, TaskLog, InventoryItem, TupoksiDefinitionsMap, LibraryBookItem, LibraryMemberStats, LibraryMemberItem } from '../types';
 import { 
   isTaskInMonth, 
   isTaskInYear, 
@@ -6,7 +6,8 @@ import {
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from './taskClassification';
 import { calculateAnnualPerformanceSummary } from './annualPerformanceHelper';
-import { formatOfficialNameWithDegree } from './formatters';
+import { ROLE_OPERATIONAL_SPECS } from '../data/roleOperationalSpecs';
+import { formatOfficialNameWithDegree, formatOfficialNipOrPppk, isMemberJoinedInMonth } from './formatters';
 
 interface DocumentExportParams {
   reportType: 'monthly' | 'annual';
@@ -18,6 +19,7 @@ interface DocumentExportParams {
   manualDate?: string;
   nomorSurat?: string;
   libraryBooks?: LibraryBookItem[];
+  libraryMembers?: LibraryMemberItem[];
   libraryMemberStats?: LibraryMemberStats;
 }
 
@@ -43,6 +45,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     manualDate,
     nomorSurat,
     libraryBooks = [],
+    libraryMembers = [],
     libraryMemberStats
   } = params;
 
@@ -72,8 +75,10 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     : formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama);
 
   const displayKepsekNip = isDefaultOrDummyKepsek || !schoolConfig.kepalaSekolah?.nip || /19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip)
-    ? (schoolConfig.kepalaSekolah?.nip && !/19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip) ? schoolConfig.kepalaSekolah.nip : 'NIP. .................................................')
-    : (schoolConfig.kepalaSekolah.nip.startsWith('NIP') ? schoolConfig.kepalaSekolah.nip : `NIP. ${schoolConfig.kepalaSekolah.nip}`);
+    ? (schoolConfig.kepalaSekolah?.nip && !/19740510\s*199802\s*1\s*003/.test(schoolConfig.kepalaSekolah.nip)
+        ? formatOfficialNipOrPppk(schoolConfig.kepalaSekolah.nip, { defaultPrefix: 'NIP.' })
+        : 'NIP. .................................................')
+    : formatOfficialNipOrPppk(schoolConfig.kepalaSekolah.nip, { defaultPrefix: 'NIP.' });
 
   const isDefaultOrDummyOperator = !operator?.nama || 
     /nurul(\s*hidayat|\s*hidayati)?/i.test(operator.nama) || 
@@ -85,8 +90,10 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     : formatOfficialNameWithDegree(operator.nama);
 
   const displayOperatorNip = isDefaultOrDummyOperator || !operator?.nip || /19920815\s*202321\s*2\s*024/.test(operator.nip)
-    ? (operator?.nip && !/19920815\s*202321\s*2\s*024/.test(operator.nip) ? operator.nip : 'NIP / NIPPK. .................................................')
-    : (operator.nip.startsWith('NIP') ? operator.nip : `NIP / NIPPK. ${operator.nip}`);
+    ? (operator?.nip && !/19920815\s*202321\s*2\s*024/.test(operator.nip)
+        ? formatOfficialNipOrPppk(operator.nip, { defaultPrefix: 'NIP.' })
+        : 'NIP / NIPPK. .................................................')
+    : formatOfficialNipOrPppk(operator.nip, { defaultPrefix: 'NIP.' });
 
   const periodString = isMonthly 
     ? `Bulan ${MONTH_NAMES[(monthlyData?.month || 9) - 1]} Tahun ${monthlyData?.year || 2026}`
@@ -142,6 +149,37 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     role, 
     !isMonthly ? (reportData as AnnualReport).year : 2026
   );
+
+  const printKpis = (isMonthly && monthlyData?.customKPIs && monthlyData.customKPIs.length > 0)
+    ? monthlyData.customKPIs
+    : (ROLE_OPERATIONAL_SPECS[role]?.operationalKPIs || []);
+
+  const targetMonth = monthlyData?.month || 9;
+  const targetYear = isMonthly ? (monthlyData?.year || 2026) : (annualData?.year || 2026);
+  const regGuruL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'L').length;
+  const regGuruP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
+  const regStaffL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'L').length;
+  const regStaffP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
+  const regSiswaL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L' && m.status !== 'tamat' && m.status !== 'alumni').length;
+  const regSiswaP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P' && m.status !== 'tamat' && m.status !== 'alumni').length;
+
+  const perpusGuruL = Math.max(regGuruL, libraryMemberStats?.guruLaki || 0);
+  const perpusGuruP = Math.max(regGuruP, libraryMemberStats?.guruPerempuan || 0);
+  const perpusTotalGuru = Math.max(libraryMemberStats?.guruPendidik || 0, perpusGuruL + perpusGuruP);
+
+  const perpusStaffL = Math.max(regStaffL, libraryMemberStats?.staffLaki || 0);
+  const perpusStaffP = Math.max(regStaffP, libraryMemberStats?.staffPerempuan || 0);
+  const perpusTotalStaff = Math.max(libraryMemberStats?.staffTendik || 0, perpusStaffL + perpusStaffP);
+
+  const perpusSiswaL = Math.max(regSiswaL, libraryMemberStats?.siswaLaki || 0);
+  const perpusSiswaP = Math.max(regSiswaP, libraryMemberStats?.siswaPerempuan || 0);
+  const perpusTotalAll = perpusTotalGuru + perpusTotalStaff + perpusSiswaL + perpusSiswaP;
+
+  const monthlyNewMembers = role === 'PERPUS'
+    ? (isMonthly
+        ? libraryMembers.filter(m => isMemberJoinedInMonth(m, targetYear, targetMonth))
+        : libraryMembers.filter(m => (m.tanggalBergabung || m.tanggalTerdaftar || '').trim().startsWith(String(targetYear))))
+    : [];
 
   // Reusable Kop Surat Generator with user-uploaded logos and official double dividing line
   const generateKopSuratHtml = (config: typeof schoolConfig) => {
@@ -308,7 +346,6 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
       border-radius: 4px;
       display: flex;
-      flex-col;
       flex-direction: column;
       justify-content: space-between;
       position: relative;
@@ -697,10 +734,8 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         padding: 0 !important;
         width: 100% !important;
         max-width: 100% !important;
-        page-break-after: always !important;
-        break-after: page !important;
-      }
-      .page-sheet:last-child {
+        min-height: 0 !important;
+        height: auto !important;
         page-break-after: auto !important;
         break-after: auto !important;
       }
@@ -840,6 +875,33 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         </div>
       </div>
 
+      ${printKpis.length > 0 ? `
+      <div class="section-title">MATRIKS TARGET OPERASIONAL &amp; INDIKATOR KINERJA KUNCI (KPI) - ${roleTitle.toUpperCase()}</div>
+      <table class="data-table" style="margin-top: 3px; margin-bottom: 8px; font-size: 8.5pt;">
+        <thead>
+          <tr>
+            <th style="width: 65px; text-align: center;">Kode</th>
+            <th>Indikator Kinerja Kunci (KPI)</th>
+            <th style="width: 110px;">Target Kerja</th>
+            <th style="width: 130px;">Realisasi Lapangan</th>
+            <th style="width: 65px; text-align: center;">Satuan</th>
+            <th style="width: 65px; text-align: center;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${printKpis.map(kpi => `
+            <tr>
+              <td style="text-align: center; font-family: monospace; font-weight: bold;">${kpi.code}</td>
+              <td style="font-weight: 600;">${kpi.name}</td>
+              <td>${kpi.target}</td>
+              <td style="font-weight: 600;">${kpi.realization}</td>
+              <td style="text-align: center;">${kpi.unit}</td>
+              <td style="text-align: center; font-weight: bold; color: #15803d;">${kpi.status === 'tercapai' ? 'Tercapai' : 'Proses'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>` : ''}
+
       ${role === 'PERPUS' ? `
       <!-- III. REKAPITULASI ANGGOTA PERPUSTAKAAN -->
       <div class="section-title">III. REKAPITULASI ANGGOTA PERPUSTAKAAN (PEMUSTAKA SEKOLAH)</div>
@@ -855,16 +917,53 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         </thead>
         <tbody>
           <tr>
-            <td>${libraryMemberStats?.guruPendidik || 0} orang</td>
-            <td>${libraryMemberStats?.staffTendik || 0} orang</td>
-            <td style="text-align: center;">${libraryMemberStats?.siswaLaki || 0} orang</td>
-            <td style="text-align: center;">${libraryMemberStats?.siswaPerempuan || 0} orang</td>
-            <td style="text-align: center; font-weight: bold; color: #1e3a8a;">
-              ${(libraryMemberStats?.guruPendidik || 0) + (libraryMemberStats?.staffTendik || 0) + (libraryMemberStats?.siswaLaki || 0) + (libraryMemberStats?.siswaPerempuan || 0)} orang
-            </td>
+            <td><b>${perpusTotalGuru} orang</b> <span style="font-size: 7.5pt; color: #475569;">(L: ${perpusGuruL}, P: ${perpusGuruP})</span></td>
+            <td><b>${perpusTotalStaff} orang</b> <span style="font-size: 7.5pt; color: #475569;">(L: ${perpusStaffL}, P: ${perpusStaffP})</span></td>
+            <td style="text-align: center;">${perpusSiswaL} orang</td>
+            <td style="text-align: center;">${perpusSiswaP} orang</td>
+            <td style="text-align: center; font-weight: bold; color: #1e3a8a;">${perpusTotalAll} orang</td>
           </tr>
         </tbody>
-      </table>` : ''}
+      </table>
+      ${(monthlyNewMembers.length > 0 || isMonthly) ? `
+      <div style="font-weight: bold; font-size: 8.5pt; margin: 6px 0 3px 0; color: #1e293b;">
+        ${isMonthly
+          ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[targetMonth - 1]} ${targetYear} (${monthlyNewMembers.length} Orang Terdaftar Baru):`
+          : `Rekapitulasi Penambahan Anggota Baru Tahun ${targetYear} (${monthlyNewMembers.length} Orang Terdaftar Baru):`
+        }
+      </div>
+      <table class="data-table" style="margin-top: 2px; margin-bottom: 8px; font-size: 8pt;">
+        <thead>
+          <tr>
+            <th class="col-no">No</th>
+            <th style="width: 80px;">No. Anggota</th>
+            <th>Nama Lengkap Pemustaka Baru</th>
+            <th style="width: 85px;">Kategori</th>
+            <th style="width: 90px;">Kelas / Jabatan</th>
+            <th style="width: 35px; text-align: center;">L/P</th>
+            <th style="width: 85px; text-align: center;">Tgl Terdaftar</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${monthlyNewMembers.length > 0 ? monthlyNewMembers.map((m, idx) => `
+            <tr>
+              <td class="col-no">${idx + 1}</td>
+              <td style="font-family: monospace; text-align: center;">${m.nomorAnggota || '-'}</td>
+              <td style="font-weight: 600;">${m.nama}</td>
+              <td style="text-align: center;">${m.tipeAnggota === 'GURU' ? 'Pendidik' : m.tipeAnggota === 'STAFF' ? 'Tendik' : 'Siswa'}</td>
+              <td>${m.kelasAtauJabatan || '-'}</td>
+              <td style="text-align: center; font-weight: bold;">${m.jenisKelamin || 'L'}</td>
+              <td style="text-align: center; font-family: monospace;">${m.tanggalBergabung || m.tanggalTerdaftar || '-'}</td>
+            </tr>
+          `).join('') : `
+            <tr>
+              <td colspan="7" style="text-align: center; color: #64748b; padding: 6px;">
+                Tidak terdapat penambahan anggota baru pada bulan ${MONTH_NAMES[targetMonth - 1]} ${targetYear}.
+              </td>
+            </tr>
+          `}
+        </tbody>
+      </table>` : ''}` : ''}
 
       <!-- REKAPITULASI TUGAS: TAHUNAN ATAU BULANAN -->
       ${isAnnual ? `
@@ -1228,6 +1327,137 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     </div>
   </div>
 
+</body>
+</html>`;
+}
+
+/**
+ * Generates standalone HTML for Kartu Inventaris Ruangan / Buku Induk Inventaris (KIR)
+ * across all 5 services uniformly.
+ */
+export function generateInventoryKirHtml(params: {
+  schoolConfig: SchoolConfig;
+  role: RoleType;
+  roleTitle: string;
+  inventories: InventoryItem[];
+  manualDate?: string;
+}): string {
+  const { schoolConfig, role, roleTitle, inventories, manualDate } = params;
+  const roleInventories = inventories.filter(inv => inv.role && inv.role.trim().toUpperCase() === role.trim().toUpperCase());
+  const leftLogo = schoolConfig.logoKopKiri || schoolConfig.logoKabupatenUrl;
+  const rightLogo = schoolConfig.logoKopKanan || schoolConfig.logoSekolahUrl;
+  const placeName = [schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0] || 'Sekolah';
+  const docDate = manualDate?.trim() || `${placeName}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+
+  const kepsekNip = formatOfficialNipOrPppk(schoolConfig.kepalaSekolah?.nip, { defaultPrefix: 'NIP.' });
+  const op = schoolConfig.operatorProfiles?.[role];
+  const opNip = op?.nip ? formatOfficialNipOrPppk(op.nip, { defaultPrefix: 'NIP.' }) : 'NIP / NIPPK. -';
+
+  const totalUnits = roleInventories.reduce((s, i) => s + (Number(i.jumlah) || 1), 0);
+  const countBaik = roleInventories.filter(i => i.kondisi === 'Baik').length;
+  const countRusakRingan = roleInventories.filter(i => i.kondisi === 'Rusak Ringan').length;
+  const countRusakBerat = roleInventories.filter(i => i.kondisi === 'Rusak Berat').length;
+
+  return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Buku Induk Inventaris (KIR) - ${roleTitle} - ${schoolConfig.namaSekolah}</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; color: #000; background: #f1f5f9; padding: 20px; }
+    .sheet { max-width: 820px; margin: 0 auto; background: #fff; padding: 36px 42px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .kop { display: flex; align-items: center; justify-content: space-between; border-bottom: 3.5px double #000; padding-bottom: 8px; margin-bottom: 14px; }
+    .kop-logo { width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; }
+    .kop-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .kop-center { flex: 1; text-align: center; padding: 0 12px; }
+    h2.title { text-align: center; font-size: 13pt; font-weight: bold; text-decoration: underline; margin: 8px 0 4px 0; text-transform: uppercase; }
+    p.subtitle { text-align: center; font-size: 10pt; margin: 0 0 14px 0; }
+    table.kir { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 16px; }
+    table.kir th, table.kir td { border: 1px solid #000; padding: 5px 6px; vertical-align: middle; }
+    table.kir th { background: #f1f5f9; font-weight: bold; text-align: center; }
+    table.sign { width: 100%; border-collapse: collapse; margin-top: 24px; break-inside: avoid; }
+    table.sign td { width: 50%; text-align: center; vertical-align: top; padding: 0 12px; font-size: 10.5pt; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .no-print { display: none !important; }
+      .sheet { box-shadow: none; padding: 0; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="max-width:820px;margin:0 auto 12px auto;background:#0f172a;color:#fff;padding:10px 16px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;font-family:sans-serif;font-size:12px;">
+    <span>Buku Induk Inventaris Sarpras (KIR) - ${roleTitle}</span>
+    <button onclick="window.print()" style="background:#d97706;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:bold;cursor:pointer;">Cetak / PDF</button>
+  </div>
+  <div class="sheet">
+    <div class="kop">
+      <div class="kop-logo">${leftLogo ? `<img src="${leftLogo}" alt="Logo Kiri" />` : '<strong>PEMDA</strong>'}</div>
+      <div class="kop-center">
+        <div style="font-size:10.5pt;font-weight:bold;text-transform:uppercase;">${schoolConfig.pemerintahDaerah || ''}</div>
+        <div style="font-size:11.5pt;font-weight:bold;text-transform:uppercase;">${schoolConfig.dinasPendidikan || ''}</div>
+        <div style="font-size:14pt;font-weight:900;text-transform:uppercase;">${schoolConfig.namaSekolah || ''}</div>
+        <div style="font-size:8.5pt;font-family:Arial,sans-serif;">${[schoolConfig.alamat, schoolConfig.desaKecamatan, schoolConfig.kabupatenKota].filter(Boolean).join(', ')}</div>
+      </div>
+      <div class="kop-logo">${rightLogo ? `<img src="${rightLogo}" alt="Logo Kanan" />` : '<strong>SEKOLAH</strong>'}</div>
+    </div>
+    <h2 class="title">BUKU INDUK INVENTARIS SARANA PRASARANA KERJA (KIR)</h2>
+    <p class="subtitle">Unit Kerja: <strong>${roleTitle}</strong> · Satuan Pendidikan: <strong>${schoolConfig.namaSekolah}</strong></p>
+    <table class="kir">
+      <thead>
+        <tr>
+          <th style="width:28px;">No</th>
+          <th>Kode Barang</th>
+          <th>Nama Barang &amp; Merk / Tipe</th>
+          <th>Kategori</th>
+          <th>Jumlah</th>
+          <th>Kondisi</th>
+          <th>Lokasi Simpan</th>
+          <th>Tahun</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${roleInventories.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:14px;color:#64748b;">Belum ada data barang inventaris yang tercatat.</td></tr>` : roleInventories.map((it, idx) => `
+          <tr>
+            <td style="text-align:center;">${idx + 1}</td>
+            <td style="font-family:monospace;">${it.kodeBarang || '-'}</td>
+            <td><strong>${it.namaBarang}</strong><br><small style="color:#475569;">${it.merkModel || '-'}</small></td>
+            <td>${it.kategori || '-'}</td>
+            <td style="text-align:center;font-weight:bold;">${it.jumlah} ${it.satuan || 'Unit'}</td>
+            <td style="text-align:center;font-weight:bold;">${it.kondisi || 'Baik'}</td>
+            <td>${it.lokasiPenyimpanan || '-'}</td>
+            <td style="text-align:center;">${it.tahunPengadaan || '-'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+      <tfoot>
+        <tr style="background:#f1f5f9;font-weight:bold;">
+          <td colspan="4" style="text-align:center;">TOTAL ASET TERDATA: ${roleInventories.length} Jenis Barang</td>
+          <td style="text-align:center;color:#1e3a8a;">${totalUnits} Unit</td>
+          <td colspan="3" style="text-align:center;">Baik: ${countBaik} · Rusak Ringan: ${countRusakRingan} · Rusak Berat: ${countRusakBerat}</td>
+        </tr>
+      </tfoot>
+    </table>
+    <table class="sign">
+      <tr>
+        <td>
+          <div>Mengetahui,</div>
+          <div style="font-weight:bold;">Kepala ${schoolConfig.namaSekolah}</div>
+          <div style="height:68px;"></div>
+          <div style="font-weight:bold;text-decoration:underline;">${formatOfficialNameWithDegree(schoolConfig.kepalaSekolah?.nama || 'Kepala Sekolah')}</div>
+          <div style="font-size:9.5pt;">${kepsekNip}</div>
+        </td>
+        <td>
+          <div>${docDate}</div>
+          <div style="font-weight:bold;">Petugas / Penanggung Jawab Sarpras</div>
+          <div style="height:68px;"></div>
+          <div style="font-weight:bold;text-decoration:underline;">${formatOfficialNameWithDegree(op?.nama || 'Petugas Layanan Operasional')}</div>
+          <div style="font-size:9.5pt;">${opNip}</div>
+        </td>
+      </tr>
+    </table>
+  </div>
 </body>
 </html>`;
 }

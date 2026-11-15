@@ -27,7 +27,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { LibraryBookItem, LibraryBookCategory, LibraryProcurementSource } from '../../types';
 import { DDC_CATEGORIES } from '../../data/bookPresets';
-import { formatOfficialNameWithDegree } from '../../utils/formatters';
+import { formatOfficialNameWithDegree, formatOfficialNipOrPppk } from '../../utils/formatters';
 import { KopSurat } from '../common/KopSurat';
 import { 
   downloadBookExcelTemplate, 
@@ -1216,14 +1216,14 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
               <div style="font-weight: bold; margin-top: 2px;">Kepala Sekolah</div>
               <div style="height: 65px;"></div>
               <div style="font-weight: bold; text-decoration: underline;">${kepalaSekolahName}</div>
-              <div style="font-size: 9pt;">NIP: ${schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001'}</div>
+              <div style="font-size: 9pt;">${formatOfficialNipOrPppk(schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001', { defaultPrefix: 'NIP.' })}</div>
             </td>
             <td>
               <div>${schoolConfig.kabupatenKota || 'Sekolah'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
               <div style="font-weight: bold; margin-top: 2px;">Pengelola Perpustakaan</div>
               <div style="height: 65px;"></div>
               <div style="font-weight: bold; text-decoration: underline;">${pengelolaName}</div>
-              <div style="font-size: 9pt;">NIP: ${pengelolaPerpus?.nip || '19880415 201502 2 001'}</div>
+              <div style="font-size: 9pt;">${formatOfficialNipOrPppk(pengelolaPerpus?.nip || '19880415 201502 2 001', { defaultPrefix: 'NIP.' })}</div>
             </td>
           </tr>
         </table>
@@ -1269,7 +1269,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
           ? `421.2/BA-BUKU/${selectedMonth !== 'all' ? selectedMonth.replace('-', '/') : new Date().getFullYear()}/PERPUS`
           : `421.2/INV-BUKU/${new Date().getFullYear()}/PERPUS`;
 
-      const doc = createLibraryBooksDocx({
+      const doc = await createLibraryBooksDocx({
         schoolConfig,
         books: printBooks,
         docTitle,
@@ -3084,7 +3084,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                     {kepalaSekolahName}
                   </div>
                   <div className="text-[11px] text-slate-600 mt-0.5">
-                    NIP: {schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001'}
+                    {formatOfficialNipOrPppk(schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001', { defaultPrefix: 'NIP.' })}
                   </div>
                 </div>
 
@@ -3101,7 +3101,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                     {pengelolaName}
                   </div>
                   <div className="text-[11px] text-slate-600 mt-0.5">
-                    NIP: {pengelolaPerpus?.nip || '19880415 201502 2 001'}
+                    {formatOfficialNipOrPppk(pengelolaPerpus?.nip || '19880415 201502 2 001', { defaultPrefix: 'NIP.' })}
                   </div>
                 </div>
               </div>

@@ -268,3 +268,108 @@ export function formatOfficialNameWithDegree(rawName: string): string {
 
   return baseName;
 }
+
+/**
+ * Standarisasi penulisan NIP / NIPPK / PPPK pada dokumen & lembar pengesahan resmi.
+ * Menghapus duplikasi prefix bertumpuk seperti:
+ * - "NIP: NIP. 19700101..." -> "NIP. 19700101..."
+ * - "nip:nip. 19700101..." -> "NIP. 19700101..."
+ * - "NIP: PPPK. 19970530..." -> "PPPK. 19970530..."
+ * - "NIP. PPPK. 19970530..." -> "PPPK. 19970530..."
+ * - "NIPPK. PPPK. 1997..." -> "PPPK. 1997..."
+ * - "NIP: NIPPK. 19930412..." -> "NIPPK. 19930412..."
+ */
+export function formatOfficialNipOrPppk(
+  rawValue?: string | null,
+  options: {
+    defaultPrefix?: 'NIP' | 'PPPK' | 'NIPPK' | 'NIP.' | 'PPPK.' | 'NIPPK.';
+    placeholderDots?: boolean;
+    emptyFallback?: string;
+  } = {}
+): string {
+  const { defaultPrefix = 'NIP', placeholderDots = true, emptyFallback } = options;
+  const normalizedDefault = defaultPrefix.replace(/\.+$/, '') as 'NIP' | 'PPPK' | 'NIPPK';
+  const trimmed = (rawValue || '').trim();
+
+  const dots = '.................................................';
+  if (!trimmed || trimmed === '-') {
+    if (emptyFallback !== undefined) return emptyFallback;
+    return placeholderDots ? `${normalizedDefault}. ${dots}` : '-';
+  }
+
+  // Deteksi tipe identitas dari input asli sebelum dibersihkan
+  const upper = trimmed.toUpperCase();
+  const hasPppk = /\b(?:NI\.?\s*)?PPPK\b/i.test(upper);
+  const hasNippk = /\bNIPPK\b/i.test(upper);
+
+  // Jika tertulis NIPPK sekaligus PPPK atau hanya PPPK -> gunakan PPPK.
+  // Jika tertulis NIPPK tanpa PPPK -> gunakan NIPPK.
+  // Selain itu -> gunakan NIP. (atau normalizedDefault bila tanpa kata kunci)
+  let resolvedPrefix: 'NIP' | 'PPPK' | 'NIPPK' = normalizedDefault;
+  if (hasPppk) {
+    resolvedPrefix = 'PPPK';
+  } else if (hasNippk) {
+    resolvedPrefix = 'NIPPK';
+  } else if (/\bNIP\b/i.test(upper)) {
+    resolvedPrefix = 'NIP';
+  }
+
+  // Kupas seluruh prefix bertumpuk di awal string (mis. "NIP: NIP.", "NIP / NIPPK.", "NIP: PPPK.", "NI PPPK.")
+  const stripped = trimmed
+    .replace(/^(\s*(?:NIP\s*\/\s*NIPPK|NI\.?\s*PPPK|NIPPK|PPPK|NIP)\s*[:./-]?\s*)+/i, '')
+    .trim();
+
+  if (!stripped || stripped === '-' || /^\.+$/.test(stripped)) {
+    if (emptyFallback !== undefined && (!stripped || stripped === '-')) return emptyFallback;
+    return placeholderDots ? `${resolvedPrefix}. ${dots}` : '-';
+  }
+
+  return `${resolvedPrefix}. ${stripped}`;
+}
+
+/**
+ * Ekstrak { year, month } dari field tanggalBergabung atau tanggalTerdaftar anggota perpustakaan.
+ */
+export function getMemberJoinYearMonth(
+  tanggalBergabung?: string,
+  tanggalTerdaftar?: string
+): { year: number; month: number } | null {
+  const raw = (tanggalBergabung || tanggalTerdaftar || '').trim();
+  if (!raw) return null;
+
+  // Format YYYY-MM-DD, YYYY/MM/DD, atau YYYY-MM
+  const isoMatch = raw.match(/^(\d{4})[-/.](\d{1,2})(?:[-/.]\d{1,2})?/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10);
+    if (month >= 1 && month <= 12 && year >= 1900) {
+      return { year, month };
+    }
+  }
+
+  // Format DD-MM-YYYY atau DD/MM/YYYY
+  const dmyMatch = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dmyMatch) {
+    const year = parseInt(dmyMatch[3], 10);
+    const month = parseInt(dmyMatch[2], 10);
+    if (month >= 1 && month <= 12 && year >= 1900) {
+      return { year, month };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Cek apakah anggota perpustakaan terdaftar/ditambahkan pada bulan dan tahun tertentu.
+ */
+export function isMemberJoinedInMonth(
+  member: { tanggalBergabung?: string; tanggalTerdaftar?: string },
+  targetYear: number,
+  targetMonth: number
+): boolean {
+  const parsed = getMemberJoinYearMonth(member.tanggalBergabung, member.tanggalTerdaftar);
+  if (!parsed) return false;
+  return parsed.year === targetYear && parsed.month === targetMonth;
+}
+

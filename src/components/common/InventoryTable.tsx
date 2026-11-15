@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { InventoryItem, RoleType } from '../../types';
 import { exportInventoryToCsv, parseInventoryCsv } from '../../data/taskPresets';
-import { formatOfficialNameWithDegree } from '../../utils/formatters';
+import { formatOfficialNameWithDegree, formatOfficialNipOrPppk } from '../../utils/formatters';
+import { generateInventoryKirWord, downloadWordBlob } from '../../utils/wordExport';
+import { createInventoryKirDocx, downloadDocxFile } from '../../utils/docxExport';
+import { generateInventoryKirHtml } from '../../utils/htmlExport';
 import { KopSurat } from './KopSurat';
 import { 
   downloadInventoryExcelTemplate, 
@@ -21,6 +24,7 @@ import {
   Upload, 
   Download, 
   FileSpreadsheet,
+  FileText,
   Check,
   Sparkles,
   Printer,
@@ -265,6 +269,48 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
       setSelectedIds([]);
       setIsBulkDeleteModalOpen(false);
     }
+  };
+
+  const handleDownloadKirWord = () => {
+    const docHtml = generateInventoryKirWord({
+      schoolConfig,
+      role: effectiveRole,
+      roleTitle,
+      inventories: roleInventories
+    });
+    downloadWordBlob(docHtml, `KIR_Inventaris_${effectiveRole}_${new Date().toISOString().split('T')[0]}.doc`);
+  };
+
+  const handleDownloadKirDocx = async () => {
+    try {
+      const doc = await createInventoryKirDocx({
+        schoolConfig,
+        role: effectiveRole,
+        roleTitle,
+        inventories: roleInventories
+      });
+      await downloadDocxFile(doc, `KIR_Inventaris_${effectiveRole}_${new Date().toISOString().split('T')[0]}.docx`);
+    } catch (err) {
+      console.error('Download KIR DOCX error:', err);
+    }
+  };
+
+  const handleDownloadKirHtml = () => {
+    const html = generateInventoryKirHtml({
+      schoolConfig,
+      role: effectiveRole,
+      roleTitle,
+      inventories: roleInventories
+    });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `KIR_Inventaris_${effectiveRole}_${new Date().toISOString().split('T')[0]}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1060,19 +1106,66 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
       {/* MODAL CETAK RESMI BUKU INVENTARIS SARPRAS (KIR) DENGAN KOP SURAT */}
       {isKirPrintModalOpen && (
         <div 
-          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4"
+          className="kir-print-modal-root fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 print:static print:bg-white print:p-0"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsKirPrintModalOpen(false);
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col animate-scaleIn relative">
+          <style dangerouslySetInnerHTML={{
+            __html: `
+              @media print {
+                body:has(.kir-print-modal-root) * { visibility: hidden !important; }
+                .kir-print-modal-root, .kir-print-modal-root * { visibility: visible !important; }
+                .kir-print-modal-root {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  height: auto !important;
+                  overflow: visible !important;
+                  background: #ffffff !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                }
+                .no-print { display: none !important; }
+              }
+            `
+          }} />
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col animate-scaleIn relative print:max-h-none print:overflow-visible print:shadow-none print:rounded-none print:max-w-full">
             {/* Top Bar Controls */}
-            <div className="shrink-0 p-4 bg-slate-900 text-white flex items-center justify-between no-print border-b border-slate-800">
+            <div className="shrink-0 p-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2 no-print border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Printer className="w-5 h-5 text-amber-400" />
                 <h3 className="font-bold text-sm">Pratinjau Cetak Buku Inventaris Sarana Kerja (KIR)</h3>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadKirWord}
+                  className="px-3 py-1.5 bg-blue-700 hover:bg-blue-600 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow cursor-pointer"
+                  title="Unduh KIR dalam format Microsoft Word (.doc)"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Unduh (.doc)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadKirDocx}
+                  className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow cursor-pointer"
+                  title="Unduh KIR dalam format Microsoft Word (.docx) Standar Dinas"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Unduh (.docx)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadKirHtml}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow cursor-pointer"
+                  title="Unduh KIR sebagai dokumen HTML mandiri"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Unduh HTML</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -1184,7 +1277,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                     {formatOfficialNameWithDegree(schoolConfig.kepalaSekolah.nama)}
                   </div>
                   <div className="text-[11px] text-slate-600 mt-0.5">
-                    NIP: {schoolConfig.kepalaSekolah.nip}
+                    {formatOfficialNipOrPppk(schoolConfig.kepalaSekolah.nip, { defaultPrefix: 'NIP.' })}
                   </div>
                 </div>
 
@@ -1200,16 +1293,42 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                     {formatOfficialNameWithDegree(schoolConfig.operatorProfiles?.[effectiveRole]?.nama || 'Petugas Layanan Operasional')}
                   </div>
                   <div className="text-[11px] text-slate-600 mt-0.5">
-                    NIP: {schoolConfig.operatorProfiles?.[effectiveRole]?.nip || '-'}
+                    {schoolConfig.operatorProfiles?.[effectiveRole]?.nip
+                      ? formatOfficialNipOrPppk(schoolConfig.operatorProfiles[effectiveRole].nip, { defaultPrefix: 'NIP.' })
+                      : 'NIP / NIPPK. -'}
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Sticky Bottom Footer */}
-            <div className="shrink-0 p-3 bg-slate-100 border-t border-slate-300 flex items-center justify-between no-print">
-              <span className="text-xs text-slate-600 font-medium">Buku Inventaris (KIR) Siap Cetak</span>
-              <div className="flex items-center gap-2">
+            <div className="shrink-0 p-3 bg-slate-100 border-t border-slate-300 flex flex-wrap items-center justify-between gap-2 no-print">
+              <span className="text-xs text-slate-600 font-medium">Buku Inventaris (KIR) Siap Cetak &amp; Unduh ({roleTitle})</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadKirWord}
+                  className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Unduh (.doc)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadKirDocx}
+                  className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Unduh (.docx)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadKirHtml}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Unduh HTML</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => window.print()}

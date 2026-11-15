@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { LibraryMemberItem, LibraryMemberStats } from '../../types';
-import { formatOfficialNameWithDegree } from '../../utils/formatters';
+import { formatOfficialNameWithDegree, formatOfficialNipOrPppk, isMemberJoinedInMonth } from '../../utils/formatters';
 import { KopSurat } from '../common/KopSurat';
 import { 
   downloadMemberExcelTemplate, 
@@ -92,6 +92,8 @@ export const LibraryMemberManager: React.FC = () => {
   const [isEditNomorDokumenOpen, setIsEditNomorDokumenOpen] = useState(false);
   const [tempPrintDate, setTempPrintDate] = useState('');
   const [tempPrintNomor, setTempPrintNomor] = useState('');
+  const [printAdditionMonth, setPrintAdditionMonth] = useState<number | 'all'>(() => new Date().getMonth() + 1);
+  const [printAdditionYear, setPrintAdditionYear] = useState<number>(() => new Date().getFullYear());
 
   // Active member for Edit / Delete
   const [activeMember, setActiveMember] = useState<LibraryMemberItem | null>(null);
@@ -190,6 +192,20 @@ export const LibraryMemberManager: React.FC = () => {
   const siswaPerempuanCount = Math.max(libraryMemberStats.siswaPerempuan || 0, registeredSiswaPerempuan);
   const totalSiswa = siswaLakiCount + siswaPerempuanCount;
   const grandTotal = totalSiswa + totalGuru + totalStaff;
+
+  const PRINT_MONTH_NAMES = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  const monthlyAddedMembers = useMemo(() => {
+    if (printAdditionMonth === 'all') return [];
+    return libraryMembers.filter(m => isMemberJoinedInMonth(m, printAdditionYear, printAdditionMonth));
+  }, [libraryMembers, printAdditionMonth, printAdditionYear]);
+
+  const printAdditionMonthLabel = printAdditionMonth === 'all'
+    ? ''
+    : `${PRINT_MONTH_NAMES[printAdditionMonth - 1]} ${printAdditionYear}`;
 
   // Open Add Modal
   const handleOpenAdd = (typeDefault: 'GURU' | 'STAFF' | 'SISWA' = 'SISWA') => {
@@ -540,6 +556,23 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
     const paperWidth = isF4 ? '215mm' : '210mm';
     const paperMinHeight = isF4 ? '330mm' : '297mm';
 
+    const addedHtmlRows = monthlyAddedMembers.length > 0
+      ? monthlyAddedMembers.map((m, idx) => {
+          const typeLabel = m.tipeAnggota === 'GURU' ? 'Pendidik (Guru)' : m.tipeAnggota === 'STAFF' ? 'Tendik / Staff' : 'Peserta Didik (Siswa)';
+          return `
+            <tr>
+              <td style="text-align: center; font-weight: 600;">${idx + 1}</td>
+              <td style="font-family: monospace; font-size: 8pt; text-align: center;">${m.nomorAnggota || '-'}</td>
+              <td style="font-weight: 600;">${m.nama}</td>
+              <td>${typeLabel}</td>
+              <td>${m.kelasAtauJabatan || '-'}</td>
+              <td style="text-align: center; font-weight: bold;">${m.jenisKelamin || 'L'}</td>
+              <td style="text-align: center; font-family: monospace; font-size: 8pt;">${m.tanggalBergabung || m.tanggalTerdaftar || '-'}</td>
+            </tr>
+          `;
+        }).join('')
+      : `<tr><td colspan="7" style="text-align: center; color: #64748b; padding: 10px;">Pada bulan ${printAdditionMonthLabel} tidak terdapat penambahan anggota perpustakaan baru.</td></tr>`;
+
     const membersHtmlRows = libraryMembers.map((m, idx) => {
       const typeLabel = m.tipeAnggota === 'GURU' ? 'Pendidik (Guru)' : m.tipeAnggota === 'STAFF' ? 'Tenaga Kependidikan' : 'Peserta Didik (Siswa)';
       const statusBadge = (m.status || 'aktif').toLowerCase() === 'aktif' ? 'Aktif' : (m.status || '').toLowerCase() === 'tamat' ? 'Tamat / Alumni' : 'Nonaktif';
@@ -830,10 +863,38 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
       </tfoot>
     </table>
 
+    ${printAdditionMonth !== 'all' ? `
+    <div style="font-weight: bold; font-size: 10.5pt; margin-top: 14px; margin-bottom: 4px; text-transform: uppercase;">
+      II. REKAPITULASI PENAMBAHAN ANGGOTA BARU BULAN ${printAdditionMonthLabel.toUpperCase()}
+    </div>
+    <div style="font-size: 9pt; margin-bottom: 6px; color: #1e3a8a; font-weight: bold;">
+      Penambahan Terdaftar: ${monthlyAddedMembers.length} Anggota Baru
+      (Guru: ${monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'GURU').length} org ·
+      Tendik: ${monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'STAFF').length} org ·
+      Siswa: ${monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'SISWA').length} org)
+    </div>
+    <table class="table-full">
+      <thead>
+        <tr>
+          <th style="width: 28px;">No</th>
+          <th style="width: 75px;">No. Anggota</th>
+          <th>Nama Lengkap Pemustaka Baru</th>
+          <th style="width: 115px;">Kategori</th>
+          <th style="width: 100px;">Kelas / Jabatan</th>
+          <th style="width: 35px;">L/P</th>
+          <th style="width: 90px;">Tgl Terdaftar</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${addedHtmlRows}
+      </tbody>
+    </table>
+    ` : ''}
+
     ${printContentMode === 'full' ? `
     <!-- Bagian Bawah: Data Keseluruhan Anggota Perpustakaan -->
     <div style="font-weight: bold; font-size: 10.5pt; margin-top: 14px; margin-bottom: 6px; text-transform: uppercase;">
-      II. DAFTAR KESELURUHAN ANGGOTA PERPUSTAKAAN SEKOLAH (${libraryMembers.length} PEMUSTAKA)
+      ${printAdditionMonth !== 'all' ? 'III.' : 'II.'} DAFTAR KESELURUHAN ANGGOTA PERPUSTAKAAN SEKOLAH (${libraryMembers.length} PEMUSTAKA)
     </div>
     <table class="table-full">
       <thead>
@@ -867,14 +928,14 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
             <div style="font-weight: bold; margin-top: 2px;">Kepala Satuan Pendidikan</div>
             <div class="sign-space"></div>
             <div class="sign-name">${kepalaSekolahName}</div>
-            <div class="sign-nip">NIP. ${schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001'}</div>
+            <div class="sign-nip">${formatOfficialNipOrPppk(schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001', { defaultPrefix: 'NIP.' })}</div>
           </td>
           <td>
             <div>${printManualDate}</div>
             <div style="font-weight: bold; margin-top: 2px;">Pengelola Perpustakaan</div>
             <div class="sign-space"></div>
             <div class="sign-name">${pengelolaName}</div>
-            <div class="sign-nip">NIPPK. ${pengelolaPerpus?.nip || '19970530 202521 1 019'}</div>
+            <div class="sign-nip">${formatOfficialNipOrPppk(pengelolaPerpus?.nip || '19970530 202521 1 019', { defaultPrefix: 'NIP.' })}</div>
           </td>
         </tr>
       </table>
@@ -904,7 +965,11 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
           total: grandTotal,
           siswaCount: totalSiswa,
           guruCount: totalGuru,
+          guruLaki: guruLakiCount,
+          guruPerempuan: guruPerempuanCount,
           staffCount: totalStaff,
+          staffLaki: staffLakiCount,
+          staffPerempuan: staffPerempuanCount,
           lakiCount: siswaLakiCount + guruLakiCount + staffLakiCount,
           perempuanCount: siswaPerempuanCount + guruPerempuanCount + staffPerempuanCount,
           aktifCount: registeredSiswaCount + registeredGuruCount + registeredStaffCount,
@@ -913,7 +978,9 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
         },
         nomorDokumen: printNomorDokumen,
         manualDate: printManualDate,
-        includeFullList: printContentMode === 'full'
+        includeFullList: printContentMode === 'full',
+        additionMonth: printAdditionMonth,
+        additionYear: printAdditionYear
       });
 
       const filename = `Laporan_Rekap_Anggota_Perpustakaan_${new Date().toISOString().slice(0, 10)}.doc`;
@@ -926,7 +993,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
   // Fungsi Unduh Dokumen Word (.docx) Asli Berstandar Resmi Dinas (Top 3cm, Left 4cm, Bottom 3cm, Right 3cm)
   const handleDownloadMemberReportDocx = async () => {
     try {
-      const doc = createLibraryMemberReportDocx({
+      const doc = await createLibraryMemberReportDocx({
         schoolConfig,
         libraryMembers,
         memberStats: {
@@ -942,7 +1009,9 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
         },
         nomorDokumen: printNomorDokumen,
         manualDate: printManualDate,
-        includeFullList: printContentMode === 'full'
+        includeFullList: printContentMode === 'full',
+        additionMonth: printAdditionMonth,
+        additionYear: printAdditionYear
       });
 
       const filename = `Laporan_Rekap_Anggota_Perpustakaan_${new Date().toISOString().slice(0, 10)}.docx`;
@@ -2153,6 +2222,33 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                   </button>
                 </div>
 
+                {/* 2b. Filter Bulan Penambahan Anggota Baru */}
+                <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700 text-[11px]">
+                  <span className="text-slate-300 font-semibold">Penambahan:</span>
+                  <select
+                    value={printAdditionMonth}
+                    onChange={(e) => setPrintAdditionMonth(e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10))}
+                    className="bg-slate-900 text-amber-300 font-bold rounded px-1.5 py-0.5 border border-slate-700 focus:outline-hidden"
+                    title="Filter penambahan anggota baru pada bulan tertentu"
+                  >
+                    <option value="all">Tidak Ditampilkan</option>
+                    {PRINT_MONTH_NAMES.map((name, idx) => (
+                      <option key={idx} value={idx + 1}>{name}</option>
+                    ))}
+                  </select>
+                  {printAdditionMonth !== 'all' && (
+                    <select
+                      value={printAdditionYear}
+                      onChange={(e) => setPrintAdditionYear(parseInt(e.target.value, 10))}
+                      className="bg-slate-900 text-slate-200 font-bold rounded px-1.5 py-0.5 border border-slate-700 focus:outline-hidden"
+                    >
+                      <option value={2025}>2025</option>
+                      <option value={2026}>2026</option>
+                      <option value={2027}>2027</option>
+                    </select>
+                  )}
+                </div>
+
                 {/* 3. Tombol Edit Tanggal Pengesahan Manual */}
                 <button
                   type="button"
@@ -2390,11 +2486,68 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                   </div>
                 </div>
 
+                {/* 3b. REKAPITULASI PENAMBAHAN ANGGOTA BARU PADA BULAN TERPILIH */}
+                {printAdditionMonth !== 'all' && (
+                  <div className="mb-6 avoid-break">
+                    <div className="font-bold font-sans text-xs uppercase tracking-wide text-slate-800 mb-2 flex items-center justify-between border-b pb-1">
+                      <span>II. REKAPITULASI PENAMBAHAN ANGGOTA BARU BULAN {printAdditionMonthLabel.toUpperCase()}</span>
+                      <span className="text-[10px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 print:border-0 print:bg-transparent">
+                        +{monthlyAddedMembers.length} Anggota Baru
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-sans text-slate-600 mb-2">
+                      Rincian penambahan anggota perpustakaan baru pada bulan <strong>{printAdditionMonthLabel}</strong>:{' '}
+                      <strong>{monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'GURU').length}</strong> Guru,{' '}
+                      <strong>{monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'STAFF').length}</strong> Tendik/Staff,{' '}
+                      <strong>{monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'SISWA').length}</strong> Siswa.
+                    </p>
+                    <div className="border border-slate-400 rounded-md overflow-hidden">
+                      <table className="w-full text-left font-sans text-[11px] leading-tight border-collapse">
+                        <thead className="bg-slate-100 font-bold border-b border-slate-400 text-[10px] uppercase">
+                          <tr>
+                            <th className="p-1.5 w-7 text-center border-r border-slate-300">No</th>
+                            <th className="p-1.5 w-20 text-center border-r border-slate-300">No. Anggota</th>
+                            <th className="p-1.5 border-r border-slate-300">Nama Pemustaka Baru</th>
+                            <th className="p-1.5 w-28 border-r border-slate-300">Kategori</th>
+                            <th className="p-1.5 w-24 border-r border-slate-300">Kelas / Jabatan</th>
+                            <th className="p-1.5 w-9 text-center border-r border-slate-300">L/P</th>
+                            <th className="p-1.5 w-24 text-center">Tgl Terdaftar</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {monthlyAddedMembers.length > 0 ? (
+                            monthlyAddedMembers.map((m, idx) => {
+                              const typeLabel = m.tipeAnggota === 'GURU' ? 'Pendidik' : m.tipeAnggota === 'STAFF' ? 'Tendik / Staff' : 'Peserta Didik';
+                              return (
+                                <tr key={m.id || idx} className="hover:bg-slate-50 avoid-break">
+                                  <td className="p-1.5 text-center border-r border-slate-200 font-semibold">{idx + 1}</td>
+                                  <td className="p-1.5 text-center font-mono text-[9px] border-r border-slate-200">{m.nomorAnggota || '-'}</td>
+                                  <td className="p-1.5 font-bold text-slate-900 border-r border-slate-200">{m.nama}</td>
+                                  <td className="p-1.5 border-r border-slate-200 text-slate-700">{typeLabel}</td>
+                                  <td className="p-1.5 border-r border-slate-200 text-slate-600">{m.kelasAtauJabatan || '-'}</td>
+                                  <td className="p-1.5 text-center font-bold border-r border-slate-200">{m.jenisKelamin || 'L'}</td>
+                                  <td className="p-1.5 text-center font-mono text-[9.5px]">{m.tanggalBergabung || m.tanggalTerdaftar || '-'}</td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={7} className="p-3 text-center text-slate-500 italic">
+                                Pada bulan {printAdditionMonthLabel} tidak terdapat penambahan anggota perpustakaan baru.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 {/* 4. BAGIAN BAWAH: DATA KESELURUHAN ANGGOTA PERPUSTAKAAN (JIKA MODE LENGKAP DIPILIH) */}
                 {printContentMode === 'full' && (
                   <div className="mb-6">
                     <div className="font-bold font-sans text-xs uppercase tracking-wide text-slate-800 mb-2 flex items-center justify-between border-b pb-1">
-                      <span>II. DAFTAR KESELURUHAN ANGGOTA PERPUSTAKAAN SEKOLAH</span>
+                      <span>{printAdditionMonth !== 'all' ? 'III.' : 'II.'} DAFTAR KESELURUHAN ANGGOTA PERPUSTAKAAN SEKOLAH</span>
                       <span className="text-[10px] text-slate-500 font-normal">Total: {libraryMembers.length} Orang Terdaftar</span>
                     </div>
 
@@ -2459,7 +2612,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                       {kepalaSekolahName}
                     </div>
                     <div className="text-[11px] text-slate-600 mt-0.5 font-mono">
-                      NIP. {schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001'}
+                      {formatOfficialNipOrPppk(schoolConfig.kepalaSekolah?.nip || '19700101 199501 1 001', { defaultPrefix: 'NIP.' })}
                     </div>
                   </div>
 
@@ -2477,7 +2630,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                       {pengelolaName}
                     </div>
                     <div className="text-[11px] text-slate-600 mt-0.5 font-mono">
-                      NIPPK. {pengelolaPerpus?.nip || '19970530 202521 1 019'}
+                      {formatOfficialNipOrPppk(pengelolaPerpus?.nip || '19970530 202521 1 019', { defaultPrefix: 'NIP.' })}
                     </div>
                   </div>
                 </div>
@@ -2491,7 +2644,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
             </div>
 
             {/* Modal Bottom Bar (No-Print) */}
-            <div className="shrink-0 p-3 bg-slate-100 border-t border-slate-300 flex items-center justify-between no-print">
+            <div className="shrink-0 p-3 bg-slate-100 border-t border-slate-300 flex flex-wrap items-center justify-between gap-2 no-print">
               <div className="flex items-center gap-2 text-xs text-slate-700">
                 <span className="font-bold">Ukuran Kertas:</span>
                 <span className="px-2 py-0.5 bg-blue-100 text-blue-900 font-mono font-bold rounded">
@@ -2501,23 +2654,32 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                 <span>Mode: <strong>{printContentMode === 'full' ? 'Lengkap (Matriks + Seluruh Anggota)' : 'Ringkasan Matriks Saja'}</strong></span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={handleDownloadMemberReportWord}
-                  className="px-4 py-1.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer border border-blue-500"
+                  className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer border border-blue-500"
                   title="Unduh dokumen lengkap sebagai file Microsoft Word (.doc)"
                 >
                   <FileText className="w-3.5 h-3.5 text-blue-200" />
-                  <span>Unduh Word (.doc)</span>
+                  <span>Unduh (.doc)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadMemberReportDocx}
+                  className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer border border-indigo-500"
+                  title="Unduh dokumen asli Microsoft Word (.docx) Standar Dinas (A4, 3-4-3-3 cm, TNR)"
+                >
+                  <FileText className="w-3.5 h-3.5 text-indigo-200" />
+                  <span>Unduh (.docx)</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleDownloadMemberReportHtml}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Unduh Dokumen HTML</span>
+                  <span>Unduh HTML</span>
                 </button>
                 <button
                   type="button"

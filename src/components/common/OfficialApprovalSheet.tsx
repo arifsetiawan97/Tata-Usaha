@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { SchoolConfig, RoleType } from '../../types';
 import { initialSchoolConfig } from '../../data/initialData';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
-import { formatOfficialNameWithDegree } from '../../utils/formatters';
+import { formatOfficialNameWithDegree, formatOfficialNipOrPppk } from '../../utils/formatters';
 import { 
   Edit3, 
   CheckCircle2, 
@@ -151,7 +151,7 @@ const OfficialESignQr: React.FC<{
         </div>
         <div className="text-[8px] text-slate-500 font-mono mt-0.5">BSrE / SI-OPS KEMDIKBUD</div>
         <div className="text-slate-950 font-bold mt-0.5 truncate">{name}</div>
-        <div className="text-[8px] text-slate-600 font-mono">NIP. {nip}</div>
+        <div className="text-[8px] text-slate-600 font-mono">{formatOfficialNipOrPppk(nip)}</div>
         <div className="text-[7.5px] text-emerald-700 font-semibold mt-0.5 flex items-center gap-0.5">
           <Check className="w-2.5 h-2.5 text-emerald-600 inline" />
           <span>Sah & Terverifikasi Digital</span>
@@ -318,9 +318,10 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
       ? '( .................................................. )' 
       : formatOfficialNameWithDegree(officer.nama);
 
-    const formattedNip = isDummy || !officer.nip || /19740510\s*199802\s*1\s*003/.test(officer.nip) || /19920815\s*202321\s*2\s*024/.test(officer.nip)
-      ? (targetKey === 'kepsek' ? 'NIP. .................................................' : 'NIP / NIPPK. .................................................')
-      : (officer.nip.startsWith('NIP') ? officer.nip : `NIP. ${officer.nip}`);
+    const isDummyNip = !officer.nip || /19740510\s*199802\s*1\s*003/.test(officer.nip) || /19920815\s*202321\s*2\s*024/.test(officer.nip);
+    const formattedNip = isDummy || isDummyNip
+      ? formatOfficialNipOrPppk('', { defaultPrefix: targetKey === 'kepsek' ? 'NIP' : 'NIPPK', placeholderDots: true })
+      : formatOfficialNipOrPppk(officer.nip, { defaultPrefix: targetKey === 'kepsek' ? 'NIP' : 'NIPPK', placeholderDots: true });
 
     return (
       <div className="flex flex-col items-center w-full relative">
