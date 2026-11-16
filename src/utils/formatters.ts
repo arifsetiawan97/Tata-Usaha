@@ -373,3 +373,97 @@ export function isMemberJoinedInMonth(
   return parsed.year === targetYear && parsed.month === targetMonth;
 }
 
+const ID_DIGITS = ['', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas'];
+const ID_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+const ID_MONTHS = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+
+/**
+ * Konversi bilangan bulat ke teks Bahasa Indonesia baku (terbilang)
+ * untuk tanggal dan tahun pada pembukaan resmi Berita Acara.
+ */
+export function numberToWordsId(n: number): string {
+  const num = Math.floor(Math.abs(n));
+  if (num === 0) return 'nol';
+  if (num < 12) return ID_DIGITS[num];
+  if (num < 20) return `${numberToWordsId(num - 10)} belas`;
+  if (num < 100) {
+    const tens = Math.floor(num / 10);
+    const rem = num % 10;
+    return `${ID_DIGITS[tens]} puluh${rem ? ' ' + numberToWordsId(rem) : ''}`;
+  }
+  if (num < 200) {
+    const rem = num % 100;
+    return `seratus${rem ? ' ' + numberToWordsId(rem) : ''}`;
+  }
+  if (num < 1000) {
+    const hundreds = Math.floor(num / 100);
+    const rem = num % 100;
+    return `${ID_DIGITS[hundreds]} ratus${rem ? ' ' + numberToWordsId(rem) : ''}`;
+  }
+  if (num < 2000) {
+    const rem = num % 1000;
+    return `seribu${rem ? ' ' + numberToWordsId(rem) : ''}`;
+  }
+  if (num < 1000000) {
+    const thousands = Math.floor(num / 1000);
+    const rem = num % 1000;
+    return `${numberToWordsId(thousands)} ribu${rem ? ' ' + numberToWordsId(rem) : ''}`;
+  }
+  return String(num);
+}
+
+/**
+ * Format tanggal YYYY-MM-DD menjadi kalimat pembuka Berita Acara baku sesuai Tata Naskah Dinas:
+ * "Pada hari ini, Senin tanggal enam belas bulan November tahun dua ribu dua puluh enam (16-11-2026)"
+ */
+export function formatOfficialIndonesianOpeningDate(isoDate?: string): {
+  dayName: string;
+  dateWords: string;
+  monthName: string;
+  yearWords: string;
+  formattedNumeric: string;
+  formattedLong: string;
+  sentencePrefix: string;
+} {
+  const clean = (isoDate || '').trim();
+  const match = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const now = new Date();
+  const year = match ? parseInt(match[1], 10) : now.getFullYear();
+  const month = match ? parseInt(match[2], 10) : now.getMonth() + 1;
+  const day = match ? parseInt(match[3], 10) : now.getDate();
+
+  const dt = new Date(year, Math.max(0, month - 1), day);
+  const dayName = ID_DAYS[dt.getDay()] || 'Senin';
+  const monthName = ID_MONTHS[(month - 1 + 12) % 12] || 'Januari';
+  const dateWords = numberToWordsId(day);
+  const yearWords = numberToWordsId(year);
+  const dd = String(day).padStart(2, '0');
+  const mm = String(month).padStart(2, '0');
+  const formattedNumeric = `${dd}-${mm}-${year}`;
+  const formattedLong = `${day} ${monthName} ${year}`;
+  const sentencePrefix = `Pada hari ini, ${dayName} tanggal ${dateWords} bulan ${monthName} tahun ${yearWords} (${formattedNumeric})`;
+
+  return {
+    dayName,
+    dateWords,
+    monthName,
+    yearWords,
+    formattedNumeric,
+    formattedLong,
+    sentencePrefix
+  };
+}
+
+export function formatRupiah(value: number | string): string {
+  const num = typeof value === 'number' ? value : Number(String(value || '0').replace(/[^\d.-]/g, '')) || 0;
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0
+  }).format(num);
+}
+
+

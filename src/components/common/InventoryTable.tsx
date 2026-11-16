@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { InventoryItem, RoleType } from '../../types';
 import { exportInventoryToCsv, parseInventoryCsv } from '../../data/taskPresets';
@@ -28,7 +28,9 @@ import {
   Check,
   Sparkles,
   Printer,
-  Bot
+  Bot,
+  Calendar,
+  Edit3
 } from 'lucide-react';
 
 interface InventoryTableProps {
@@ -102,6 +104,19 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   };
 
   const [isKirPrintModalOpen, setIsKirPrintModalOpen] = useState(false);
+
+  const defaultKirPlaceDate = `${[schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0] || 'Sekolah'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+  const [kirManualDate, setKirManualDate] = useState<string>(defaultKirPlaceDate);
+  const [hasCustomKirDate, setHasCustomKirDate] = useState<boolean>(false);
+  const [isEditingKirDate, setIsEditingKirDate] = useState<boolean>(false);
+  const [isEditingKirDateInline, setIsEditingKirDateInline] = useState<boolean>(false);
+  const [tempKirDate, setTempKirDate] = useState<string>(defaultKirPlaceDate);
+
+  useEffect(() => {
+    if (!hasCustomKirDate) {
+      setKirManualDate(defaultKirPlaceDate);
+    }
+  }, [defaultKirPlaceDate, hasCustomKirDate]);
 
   const handleDirectPrintKir = () => {
     setIsKirPrintModalOpen(true);
@@ -276,7 +291,8 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
       schoolConfig,
       role: effectiveRole,
       roleTitle,
-      inventories: roleInventories
+      inventories: roleInventories,
+      manualDate: kirManualDate
     });
     downloadWordBlob(docHtml, `KIR_Inventaris_${effectiveRole}_${new Date().toISOString().split('T')[0]}.doc`);
   };
@@ -287,7 +303,8 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
         schoolConfig,
         role: effectiveRole,
         roleTitle,
-        inventories: roleInventories
+        inventories: roleInventories,
+        manualDate: kirManualDate
       });
       await downloadDocxFile(doc, `KIR_Inventaris_${effectiveRole}_${new Date().toISOString().split('T')[0]}.docx`);
     } catch (err) {
@@ -300,7 +317,8 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
       schoolConfig,
       role: effectiveRole,
       roleTitle,
-      inventories: roleInventories
+      inventories: roleInventories,
+      manualDate: kirManualDate
     });
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1141,6 +1159,19 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => {
+                    setTempKirDate(kirManualDate);
+                    setIsEditingKirDate(prev => !prev);
+                    setIsEditingKirDateInline(false);
+                  }}
+                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow cursor-pointer"
+                  title="Edit tempat dan tanggal tanda tangan pada lembar pengesahan"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Edit Tempat & Tanggal</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleDownloadKirWord}
                   className="px-3 py-1.5 bg-blue-700 hover:bg-blue-600 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow cursor-pointer"
                   title="Unduh KIR dalam format Microsoft Word (.doc)"
@@ -1184,6 +1215,60 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Quick Edit Tempat & Tanggal Pengesahan Bar */}
+            {isEditingKirDate && (
+              <div className="shrink-0 p-3 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-2 no-print">
+                <div className="flex items-center gap-2 flex-1 min-w-[260px] max-w-xl">
+                  <span className="text-xs font-bold text-amber-900 shrink-0">Tempat & Tanggal Pengesahan:</span>
+                  <input
+                    type="text"
+                    value={tempKirDate}
+                    onChange={(e) => setTempKirDate(e.target.value)}
+                    placeholder="Contoh: Batang Hari, 16 November 2026"
+                    className="flex-1 px-3 py-1 bg-white border border-amber-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const val = tempKirDate.trim();
+                      if (val) {
+                        setKirManualDate(val);
+                        setHasCustomKirDate(true);
+                      } else {
+                        setKirManualDate(defaultKirPlaceDate);
+                        setHasCustomKirDate(false);
+                      }
+                      setIsEditingKirDate(false);
+                    }}
+                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                  >
+                    Simpan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKirManualDate(defaultKirPlaceDate);
+                      setTempKirDate(defaultKirPlaceDate);
+                      setHasCustomKirDate(false);
+                      setIsEditingKirDate(false);
+                    }}
+                    className="px-2.5 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 text-xs font-semibold rounded-lg cursor-pointer"
+                  >
+                    Reset Default
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingKirDate(false)}
+                    className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Printable Document Sheet */}
             <div className="flex-1 overflow-y-auto p-8 sm:p-12 text-slate-900 bg-white font-serif leading-relaxed text-xs sm:text-sm print:p-0 print:overflow-visible">
@@ -1283,7 +1368,60 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
 
                 <div className="flex flex-col items-center">
                   <div className="text-slate-600">
-                    {[schoolConfig.kabupatenKota, schoolConfig.desaKecamatan].filter(Boolean)[0] || 'Sekolah'}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {isEditingKirDateInline ? (
+                      <div className="flex items-center gap-1 bg-amber-50 p-1 rounded-lg border border-amber-300 no-print">
+                        <input
+                          type="text"
+                          value={tempKirDate}
+                          onChange={(e) => setTempKirDate(e.target.value)}
+                          className="text-xs px-2 py-0.5 border border-amber-400 rounded bg-white font-medium text-slate-900 w-52"
+                          placeholder="Tempat, Tanggal Pengesahan"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = tempKirDate.trim();
+                            if (val) {
+                              setKirManualDate(val);
+                              setHasCustomKirDate(true);
+                            } else {
+                              setKirManualDate(defaultKirPlaceDate);
+                              setHasCustomKirDate(false);
+                            }
+                            setIsEditingKirDateInline(false);
+                          }}
+                          className="px-2 py-0.5 text-xs bg-emerald-600 text-white font-semibold rounded hover:bg-emerald-700 cursor-pointer"
+                        >
+                          OK
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempKirDate(kirManualDate);
+                            setIsEditingKirDateInline(false);
+                          }}
+                          className="px-1.5 py-0.5 text-xs text-slate-500 cursor-pointer"
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1">
+                        <span>{kirManualDate}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempKirDate(kirManualDate);
+                            setIsEditingKirDateInline(true);
+                            setIsEditingKirDate(false);
+                          }}
+                          className="p-0.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded no-print cursor-pointer"
+                          title="Ubah tempat & tanggal pengesahan"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="font-semibold text-slate-800 mt-0.5">Petugas / Penanggung Jawab Sarpras</div>
                   <div className="h-20 flex items-center justify-center">

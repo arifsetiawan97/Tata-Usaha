@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SchoolConfig, RoleType } from '../../types';
 import { initialSchoolConfig } from '../../data/initialData';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
@@ -171,6 +171,10 @@ export const OfficialApprovalSheet: React.FC<OfficialApprovalSheetProps> = ({
 }) => {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [tempDate, setTempDate] = useState(manualDate);
+
+  useEffect(() => {
+    setTempDate(manualDate);
+  }, [manualDate]);
   const [showSignPad, setShowSignPad] = useState(false);
   const [activeSignTarget, setActiveSignTarget] = useState<'operator' | 'kepsek' | 'kasubag' | null>(null);
 

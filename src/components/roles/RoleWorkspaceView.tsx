@@ -12,6 +12,7 @@ import { AnnualReportView } from '../reports/AnnualReportView';
 import { InventoryTable } from '../common/InventoryTable';
 import { LibraryBookManager } from '../perpus/LibraryBookManager';
 import { LibraryMemberManager } from '../perpus/LibraryMemberManager';
+import { BeritaAcaraManager } from './BeritaAcaraManager';
 import { initialSchoolConfig } from '../../data/initialData';
 import { 
   Shield, 
@@ -27,7 +28,8 @@ import {
   UserCheck,
   Printer,
   Bot,
-  Users
+  Users,
+  ScrollText
 } from 'lucide-react';
 import { AiAssistantModal } from '../common/AiAssistantModal';
 
@@ -151,6 +153,14 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
       icon: Boxes,
       badge: `${roleInventories.length} item`
     },
+    ...(role === 'TU' ? [
+      {
+        id: 'berita_acara' as RoleSubTab,
+        label: 'Berita Acara Otomatis',
+        icon: ScrollText,
+        badge: '10 template'
+      }
+    ] : []),
     ...(role === 'PERPUS' ? [
       {
         id: 'buku' as RoleSubTab,
@@ -170,7 +180,7 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
   return (
     <div className="space-y-6">
       {/* Top Banner Header for this Role */}
-      <div className={`p-5 rounded-2xl bg-gradient-to-r ${roleMeta.themeBg} text-white shadow-md border border-slate-700/50`}>
+      <div className={`no-print p-5 rounded-2xl bg-gradient-to-r ${roleMeta.themeBg} text-white shadow-md border border-slate-700/50`}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
             <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shrink-0">
@@ -317,6 +327,10 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
 
         {currentSubTab === 'anggota' && (
           <LibraryMemberManager />
+        )}
+
+        {currentSubTab === 'berita_acara' && role === 'TU' && (
+          <BeritaAcaraManager />
         )}
       </div>
 

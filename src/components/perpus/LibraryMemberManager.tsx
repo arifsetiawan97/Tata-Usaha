@@ -89,6 +89,7 @@ export const LibraryMemberManager: React.FC = () => {
     return `421.2/028/REKAP-ANGGOTA/${schoolConfig.npsn || '20202819'}/${new Date().getFullYear()}`;
   });
   const [isEditPrintDateOpen, setIsEditPrintDateOpen] = useState(false);
+  const [isEditPrintDateInline, setIsEditPrintDateInline] = useState(false);
   const [isEditNomorDokumenOpen, setIsEditNomorDokumenOpen] = useState(false);
   const [tempPrintDate, setTempPrintDate] = useState('');
   const [tempPrintNomor, setTempPrintNomor] = useState('');
@@ -2254,13 +2255,14 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                   type="button"
                   onClick={() => {
                     setTempPrintDate(printManualDate);
-                    setIsEditPrintDateOpen(true);
+                    setIsEditPrintDateOpen(prev => !prev);
+                    setIsEditPrintDateInline(false);
                   }}
                   className="px-2.5 py-1 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-lg flex items-center gap-1 transition cursor-pointer"
                   title="Sesuaikan tempat dan tanggal tanda tangan pengesahan"
                 >
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>Edit Tanggal</span>
+                  <span>Edit Tempat &amp; Tanggal</span>
                 </button>
 
                 {/* 4a. Tombol Unduh File Word (.doc) Mandiri */}
@@ -2619,7 +2621,53 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                   {/* Sisi KANAN: Pengelola Perpustakaan */}
                   <div className="flex flex-col items-center">
                     <div className="text-slate-700 font-medium">
-                      {printManualDate}
+                      {isEditPrintDateInline ? (
+                        <div className="flex items-center gap-1 bg-amber-50 p-1 rounded-lg border border-amber-300 no-print">
+                          <input
+                            type="text"
+                            value={tempPrintDate}
+                            onChange={(e) => setTempPrintDate(e.target.value)}
+                            className="text-xs px-2 py-0.5 border border-amber-400 rounded bg-white font-medium text-slate-900 w-52"
+                            placeholder="Tempat, Tanggal Pengesahan"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPrintManualDate(tempPrintDate.trim() || `${schoolConfig.kabupatenKota || 'Batang Hari'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`);
+                              setIsEditPrintDateInline(false);
+                            }}
+                            className="px-2 py-0.5 text-xs bg-emerald-600 text-white font-semibold rounded hover:bg-emerald-700 cursor-pointer"
+                          >
+                            OK
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempPrintDate(printManualDate);
+                              setIsEditPrintDateInline(false);
+                            }}
+                            className="px-1.5 py-0.5 text-xs text-slate-500 cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1">
+                          <span>{printManualDate}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempPrintDate(printManualDate);
+                              setIsEditPrintDateInline(true);
+                              setIsEditPrintDateOpen(false);
+                            }}
+                            className="p-0.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded no-print cursor-pointer"
+                            title="Ubah tempat & tanggal pengesahan"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="font-semibold text-slate-800 mt-0.5">Pengelola Perpustakaan</div>
 

@@ -46,17 +46,17 @@ const MONTH_NAMES = [
 
 // A4 Standard (11906 x 16838 twips / DXA)
 // Margin Resmi Dinas: Top 3 cm (1701), Left 4 cm (2268), Bottom 3 cm (1701), Right 3 cm (1701)
-const PAGE_WIDTH_DXA = 11906;
-const PAGE_HEIGHT_DXA = 16838;
-const MARGIN_TOP_DXA = 1701;    // 3.0 cm
-const MARGIN_LEFT_DXA = 2268;   // 4.0 cm
-const MARGIN_BOTTOM_DXA = 1701; // 3.0 cm
-const MARGIN_RIGHT_DXA = 1701;  // 3.0 cm
+export const PAGE_WIDTH_DXA = 11906;
+export const PAGE_HEIGHT_DXA = 16838;
+export const MARGIN_TOP_DXA = 1701;    // 3.0 cm
+export const MARGIN_LEFT_DXA = 2268;   // 4.0 cm
+export const MARGIN_BOTTOM_DXA = 1701; // 3.0 cm
+export const MARGIN_RIGHT_DXA = 1701;  // 3.0 cm
 
 // Printable content width = 11906 - (2268 + 1701) = 7937 DXA
-const CONTENT_WIDTH_DXA = PAGE_WIDTH_DXA - (MARGIN_LEFT_DXA + MARGIN_RIGHT_DXA); // 7937
+export const CONTENT_WIDTH_DXA = PAGE_WIDTH_DXA - (MARGIN_LEFT_DXA + MARGIN_RIGHT_DXA); // 7937
 
-const FONT_FAMILY = 'Times New Roman';
+export const FONT_FAMILY = 'Times New Roman';
 
 // Line spacing 1.15 (line: 276) and after 6 pt (after: 120)
 const STANDARD_PARAGRAPH_SPACING = {
@@ -168,7 +168,7 @@ const DEFAULT_RIGHT_LOGO_SVG = `<svg viewBox="0 0 120 140" width="120" height="1
  * Convert any browser image source (data URL, blob URL, http URL, or SVG string) to PNG Uint8Array
  * so docx ImageRun embeds crisp logos & signature images reliably.
  */
-async function imageSourceToPngBytes(
+export async function imageSourceToPngBytes(
   src?: string,
   fallbackKind?: 'left' | 'right',
   targetSize: { maxW: number; maxH: number } = { maxW: 150, maxH: 150 }
@@ -252,7 +252,7 @@ export async function downloadDocxFile(doc: Document, filename: string): Promise
  * Creates 3-Column Official Kop Surat Table matching KopSurat.tsx 1:1
  * [Logo Kiri | Teks Instansi Sekolah | Logo Kanan] + Double Bottom Border
  */
-async function createKopSuratTable(config: SchoolConfig): Promise<Table> {
+export async function createKopSuratTable(config: SchoolConfig): Promise<Table> {
   const leftSrc = config.logoKopKiri || config.logoKabupatenUrl;
   const rightSrc = config.logoKopKanan || config.logoSekolahUrl;
 

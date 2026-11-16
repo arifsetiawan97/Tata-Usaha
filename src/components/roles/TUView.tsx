@@ -30,11 +30,12 @@ import {
   PenTool,
   Image as ImageIcon,
   ZoomIn,
-  X
+  X,
+  ScrollText
 } from 'lucide-react';
 
 export const TUView: React.FC = () => {
-  const { tasks, deleteTask, deleteMultipleTasks, inventories } = useApp();
+  const { tasks, deleteTask, deleteMultipleTasks, inventories, setRoleSubTab } = useApp();
   const [activeCategory, setActiveCategory] = useState<string>('semua');
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState<boolean>(false);
@@ -116,12 +117,22 @@ export const TUView: React.FC = () => {
           </p>
         </div>
 
-        {/* Dual Action Buttons: Template vs Manual */}
+        {/* Dual Action Buttons: Template vs Manual + Berita Acara */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
+            onClick={() => setRoleSubTab('TU', 'berita_acara')}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 text-xs sm:text-sm font-bold rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap shrink-0"
+            title="Buat Berita Acara Otomatis (Kelulusan, Kenaikan Kelas, BAST, Rapat, Kas, Ujian, dll.)"
+          >
+            <ScrollText className="w-4 h-4" />
+            <span>Berita Acara Otomatis</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleAddNewWithMode('template')}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white text-xs sm:text-sm font-bold rounded-lg transition-all shadow-sm cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white text-xs sm:text-sm font-bold rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap shrink-0"
             title="Pilih pekerjaan standar dan otomatis isi form"
           >
             <Sparkles className="w-4 h-4 text-sky-200" />
@@ -131,7 +142,7 @@ export const TUView: React.FC = () => {
           <button
             type="button"
             onClick={() => handleAddNewWithMode('manual')}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs sm:text-sm font-semibold rounded-lg transition-all border border-slate-700 shadow-sm cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs sm:text-sm font-semibold rounded-lg transition-all border border-slate-700 shadow-sm cursor-pointer whitespace-nowrap shrink-0"
             title="Ketik formulir secara manual dan bebas"
           >
             <PenTool className="w-4 h-4 text-amber-300" />

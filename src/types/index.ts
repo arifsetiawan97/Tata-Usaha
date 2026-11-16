@@ -1,6 +1,6 @@
 export type RoleType = 'TU' | 'PENJAGA' | 'SERVICE' | 'PERPUS' | 'LAB_IPA';
 
-export type RoleSubTab = 'tasks' | 'tupoksi' | 'monthly' | 'annual' | 'inventory' | 'buku' | 'anggota';
+export type RoleSubTab = 'tasks' | 'tupoksi' | 'monthly' | 'annual' | 'inventory' | 'buku' | 'anggota' | 'berita_acara';
 
 export type LibraryBookCategory = 
   | 'Buku Teks Utama' 
@@ -306,3 +306,77 @@ export interface ArchiveDocument {
   };
   reportData: any; // Complete snapshot for inspection preview/print
 }
+
+export type BeritaAcaraTemplateId =
+  | 'kelulusan'
+  | 'kenaikan_kelas'
+  | 'bast_barang'
+  | 'serah_terima_jabatan'
+  | 'rapat_dinas'
+  | 'pemeriksaan_kas'
+  | 'pelaksanaan_ujian'
+  | 'pemusnahan_arsip_barang'
+  | 'ppdb_spmb'
+  | 'kehilangan_kerusakan';
+
+export interface BeritaAcaraSignatory {
+  roleLabel: string;
+  jabatan: string;
+  nama: string;
+  nip: string;
+  signatureImage?: string;
+  dateLine?: string;
+}
+
+export interface BeritaAcaraDetailPair {
+  label: string;
+  value: string;
+}
+
+export interface BeritaAcaraTableData {
+  title: string;
+  columns: { header: string; align?: 'left' | 'center' | 'right'; widthPercent?: number }[];
+  rows: string[][];
+  footerRow?: string[];
+}
+
+export interface GeneratedBeritaAcaraContent {
+  templateId: BeritaAcaraTemplateId;
+  templateTitle: string;
+  documentHeading: string; // e.g. "BERITA ACARA"
+  documentSubHeading: string; // e.g. "RAPAT DEWAN GURU PENETAPAN KELULUSAN PESERTA DIDIK"
+  nomorSurat: string;
+  docDateLocation: string; // e.g. "Teluk, 16 November 2026"
+  openingParagraph: string;
+  basisParagraphs: string[];
+  detailSectionTitle?: string;
+  detailPairs?: BeritaAcaraDetailPair[];
+  partyBoxes?: {
+    partyTitle: string;
+    nama: string;
+    nip: string;
+    jabatan: string;
+    unit?: string;
+  }[];
+  bodyParagraphs: string[];
+  tables: BeritaAcaraTableData[];
+  closingParagraph: string;
+  signatoryLayout: 'two_col' | 'two_col_plus_kepsek';
+  leftSignatory: BeritaAcaraSignatory;
+  rightSignatory: BeritaAcaraSignatory;
+  centerBottomSignatory?: BeritaAcaraSignatory;
+  witnesses?: { nama: string; jabatan: string; nip?: string }[];
+}
+
+export interface SavedBeritaAcaraRecord {
+  id: string;
+  templateId: BeritaAcaraTemplateId;
+  templateTitle: string;
+  nomorSurat: string;
+  tanggalSurat: string;
+  ringkasan: string;
+  formValues: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
