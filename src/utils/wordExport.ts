@@ -210,24 +210,13 @@ function renderWordSignatureBlock(params: {
         : 'NIP / NIPPK. .................................................')
     : formatOfficialNipOrPppk(operator.nip, { defaultPrefix: 'NIP.' });
 
-  let showImages = false;
-  try {
-    if (typeof localStorage !== 'undefined') {
-      showImages = localStorage.getItem('siops_signature_mode') === 'image';
-    }
-  } catch {
-    showImages = false;
-  }
-
   return `
     <table class="signatures">
       <tr>
         <td>
           <div>Mengetahui / Mengesahkan,</div>
           <div style="font-weight: bold; margin-top: 2px;">Kepala Sekolah</div>
-          <div style="height: 70px; text-align: center; vertical-align: middle;">
-            ${showImages && !isDummyKepsek && kepsek?.signatureImage ? `<img src="${kepsek.signatureImage}" height="65" style="object-fit: contain;" alt="TTD Kepala Sekolah" />` : ''}
-          </div>
+          <div style="height: 70px; text-align: center; vertical-align: middle;"></div>
           <div style="font-weight: bold; ${isDummyKepsek ? '' : 'text-decoration: underline;'} font-size: 11pt;">${kepsekName}</div>
           <div style="font-size: 9.5pt; font-family: Arial, sans-serif; margin-top: 2px;">
             ${kepsekNip}
@@ -236,9 +225,7 @@ function renderWordSignatureBlock(params: {
         <td>
           <div>${docDate}</div>
           <div style="font-weight: bold; margin-top: 2px;">${operatorTitle}</div>
-          <div style="height: 70px; text-align: center; vertical-align: middle;">
-            ${showImages && !isDummyOperator && operator?.signatureImage ? `<img src="${operator.signatureImage}" height="65" style="object-fit: contain;" alt="TTD Petugas" />` : ''}
-          </div>
+          <div style="height: 70px; text-align: center; vertical-align: middle;"></div>
           <div style="font-weight: bold; ${isDummyOperator ? '' : 'text-decoration: underline;'} font-size: 11pt;">${operatorName}</div>
           <div style="font-size: 9.5pt; font-family: Arial, sans-serif; margin-top: 2px;">
             ${operatorNip}

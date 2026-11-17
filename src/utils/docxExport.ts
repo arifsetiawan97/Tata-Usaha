@@ -579,14 +579,11 @@ async function createOfficialSignatureBlockDocx(params: {
   const { schoolConfig, role, operatorTitle, docDate, forceTwoCol = false } = params;
 
   let layoutMode: '2_col' | '3_col' = '2_col';
-  let signatureMode = 'digital';
   try {
     if (!forceTwoCol) {
       const savedLayout = localStorage.getItem('siops_signature_layout');
       if (savedLayout === '3_col') layoutMode = '3_col';
     }
-    const savedMode = localStorage.getItem('siops_signature_mode');
-    if (savedMode) signatureMode = savedMode;
   } catch {
     // ignore storage errors
   }
@@ -617,17 +614,8 @@ async function createOfficialSignatureBlockDocx(params: {
     ? formatOfficialNipOrPppk('', { defaultPrefix: 'NIP', placeholderDots: true })
     : formatOfficialNipOrPppk(tuProfile?.nip, { defaultPrefix: 'NIP', placeholderDots: true });
 
-  const shouldEmbedSig = signatureMode === 'image';
-  const [kepsekSigImg, opSigImg] = shouldEmbedSig
-    ? await Promise.all([
-        !isDummyKepsek && schoolConfig.kepalaSekolah?.signatureImage
-          ? imageSourceToPngBytes(schoolConfig.kepalaSekolah.signatureImage, undefined, { maxW: 160, maxH: 70 })
-          : Promise.resolve(null),
-        !isDummyOperator && operator?.signatureImage
-          ? imageSourceToPngBytes(operator.signatureImage, undefined, { maxW: 160, maxH: 70 })
-          : Promise.resolve(null)
-      ])
-    : [null, null];
+  const kepsekSigImg = null;
+  const opSigImg = null;
 
   const makeSignatureCell = (cellConfig: {
     widthDxa: number;

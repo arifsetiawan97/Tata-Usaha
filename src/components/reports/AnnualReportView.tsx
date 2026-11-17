@@ -883,7 +883,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">
-            Dilengkapi Lembar Pengesahan NIP/NIPPK & Cap Stempel
+            Dilengkapi Lembar Pengesahan NIP/NIPPK
           </p>
         </div>
       </div>
@@ -973,7 +973,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             Format Tanggal Manual Pengesahan Laporan Tahunan:
           </label>
           <p className="text-[11px] text-slate-500">
-            Disesuaikan dengan tanggal penutupan tahun anggaran. Dilengkapi pilihan tanda tangan digital, basah, gores, & QR e-sign.
+            Disesuaikan dengan tanggal penutupan tahun anggaran. Menggunakan format tanda tangan basah resmi pada lembar pengesahan.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

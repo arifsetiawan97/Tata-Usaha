@@ -72,7 +72,7 @@ function MainLayout() {
             Sistem Informasi Operator Layanan Operasional (TU, Penjaga, Service, Perpustakaan, Lab IPA) · Standar Tata Kelola Satuan Pendidikan
           </p>
           <p className="font-mono text-[11px] text-slate-400">
-            Kop 3 Kolom · Lembar Pengesahan NIP/NIPPK · E-Sign & Stempel
+            Kop 3 Kolom · Lembar Pengesahan NIP/NIPPK · Tanda Tangan Basah
           </p>
         </div>
       </footer>

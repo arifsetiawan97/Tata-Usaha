@@ -1284,11 +1284,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
               <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${schoolConfig.kepalaSekolah.jabatan || 'Kepala Satuan Pendidikan'}</div>
               
               <div class="sign-box" style="height: 85px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
-                ${!isDefaultOrDummyKepsek && schoolConfig.kepalaSekolah.signatureImage ? `
-                  <img src="${schoolConfig.kepalaSekolah.signatureImage}" alt="Tanda Tangan Kepsek" class="sign-image" style="max-height: 75px; max-width: 180px; object-fit: contain;">
-                ` : `
-                  <div style="height: 75px; width: 100%;"></div>
-                `}
+                <div style="height: 75px; width: 100%;"></div>
               </div>
 
               <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; ${isDefaultOrDummyKepsek ? '' : 'text-decoration: underline;'}">${displayKepsekNama}</div>
@@ -1302,11 +1298,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
               <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${operator.jabatan || (role === 'PERPUS' ? 'Pengelola Perpustakaan' : 'Petugas Pelaksana')}</div>
 
               <div class="sign-box" style="height: 85px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
-                ${!isDefaultOrDummyOperator && operator.signatureImage ? `
-                  <img src="${operator.signatureImage}" alt="Tanda Tangan Operator" class="sign-image" style="max-height: 75px; max-width: 180px; object-fit: contain;">
-                ` : `
-                  <div style="height: 75px; width: 100%;"></div>
-                `}
+                <div style="height: 75px; width: 100%;"></div>
               </div>
 
               <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; ${isDefaultOrDummyOperator ? '' : 'text-decoration: underline;'}">${displayOperatorNama}</div>

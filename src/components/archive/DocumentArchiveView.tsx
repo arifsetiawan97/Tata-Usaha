@@ -259,7 +259,7 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
           <div className="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60">
             <div className="text-[11px] text-emerald-400 font-medium">Telah Disahkan Kepsek</div>
             <div className="text-xl font-black text-emerald-300 mt-1">{stats.verified} Dokumen</div>
-            <div className="text-[10px] text-emerald-400/80 mt-0.5">Lengkap TTD & Cap Stempel</div>
+            <div className="text-[10px] text-emerald-400/80 mt-0.5">Lengkap TTD Pengesahan</div>
           </div>
 
           <div className="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60">
@@ -585,9 +585,6 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
                     </span>
                     <span className="flex items-center gap-1 text-emerald-700 font-medium">
                       <Check className="w-3 h-3 text-emerald-600" /> TTD Petugas & Kepsek
-                    </span>
-                    <span className="flex items-center gap-1 text-emerald-700 font-medium">
-                      <Check className="w-3 h-3 text-emerald-600" /> Cap Stempel Sekolah
                     </span>
                     {doc.checklist.hasPhotos ? (
                       <span className="flex items-center gap-1 text-sky-700 font-medium">

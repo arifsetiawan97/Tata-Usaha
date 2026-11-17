@@ -28,7 +28,7 @@ export const initialSchoolConfig: SchoolConfig = {
   logoKabupatenUrl: '', // Will use inline SVG renderer if empty
   logoSekolahUrl: '',   // Will use inline SVG Tut Wuri Handayani if empty
   logoAplikasiUrl: '',  // Custom application logo (JPEG/PNG)
-  stempelEnabled: true,
+  stempelEnabled: false,
   stempelTextLine1: 'DINAS PENDIDIKAN DAN KEBUDAYAAN',
   stempelTextLine2: 'SMP NEGERI SATU ATAP TELUK',
   kepalaSekolah: {

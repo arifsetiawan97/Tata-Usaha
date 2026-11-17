@@ -1519,7 +1519,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         hasKop: true,
         hasApprovalSheet: true,
         hasSignatures: true,
-        hasStamp: schoolConfig.stempelEnabled,
+        hasStamp: false,
         hasPhotos: roleTasksWithPhotos.length > 0,
         photoCount: roleTasksWithPhotos.length
       },

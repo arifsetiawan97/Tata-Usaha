@@ -1058,7 +1058,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             </span>
           </div>
           <p className="text-[10.5px] text-slate-500 mt-2">
-            Lembar Pengesahan: NIP & Stempel Resmi Siap
+            Lembar Pengesahan: NIP / NIPPK Siap
           </p>
         </div>
       </div>
@@ -1160,7 +1160,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             Format Tanggal Manual & Lembar Pengesahan:
           </label>
           <p className="text-[11px] text-slate-500">
-            Dapat diubah bebas sesuai tanggal pelaporan resmi. Dilengkapi pilihan tanda tangan digital, basah, gores, & QR e-sign.
+            Dapat diubah bebas sesuai tanggal pelaporan resmi. Menggunakan format tanda tangan basah resmi pada lembar pengesahan.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

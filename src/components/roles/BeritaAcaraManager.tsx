@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { KopSurat } from '../common/KopSurat';
-import { StempelResmiSekolah } from '../common/OfficialApprovalSheet';
 import {
   BERITA_ACARA_TEMPLATES,
   BeritaAcaraTemplateDef
@@ -27,8 +26,6 @@ import {
   CheckCircle2,
   ScrollText,
   Boxes,
-  Stamp,
-  PenTool,
   ChevronRight,
   Calendar,
   Edit3
@@ -72,8 +69,6 @@ export const BeritaAcaraManager: React.FC = () => {
     return initial;
   });
 
-  const [showStamp, setShowStamp] = useState<boolean>(schoolConfig.stempelEnabled ?? true);
-  const [includeSignatures, setIncludeSignatures] = useState<boolean>(false);
   const [isExportingDocx, setIsExportingDocx] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isEditingApprovalDateInline, setIsEditingApprovalDateInline] = useState<boolean>(false);
@@ -180,7 +175,7 @@ export const BeritaAcaraManager: React.FC = () => {
         effectiveGeneratedDoc,
         schoolConfig,
         buildSafeFilename('docx'),
-        includeSignatures
+        false
       );
       showToast('Dokumen .docx berhasil diunduh sesuai format resmi A4.');
     } catch (err) {
@@ -196,7 +191,7 @@ export const BeritaAcaraManager: React.FC = () => {
       effectiveGeneratedDoc,
       schoolConfig,
       buildSafeFilename('doc'),
-      includeSignatures
+      false
     );
     showToast('Dokumen .doc berhasil diunduh.');
   };
@@ -206,7 +201,7 @@ export const BeritaAcaraManager: React.FC = () => {
       effectiveGeneratedDoc,
       schoolConfig,
       buildSafeFilename('html'),
-      includeSignatures
+      false
     );
     showToast('Dokumen HTML siap cetak berhasil diunduh.');
   };
@@ -306,18 +301,7 @@ export const BeritaAcaraManager: React.FC = () => {
         </div>
 
         <div className="relative w-full h-20 flex items-center justify-center my-1">
-          {withStampOverlay && showStamp && (
-            <div className="absolute -top-2 left-2 sm:left-4 z-10 pointer-events-none">
-              <StempelResmiSekolah config={schoolConfig} size={105} />
-            </div>
-          )}
-          {includeSignatures && sig.signatureImage && (
-            <img
-              src={sig.signatureImage}
-              alt="Tanda Tangan"
-              className="max-h-16 max-w-[160px] object-contain"
-            />
-          )}
+          {/* Ruang tanda tangan basah */}
         </div>
 
         <div className={`text-[11.5px] font-bold text-slate-950 ${isPlaceholder ? '' : 'underline underline-offset-2'}`}>
@@ -647,31 +631,6 @@ export const BeritaAcaraManager: React.FC = () => {
                 <p className="text-[10.5px] text-slate-500 leading-snug">
                   Kosongkan untuk mengikuti tempat sekolah &amp; tanggal berita acara secara otomatis, atau ketik manual khusus baris tempat &amp; tanggal pengesahan.
                 </p>
-              </div>
-
-              {/* Signature & Stamp Toggles */}
-              <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center gap-4 text-xs text-slate-700">
-                <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showStamp}
-                    onChange={e => setShowStamp(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded text-sky-700 border-slate-300"
-                  />
-                  <Stamp className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Stempel Sekolah (Cetak)</span>
-                </label>
-
-                <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={includeSignatures}
-                    onChange={e => setIncludeSignatures(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded text-sky-700 border-slate-300"
-                  />
-                  <PenTool className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Sertakan Scan TTD Tersimpan</span>
-                </label>
               </div>
             </div>
           </div>

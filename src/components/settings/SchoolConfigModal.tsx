@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SchoolConfig, RoleType } from '../../types';
 import { KopSurat } from '../common/KopSurat';
-import { X, Save, Building, UserCheck, Stamp, Image as ImageIcon, Upload, Download } from 'lucide-react';
+import { X, Save, Building, UserCheck, Image as ImageIcon, Upload, Download } from 'lucide-react';
 
 interface SchoolConfigModalProps {
   isOpen: boolean;
@@ -57,31 +57,6 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
     }
   };
 
-  const handleUploadStempel = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setFormData(prev => ({ ...prev, customStempelUrl: event.target?.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleUploadKepsekSig = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setFormData(prev => ({
-          ...prev,
-          kepalaSekolah: { ...prev.kepalaSekolah, signatureImage: event.target?.result as string }
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleRestoreFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -113,7 +88,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
               Pengaturan Satuan Pendidikan & Lembar Pengesahan
             </h3>
             <p className="text-[11px] text-slate-500">
-              Konfigurasi identitas sekolah, Kepala Sekolah, NIP/NIPPK operator, dan cap stempel
+              Konfigurasi identitas sekolah, Kepala Sekolah, dan NIP/NIPPK operator
             </p>
           </div>
           <button
@@ -169,7 +144,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            Kop & Stempel
+            Kop Surat
           </button>
           <button
             type="button"
@@ -391,33 +366,6 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                     />
                   </div>
                 </div>
-
-                {/* Upload Foto TTD Kepala Sekolah */}
-                <div className="pt-2">
-                  <label className="block font-semibold text-slate-700 mb-1">Upload File Tanda Tangan Kepala Sekolah (Opsional)</label>
-                  <div className="flex items-center gap-3">
-                    <label className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-medium text-slate-700">
-                      <Upload className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Pilih Foto TTD (PNG/JPG)</span>
-                      <input type="file" accept="image/*" onChange={handleUploadKepsekSig} className="hidden" />
-                    </label>
-                    {formData.kepalaSekolah.signatureImage && (
-                      <div className="flex items-center gap-2 border border-slate-300 p-1 rounded bg-white">
-                        <img src={formData.kepalaSekolah.signatureImage} alt="TTD Kepsek" className="h-8 max-w-[100px] object-contain" />
-                        <button
-                          type="button"
-                          onClick={() => setFormData(prev => ({
-                            ...prev,
-                            kepalaSekolah: { ...prev.kepalaSekolah, signatureImage: undefined }
-                          }))}
-                          className="text-rose-600 hover:text-rose-800 text-[10px]"
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -600,68 +548,6 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                     </div>
                   </div>
                 </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Teks Melingkar Atas Stempel</label>
-                <input
-                  type="text"
-                  value={formData.stempelTextLine1}
-                  onChange={(e) => setFormData(prev => ({ ...prev, stempelTextLine1: e.target.value }))}
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg"
-                  placeholder="Contoh: DINAS PENDIDIKAN DAN KEBUDAYAAN"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Teks Melingkar Bawah Stempel</label>
-                <input
-                  type="text"
-                  value={formData.stempelTextLine2}
-                  onChange={(e) => setFormData(prev => ({ ...prev, stempelTextLine2: e.target.value }))}
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg"
-                  placeholder="Contoh: SMP NEGERI SATU ATAP TELUK"
-                />
-              </div>
-
-              {/* Upload Cap Stempel Custom */}
-              <div className="pt-2">
-                <label className="block font-semibold text-slate-700 mb-1">Upload File Cap Stempel Sekolah Resmi (Opsional)</label>
-                <p className="text-[10.5px] text-slate-500 mb-2">
-                  Jika Anda memiliki gambar cap stempel fisik sekolah (format PNG transparan / JPEG), Anda dapat mengunggahnya di sini:
-                </p>
-                <div className="flex items-center gap-3">
-                  <label className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-medium text-slate-700">
-                    <Stamp className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Upload Cap Stempel PNG/JPEG</span>
-                    <input type="file" accept="image/*" onChange={handleUploadStempel} className="hidden" />
-                  </label>
-
-                  {formData.customStempelUrl && (
-                    <div className="flex items-center gap-2 border border-slate-300 p-1 rounded bg-white">
-                      <img src={formData.customStempelUrl} alt="Cap Stempel" className="h-10 w-10 object-contain" />
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, customStempelUrl: undefined }))}
-                        className="text-rose-600 hover:text-rose-800 text-[10px]"
-                      >
-                        Gunakan Stempel Default
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={formData.stempelEnabled}
-                    onChange={(e) => setFormData(prev => ({ ...prev, stempelEnabled: e.target.checked }))}
-                    className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                  />
-                  <span>Tampilkan Cap Stempel Resmi di Lembar Pengesahan</span>
-                </label>
               </div>
             </div>
           )}
