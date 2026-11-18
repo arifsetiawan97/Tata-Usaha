@@ -1075,18 +1075,32 @@ export const RoleSelectView: React.FC = () => {
 
               {authFeedback && (
                 <div
-                  className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                  className={`p-3 rounded-xl border text-xs space-y-2 ${
                     authFeedback.ok
                       ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
                       : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
                   }`}
                 >
-                  {authFeedback.ok ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2">
+                    {authFeedback.ok ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    )}
+                    <span className="leading-relaxed">{authFeedback.text}</span>
+                  </div>
+                  {authFeedback.ok && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthModalMode(null);
+                        setAuthFeedback(null);
+                      }}
+                      className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer transition-colors"
+                    >
+                      Lihat Status Konfirmasi Admin Secara Real-Time →
+                    </button>
                   )}
-                  <span className="leading-relaxed">{authFeedback.text}</span>
                 </div>
               )}
 

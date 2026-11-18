@@ -59,7 +59,8 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
     createAccessUserByAdmin,
     verifyAdminPassword,
     updateAdminPassword,
-    issueResetPasswordByAdmin
+    issueResetPasswordByAdmin,
+    refreshAccessState
   } = useApp();
 
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -72,6 +73,7 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
+  const [isRefreshingList, setIsRefreshingList] = useState(false);
 
   // Approve / Edit Password / Issue Reset Password sub-dialog
   const [editingUser, setEditingUser] = useState<{
@@ -106,6 +108,16 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
     }
   }, [isOpen]);
 
+  // Fast 2-second real-time polling while Admin Panel is open & unlocked so new registrations appear immediately
+  useEffect(() => {
+    if (!isOpen || !isUnlocked) return;
+    refreshAccessState();
+    const timer = setInterval(() => {
+      refreshAccessState();
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [isOpen, isUnlocked]);
+
   if (!isOpen) return null;
 
   const generateTempPassword = () => {
@@ -119,12 +131,28 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
       setIsUnlocked(true);
       setAdminLoginError(null);
       setAdminInput('');
+      refreshAccessState();
     } else {
       setAdminLoginError('Sandi pemilik tidak sesuai!');
     }
   };
 
-  const pendingCount = accessUsers.filter(u => u.status === 'PENDING').length;
+  const handleManualRefresh = async () => {
+    setIsRefreshingList(true);
+    await refreshAccessState();
+    setTimeout(() => setIsRefreshingList(false), 300);
+  };
+
+  const handleQuickApprove = (user: RegisteredAccessUser) => {
+    const res = approveAccessUser(user.id);
+    setNotice({ ok: res.ok, text: res.message });
+    if (!res.ok) {
+      setEditingUser({ user, mode: 'approve', passwordInput: user.password });
+    }
+  };
+
+  const pendingUsers = accessUsers.filter(u => u.status === 'PENDING');
+  const pendingCount = pendingUsers.length;
   const approvedCount = accessUsers.filter(u => u.status === 'APPROVED').length;
   const rejectedCount = accessUsers.filter(u => u.status === 'REJECTED').length;
   const resetRequestedCount = accessUsers.filter(u => u.resetRequestStatus === 'REQUESTED').length;
@@ -315,6 +343,35 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
                 <button type="button" onClick={() => setNotice(null)} className="text-slate-400 hover:text-white cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
+              </div>
+            )}
+
+            {/* New Pending Registration Fast Confirmation Banner */}
+            {pendingCount > 0 && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-100">
+                <div className="flex items-center gap-2.5">
+                  <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>
+                    <strong>Konfirmasi Pendaftar Baru:</strong> Terdapat <strong>{pendingCount} pengajuan akun baru</strong> (
+                    <span className="font-mono text-emerald-300">
+                      {pendingUsers
+                        .slice(0, 3)
+                        .map(u => `@${u.username}`)
+                        .join(', ')}
+                      {pendingCount > 3 ? `, +${pendingCount - 3} lainnya` : ''}
+                    </span>
+                    ) yang menunggu persetujuan akses Admin.
+                  </span>
+                </div>
+                {statusFilter !== 'PENDING' && (
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('PENDING')}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold cursor-pointer"
+                  >
+                    Tinjau & Setujui Sekarang
+                  </button>
+                )}
               </div>
             )}
 
@@ -522,7 +579,7 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:w-56">
+                  <div className="relative flex-1 sm:w-52">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
@@ -532,6 +589,15 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
                       className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-800 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
                     />
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleManualRefresh}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg shrink-0 cursor-pointer"
+                    title="Muat ulang daftar pendaftar terbaru dari server"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingList ? 'animate-spin text-sky-400' : 'text-sky-400'}`} />
+                    <span className="hidden sm:inline">Perbarui</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setShowAddForm(!showAddForm)}
@@ -760,16 +826,28 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
                               <td className="px-4 py-3">
                                 <div className="flex flex-wrap items-center justify-end gap-1.5">
                                   {user.status !== 'APPROVED' && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setEditingUser({ user, mode: 'approve', passwordInput: user.password })
-                                      }
-                                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <UserCheck className="w-3.5 h-3.5" />
-                                      <span>Setujui</span>
-                                    </button>
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickApprove(user)}
+                                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1 cursor-pointer shadow-xs"
+                                        title="Langsung setujui pengajuan dengan sandi pendaftar"
+                                      >
+                                        <UserCheck className="w-3.5 h-3.5" />
+                                        <span>Setujui Langsung</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setEditingUser({ user, mode: 'approve', passwordInput: user.password })
+                                        }
+                                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-semibold flex items-center gap-1 cursor-pointer"
+                                        title="Atur atau ubah sandi khusus sebelum menyetujui"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                        <span>Atur Sandi</span>
+                                      </button>
+                                    </>
                                   )}
                                   {user.status !== 'REJECTED' && (
                                     <button

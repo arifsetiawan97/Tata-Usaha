@@ -864,23 +864,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, overrides.adminPassword);
     }
 
+    const payload = {
+      accessUsers: nextUsers,
+      deletedAccessUserIds: deletedIds,
+      accessRules: overrides?.accessRules || accessRules,
+      adminPassword: overrides?.adminPassword || adminPassword,
+      clientHydratedFromServer: hasHydratedFromServerRef.current
+    };
+
+    isPendingLocalSaveRef.current = true;
+    setSyncStatus('saving');
+
     storageService
-      .syncServerState({
-        accessUsers: nextUsers,
-        deletedAccessUserIds: deletedIds,
-        accessRules: overrides?.accessRules || accessRules,
-        adminPassword: overrides?.adminPassword || adminPassword,
-        clientHydratedFromServer: hasHydratedFromServerRef.current
-      })
-      .then(ok => {
+      .syncServerState(payload)
+      .then(async ok => {
+        if (!ok) {
+          // Retry once immediately so new registrations/approvals reach server without delay
+          ok = await storageService.syncServerState(payload);
+        }
         if (ok) {
           setSyncStatus('synced');
           if (!overrides?.extraDeletedId && pendingDeletedAccessUserIdsRef.current.length > 0) {
             pendingDeletedAccessUserIdsRef.current = [];
           }
+        } else {
+          setSyncStatus('offline');
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setSyncStatus('offline');
+      })
+      .finally(() => {
+        isPendingLocalSaveRef.current = false;
+      });
   };
 
   const refreshAccessState = async (): Promise<RegisteredAccessUser[]> => {
@@ -966,19 +982,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return accessUsers;
   };
 
-  // Real-time background polling so users & devices stay automatically synchronized without losing existing users
+  // Real-time background polling & cross-tab listener so registrations, approvals, and reset notifications confirm rapidly
   useEffect(() => {
-    const pollMs = currentRole ? 10000 : 4000;
+    const pollMs = currentRole ? 6000 : 2000;
     const interval = setInterval(() => {
       refreshAccessState();
     }, pollMs);
     const handleFocus = () => {
       refreshAccessState();
     };
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEYS.ACCESS_USERS && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            skipNextServerSyncRef.current = true;
+            setAccessUsers(parsed);
+          }
+        } catch {
+          // Ignore malformed storage event
+        }
+      } else if (e.key === STORAGE_KEYS.ACCESS_RULES && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed && typeof parsed === 'object') {
+            skipNextServerSyncRef.current = true;
+            setAccessRules({ ...DEFAULT_ACCESS_RULES, ...parsed });
+          }
+        } catch {
+          // Ignore malformed storage event
+        }
+      } else if (e.key === STORAGE_KEYS.ADMIN_PASSWORD && e.newValue && e.newValue.trim()) {
+        skipNextServerSyncRef.current = true;
+        setAdminPassword(e.newValue.trim());
+      }
+    };
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage', handleStorageChange);
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, [currentRole]);
 
@@ -1981,7 +2025,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ok: true,
       user: newUser,
       message: accessRules.requireAdminApproval
-        ? `Pendaftaran akun "@${cleanUsername}" untuk layanan ${ROLE_LABELS_MAP[role]} berhasil dikirim dengan status MENUNGGU PERSETUJUAN Admin.`
+        ? `Pendaftaran akun "@${cleanUsername}" (${ROLE_LABELS_MAP[role]}) berhasil dikirim & langsung dikonfirmasi ke Panel Admin. Status saat ini MENUNGGU PERSETUJUAN Admin.`
         : `Pendaftaran akun "@${cleanUsername}" berhasil disimpan. Karena aturan persetujuan Admin sedang nonaktif, Anda dapat langsung masuk.`
     };
   };

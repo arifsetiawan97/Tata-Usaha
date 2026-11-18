@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SchoolConfig, RoleType } from '../../types';
 import { KopSurat } from '../common/KopSurat';
@@ -10,11 +10,31 @@ interface SchoolConfigModalProps {
 }
 
 export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, onClose }) => {
-  const { schoolConfig, updateSchoolConfig, exportBackupJson, restoreFromBackupJson } = useApp();
+  const {
+    schoolConfig,
+    updateSchoolConfig,
+    exportBackupJson,
+    restoreFromBackupJson,
+    currentRole,
+    currentUser
+  } = useApp();
   const [formData, setFormData] = useState<SchoolConfig>(schoolConfig);
   const [activeTab, setActiveTab] = useState<'identitas' | 'kepsek' | 'operator' | 'kop' | 'backup'>('identitas');
+  const [restoreFeedback, setRestoreFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(schoolConfig);
+      setRestoreFeedback(null);
+    }
+  }, [isOpen, schoolConfig]);
 
   if (!isOpen) return null;
+
+  const activeOperatorRole: RoleType | null = currentUser?.role || currentRole;
+  const visibleOperatorRoleKeys: RoleType[] = activeOperatorRole
+    ? [activeOperatorRole]
+    : ['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,13 +86,13 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
           const json = JSON.parse(event.target?.result as string);
           const ok = restoreFromBackupJson(json);
           if (ok) {
-            alert('Data cadangan berhasil dipulihkan!');
-            onClose();
+            setRestoreFeedback({ ok: true, text: 'Data cadangan berhasil dipulihkan!' });
+            setTimeout(() => onClose(), 800);
           } else {
-            alert('Format berkas tidak sesuai.');
+            setRestoreFeedback({ ok: false, text: 'Format berkas tidak sesuai.' });
           }
         } catch (err) {
-          alert('Gagal membaca berkas JSON.');
+          setRestoreFeedback({ ok: false, text: 'Gagal membaca berkas JSON.' });
         }
       };
       reader.readAsText(file);
@@ -372,9 +392,9 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
 
           {activeTab === 'operator' && (
             <div className="space-y-4">
-              {(['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'] as RoleType[]).map(roleKey => {
+              {visibleOperatorRoleKeys.map(roleKey => {
                 const op = formData.operatorProfiles[roleKey] || {
-                  nama: '',
+                  nama: currentUser?.namaLengkap || '',
                   nip: '',
                   jabatan: roleKey === 'PERPUS' ? 'Pengelola Perpustakaan' : 'Laboran Lab IPA',
                   signatureType: 'script',
@@ -386,8 +406,21 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                   roleKey === 'SERVICE' ? 'Petugas Layanan Kebersihan (Service)' :
                   roleKey === 'PERPUS' ? 'Pengelola Perpustakaan Sekolah' : 'Laboran / Pengelola Lab IPA';
                 return (
-                  <div key={roleKey} className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-                    <h4 className="font-bold text-slate-900">{label}</h4>
+                  <div key={roleKey} className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
+                        <UserCheck className="w-4 h-4 text-blue-600" />
+                        <span>{label}</span>
+                      </h4>
+                      {currentUser && (
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          Akun aktif: @{currentUser.username}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Menampilkan data petugas &amp; NIP/NIPPK khusus layanan Anda untuk lembar pengesahan.
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block font-semibold text-slate-700 mb-1">Nama Petugas</label>
@@ -579,6 +612,17 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                   <span>Pilih Berkas Cadangan JSON</span>
                   <input type="file" accept=".json,application/json" onChange={handleRestoreFile} className="hidden" />
                 </label>
+                {restoreFeedback && (
+                  <div
+                    className={`mt-2 p-2.5 rounded-lg border text-[11px] font-medium ${
+                      restoreFeedback.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-rose-50 border-rose-200 text-rose-800'
+                    }`}
+                  >
+                    {restoreFeedback.text}
+                  </div>
+                )}
               </div>
             </div>
           )}
