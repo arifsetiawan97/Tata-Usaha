@@ -28,6 +28,7 @@ export function getUserLatestActivityTimestamp(user: Partial<RegisteredAccessUse
     parseTimestamp(user.passwordUpdatedAt),
     parseTimestamp(user.resetIssuedAt),
     parseTimestamp(user.resetRequestedAt),
+    parseTimestamp(user.rejectedAt),
     parseTimestamp(user.approvedAt),
     parseTimestamp(user.lastLoginAt),
     parseTimestamp(user.createdAt)
@@ -85,6 +86,7 @@ export function normalizeRegisteredUser(raw: any): RegisteredAccessUser | null {
         ? raw.createdAt
         : new Date(0).toISOString(),
     approvedAt: typeof raw.approvedAt === 'string' ? raw.approvedAt : undefined,
+    rejectedAt: typeof raw.rejectedAt === 'string' ? raw.rejectedAt : undefined,
     lastLoginAt: typeof raw.lastLoginAt === 'string' ? raw.lastLoginAt : undefined,
     resetRequestStatus: raw.resetRequestStatus,
     resetRequestedAt: typeof raw.resetRequestedAt === 'string' ? raw.resetRequestedAt : undefined,
@@ -128,6 +130,7 @@ export function mergeRegisteredUsers(
           ...older,
           ...newer,
           approvedAt: newer.approvedAt || older.approvedAt,
+          rejectedAt: newer.rejectedAt || older.rejectedAt,
           createdAt: older.createdAt || newer.createdAt,
           lastLoginAt:
             parseTimestamp(newer.lastLoginAt) >= parseTimestamp(older.lastLoginAt)

@@ -405,6 +405,7 @@ export interface RegisteredAccessUser {
   status: UserAccountStatus;
   createdAt: string;
   approvedAt?: string;
+  rejectedAt?: string;
   lastLoginAt?: string;
   resetRequestStatus?: PasswordResetStatus;
   resetRequestedAt?: string;

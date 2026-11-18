@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
+import { storageService } from '../../services/storageService';
 import { RegisteredAccessUser, RoleType, UserAccountStatus } from '../../types';
 import {
   ShieldCheck,
@@ -21,7 +22,11 @@ import {
   Edit3,
   RefreshCw,
   History,
-  Copy
+  Copy,
+  Database,
+  Share2,
+  Globe,
+  WifiOff
 } from 'lucide-react';
 
 interface AdminAccessPanelModalProps {
@@ -60,7 +65,9 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
     verifyAdminPassword,
     updateAdminPassword,
     issueResetPasswordByAdmin,
-    refreshAccessState
+    refreshAccessState,
+    syncStatus,
+    serverStorageMode
   } = useApp();
 
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -74,6 +81,9 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
   const [isRefreshingList, setIsRefreshingList] = useState(false);
+  const [copiedPortalType, setCopiedPortalType] = useState<'origin' | 'hub' | null>(null);
+  const [showHubInput, setShowHubInput] = useState(false);
+  const [hubUrlInput, setHubUrlInput] = useState(() => storageService.getCentralHubOverride() || '');
 
   // Approve / Edit Password / Issue Reset Password sub-dialog
   const [editingUser, setEditingUser] = useState<{
@@ -97,6 +107,10 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
   // In-UI Delete confirmation
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<RegisteredAccessUser | null>(null);
 
+  // Keep latest refreshAccessState ref to avoid stale closures during 2s polling
+  const refreshAccessStateRef = useRef(refreshAccessState);
+  refreshAccessStateRef.current = refreshAccessState;
+
   // Reset unlock state whenever modal closes for strict owner-only privacy
   useEffect(() => {
     if (!isOpen) {
@@ -111,9 +125,9 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
   // Fast 2-second real-time polling while Admin Panel is open & unlocked so new registrations appear immediately
   useEffect(() => {
     if (!isOpen || !isUnlocked) return;
-    refreshAccessState();
+    refreshAccessStateRef.current(true);
     const timer = setInterval(() => {
-      refreshAccessState();
+      refreshAccessStateRef.current(true);
     }, 2000);
     return () => clearInterval(timer);
   }, [isOpen, isUnlocked]);
@@ -131,7 +145,7 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
       setIsUnlocked(true);
       setAdminLoginError(null);
       setAdminInput('');
-      refreshAccessState();
+      refreshAccessState(true);
     } else {
       setAdminLoginError('Sandi pemilik tidak sesuai!');
     }
@@ -139,8 +153,42 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
 
   const handleManualRefresh = async () => {
     setIsRefreshingList(true);
-    await refreshAccessState();
+    await refreshAccessState(true);
     setTimeout(() => setIsRefreshingList(false), 300);
+  };
+
+  const handleCopyPortalLink = (withHubParam: boolean) => {
+    if (typeof window === 'undefined' || !navigator?.clipboard) return;
+    const origin = window.location.origin;
+    const activeHub = storageService.getCentralHubOverride() || origin;
+    const urlToCopy = withHubParam ? `${origin}/?hub=${encodeURIComponent(activeHub)}` : origin;
+    navigator.clipboard.writeText(urlToCopy).catch(() => {});
+    setCopiedPortalType(withHubParam ? 'hub' : 'origin');
+    setNotice({
+      ok: true,
+      text: withHubParam
+        ? `Link Hub Terpusat disalin (${urlToCopy}). Pengguna yang membuka link ini otomatis terhubung ke database Admin Anda.`
+        : `Link Portal disalin (${urlToCopy}). Bagikan link ini ke petugas untuk mendaftar satu pintu.`
+    });
+    setTimeout(() => setCopiedPortalType(null), 2000);
+  };
+
+  const handleSaveHubOverride = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = hubUrlInput.trim().replace(/\/+$/, '');
+    if (cleaned && !/^https?:\/\//i.test(cleaned)) {
+      setNotice({ ok: false, text: 'URL Hub harus diawali http:// atau https://' });
+      return;
+    }
+    storageService.setCentralHubOverride(cleaned || null);
+    setNotice({
+      ok: true,
+      text: cleaned
+        ? `Hub Satu Pintu diarahkan ke ${cleaned}. Memuat data terbaru...`
+        : 'Koneksi hub dikembalikan ke server asal domain ini.'
+    });
+    setShowHubInput(false);
+    await refreshAccessState(true);
   };
 
   const handleQuickApprove = (user: RegisteredAccessUser) => {
@@ -345,6 +393,107 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
                 </button>
               </div>
             )}
+
+            {/* Status Koneksi Satu Pintu & Sebar Link Portal */}
+            <div
+              className={`p-3.5 rounded-xl border text-xs space-y-2.5 ${
+                syncStatus === 'offline' || serverStorageMode === 'offline'
+                  ? 'bg-rose-500/10 border-rose-500/35 text-rose-100'
+                  : serverStorageMode === 'vercel-ephemeral'
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-100'
+                  : 'bg-sky-500/10 border-sky-500/30 text-sky-100'
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {syncStatus === 'offline' || serverStorageMode === 'offline' ? (
+                    <WifiOff className="w-4 h-4 text-rose-400 shrink-0" />
+                  ) : (
+                    <Database className="w-4 h-4 text-sky-400 shrink-0" />
+                  )}
+                  <div>
+                    <span className="font-bold">
+                      {syncStatus === 'offline' || serverStorageMode === 'offline'
+                        ? 'Koneksi Server Terputus (Mode Offline)'
+                        : serverStorageMode === 'upstash'
+                        ? 'Satu Pintu Aktif · Upstash Redis Cloud (Permanen)'
+                        : serverStorageMode === 'supabase'
+                        ? 'Satu Pintu Aktif · Supabase Cloud (Permanen)'
+                        : serverStorageMode === 'local-file'
+                        ? 'Satu Pintu Aktif · Database Server Lokal'
+                        : 'Vercel Mode Sementara · Belum Terhubung Cloud Database'}
+                    </span>
+                    <p className="text-[11px] opacity-85 mt-0.5">
+                      {serverStorageMode === 'vercel-ephemeral'
+                        ? 'Peringatan: Di Vercel tanpa Cloud DB, pendaftaran pengguna lain berisiko terpisah antar sesi serverless. Hubungkan Upstash Redis (Gratis) di Vercel Dashboard: Storage → Create Database → Upstash Redis → Connect Project → Redeploy.'
+                        : syncStatus === 'offline' || serverStorageMode === 'offline'
+                        ? 'Browser tidak dapat menjangkau endpoint /api/state. Pastikan link portal benar atau arahkan URL Hub terpusat.'
+                        : 'Semua pengguna yang membuka link portal yang sama otomatis membaca & mengirim pendaftaran ke satu database Admin ini secara real-time.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPortalLink(false)}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 cursor-pointer"
+                    title="Salin alamat link web ini untuk disebarkan ke petugas"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-sky-400" />
+                    <span>{copiedPortalType === 'origin' ? 'Tersalin!' : 'Salin Link Portal'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPortalLink(true)}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold flex items-center gap-1.5 cursor-pointer"
+                    title="Salin link dengan parameter ?hub= agar link terkait tetap terhubung satu pintu"
+                  >
+                    <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{copiedPortalType === 'hub' ? 'Tersalin!' : 'Salin Link Hub'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowHubInput(!showHubInput)}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800/70 hover:bg-slate-700 border border-slate-700 text-slate-300 font-semibold cursor-pointer"
+                  >
+                    {showHubInput ? 'Tutup Hub' : 'Atur URL Hub'}
+                  </button>
+                </div>
+              </div>
+
+              {showHubInput && (
+                <form onSubmit={handleSaveHubOverride} className="pt-2 border-t border-slate-700/60 flex flex-wrap items-center gap-2">
+                  <input
+                    type="url"
+                    value={hubUrlInput}
+                    onChange={e => setHubUrlInput(e.target.value)}
+                    placeholder="Kosongkan untuk default, atau isi https://domain-vercel-anda.vercel.app"
+                    className="flex-1 min-w-[220px] px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white placeholder:text-slate-500"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white rounded-lg cursor-pointer"
+                  >
+                    Terapkan Hub
+                  </button>
+                  {storageService.getCentralHubOverride() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHubUrlInput('');
+                        storageService.setCentralHubOverride(null);
+                        setShowHubInput(false);
+                        refreshAccessState(true);
+                      }}
+                      className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer"
+                    >
+                      Reset Default
+                    </button>
+                  )}
+                </form>
+              )}
+            </div>
 
             {/* New Pending Registration Fast Confirmation Banner */}
             {pendingCount > 0 && (

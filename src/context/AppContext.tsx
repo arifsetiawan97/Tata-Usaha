@@ -31,7 +31,7 @@ import {
   initialLibraryMemberStats
 } from '../data/initialData';
 import { ROLE_OPERATIONAL_SPECS } from '../data/roleOperationalSpecs';
-import { storageService } from '../services/storageService';
+import { ServerStorageMode, storageService } from '../services/storageService';
 import { 
   isTaskInMonth, 
   isTaskInYear, 
@@ -150,8 +150,10 @@ interface AppContextType {
   completePasswordResetWithNewPassword: (userId: string, newPassword: string) => AuthActionResult;
   trackedUsername: string | null;
   setTrackedUsername: (username: string | null) => void;
-  refreshAccessState: () => Promise<RegisteredAccessUser[]>;
+  refreshAccessState: (force?: boolean) => Promise<RegisteredAccessUser[]>;
   syncStatus: 'synced' | 'saving' | 'offline';
+  serverStorageMode: ServerStorageMode;
+  cloudPersistent: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -316,11 +318,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [activeNavTab, setActiveNavTab] = useState<string>('dashboard');
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'offline'>('synced');
+  const [serverStorageMode, setServerStorageMode] = useState<ServerStorageMode>('local-file');
+  const [cloudPersistent, setCloudPersistent] = useState<boolean>(true);
   const isInitialLoad = useRef(true);
   const hasHydratedFromServerRef = useRef(false);
   const skipNextServerSyncRef = useRef(false);
   const isPendingLocalSaveRef = useRef(false);
   const pendingDeletedAccessUserIdsRef = useRef<string[]>([]);
+  const accessUsersRef = useRef<RegisteredAccessUser[]>(accessUsers);
+  const accessRulesRef = useRef<AccessSecurityRules>(accessRules);
+  const adminPasswordRef = useRef<string>(adminPassword);
+  accessUsersRef.current = accessUsers;
+  accessRulesRef.current = accessRules;
+  adminPasswordRef.current = adminPassword;
 
   const [tasks, setTasks] = useState<TaskLog[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.TASKS);
@@ -828,12 +838,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     async function loadServerState() {
       try {
         const json = await storageService.fetchServerState();
-        if (json && json.initialized && json.data && isMounted) {
-          applyHydratedStateFromServer(json.data);
+        if (json && isMounted) {
+          if (json.storageMode) setServerStorageMode(json.storageMode);
+          if (typeof json.cloudPersistent === 'boolean') setCloudPersistent(json.cloudPersistent);
+          if (json.initialized && json.data) {
+            applyHydratedStateFromServer(json.data);
+          } else {
+            setSyncStatus('synced');
+          }
+        } else if (isMounted) {
+          setServerStorageMode('offline');
+          setCloudPersistent(false);
+          setSyncStatus('offline');
         }
       } catch (err) {
         console.warn('Server offline / fallback to local storage', err);
-        setSyncStatus('offline');
+        if (isMounted) {
+          setServerStorageMode('offline');
+          setCloudPersistent(false);
+          setSyncStatus('offline');
+        }
       } finally {
         isInitialLoad.current = false;
       }
@@ -867,8 +891,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const payload = {
       accessUsers: nextUsers,
       deletedAccessUserIds: deletedIds,
-      accessRules: overrides?.accessRules || accessRules,
-      adminPassword: overrides?.adminPassword || adminPassword,
+      accessRules: overrides?.accessRules || accessRulesRef.current,
+      adminPassword: overrides?.adminPassword || adminPasswordRef.current,
       clientHydratedFromServer: hasHydratedFromServerRef.current
     };
 
@@ -876,22 +900,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSyncStatus('saving');
 
     storageService
-      .syncServerState(payload)
-      .then(async ok => {
-        if (!ok) {
+      .syncServerStateDetailed(payload)
+      .then(async res => {
+        if (!res.ok) {
           // Retry once immediately so new registrations/approvals reach server without delay
-          ok = await storageService.syncServerState(payload);
+          res = await storageService.syncServerStateDetailed(payload);
         }
-        if (ok) {
+        if (res.ok) {
           setSyncStatus('synced');
+          if (res.storageMode) setServerStorageMode(res.storageMode);
+          if (typeof res.cloudPersistent === 'boolean') setCloudPersistent(res.cloudPersistent);
           if (!overrides?.extraDeletedId && pendingDeletedAccessUserIdsRef.current.length > 0) {
             pendingDeletedAccessUserIdsRef.current = [];
           }
+          // Reconcile server-merged user list immediately so concurrent registrations from other users appear right away
+          if (res.data && Array.isArray(res.data.accessUsers)) {
+            const mergedFromServer = mergeRegisteredUsers(
+              res.data.accessUsers,
+              [],
+              Array.isArray(res.data.deletedAccessUserIds) ? res.data.deletedAccessUserIds : deletedIds
+            );
+            const mergedStr = JSON.stringify(mergedFromServer);
+            if (mergedStr !== localStorage.getItem(STORAGE_KEYS.ACCESS_USERS)) {
+              skipNextServerSyncRef.current = true;
+              setAccessUsers(mergedFromServer);
+              localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, mergedStr);
+            }
+          }
         } else {
+          setServerStorageMode('offline');
+          setCloudPersistent(false);
           setSyncStatus('offline');
         }
       })
       .catch(() => {
+        setServerStorageMode('offline');
+        setCloudPersistent(false);
         setSyncStatus('offline');
       })
       .finally(() => {
@@ -899,14 +943,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
   };
 
-  const refreshAccessState = async (): Promise<RegisteredAccessUser[]> => {
-    if (isPendingLocalSaveRef.current || isInitialLoad.current) return accessUsers;
+  const refreshAccessState = async (force: boolean = false): Promise<RegisteredAccessUser[]> => {
+    if (!force && (isPendingLocalSaveRef.current || isInitialLoad.current)) {
+      return accessUsersRef.current;
+    }
     try {
       const json = await storageService.fetchServerState();
-      if (json && json.initialized && json.data) {
+      if (!json) {
+        setServerStorageMode('offline');
+        setCloudPersistent(false);
+        setSyncStatus('offline');
+        return accessUsersRef.current;
+      }
+
+      if (json.storageMode) setServerStorageMode(json.storageMode);
+      if (typeof json.cloudPersistent === 'boolean') setCloudPersistent(json.cloudPersistent);
+
+      if (json.initialized && json.data) {
         if (!hasHydratedFromServerRef.current) {
           applyHydratedStateFromServer(json.data);
-          return Array.isArray(json.data.accessUsers) ? json.data.accessUsers : accessUsers;
+          return Array.isArray(json.data.accessUsers) ? json.data.accessUsers : accessUsersRef.current;
         }
 
         const serverDeletedIds: string[] = Array.isArray(json.data.deletedAccessUserIds)
@@ -916,7 +972,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           new Set([...serverDeletedIds, ...pendingDeletedAccessUserIdsRef.current])
         );
 
-        let localUsersRaw: RegisteredAccessUser[] = accessUsers;
+        let localUsersRaw: RegisteredAccessUser[] = accessUsersRef.current;
         try {
           const localStr = localStorage.getItem(STORAGE_KEYS.ACCESS_USERS);
           if (localStr) {
@@ -924,7 +980,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (Array.isArray(parsed)) localUsersRaw = parsed;
           }
         } catch {
-          localUsersRaw = accessUsers;
+          localUsersRaw = accessUsersRef.current;
         }
 
         const serverUsersRaw = Array.isArray(json.data.accessUsers) ? json.data.accessUsers : [];
@@ -966,30 +1022,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
-        // Push back if local had unsynced accounts so they are permanently stored on server
+        // Push back if local had unsynced accounts or newer local records so server always catches up
         if (mergedUsers.length > serverUsersRaw.length) {
           syncAccessChangeNow(mergedUsers);
         }
 
+        setSyncStatus('synced');
         if (changed) {
-          setSyncStatus('synced');
+          setCurrentUserState(prevUser => {
+            if (!prevUser) return prevUser;
+            const freshMatch = mergedUsers.find(u => u.id === prevUser.id);
+            if (freshMatch) {
+              localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(freshMatch));
+              return freshMatch;
+            }
+            return prevUser;
+          });
         }
         return mergedUsers;
       }
     } catch {
       // Ignore transient network errors during background poll
     }
-    return accessUsers;
+    return accessUsersRef.current;
   };
+
+  const refreshAccessStateRef = useRef(refreshAccessState);
+  refreshAccessStateRef.current = refreshAccessState;
 
   // Real-time background polling & cross-tab listener so registrations, approvals, and reset notifications confirm rapidly
   useEffect(() => {
-    const pollMs = currentRole ? 6000 : 2000;
+    const pollMs = currentRole ? 5000 : 2000;
     const interval = setInterval(() => {
-      refreshAccessState();
+      refreshAccessStateRef.current();
     }, pollMs);
     const handleFocus = () => {
-      refreshAccessState();
+      refreshAccessStateRef.current();
     };
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === STORAGE_KEYS.ACCESS_USERS && e.newValue) {
@@ -2272,8 +2340,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const rejectAccessUser = (userId: string) => {
+    const now = new Date().toISOString();
     const nextUsers = accessUsers.map(u =>
-      u.id === userId ? { ...u, status: 'REJECTED' as UserAccountStatus } : u
+      u.id === userId ? { ...u, status: 'REJECTED' as UserAccountStatus, rejectedAt: now } : u
     );
     setAccessUsers(nextUsers);
     syncAccessChangeNow(nextUsers);
@@ -2705,7 +2774,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         trackedUsername,
         setTrackedUsername,
         refreshAccessState,
-        syncStatus
+        syncStatus,
+        serverStorageMode,
+        cloudPersistent
       }}
     >
       {children}
