@@ -1,4 +1,4 @@
-let geminiClient: any = null;
+let geminiClient = null;
 
 async function getGeminiClient() {
   if (geminiClient) return geminiClient;
@@ -21,7 +21,16 @@ async function getGeminiClient() {
   }
 }
 
-export async function handleAnalyzeMonthly(body: any) {
+async function generateWithTimeout(ai, params, timeoutMs = 12000) {
+  return Promise.race([
+    ai.models.generateContent(params),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Gemini API timeout')), timeoutMs)
+    )
+  ]);
+}
+
+export async function handleAnalyzeMonthly(body) {
   const { role, month, year, tasks = [], schoolConfig = {} } = body || {};
   const roleTitle =
     role === 'TU'
@@ -41,12 +50,12 @@ export async function handleAnalyzeMonthly(body: any) {
   const monthName = monthNames[(month || 9) - 1] || 'September';
 
   const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t: any) => t.status === 'selesai').length;
-  const inProgressTasks = tasks.filter((t: any) => t.status !== 'selesai').length;
+  const completedTasks = tasks.filter((t) => t.status === 'selesai').length;
+  const inProgressTasks = tasks.filter((t) => t.status !== 'selesai').length;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
   const sampleTasks = tasks
     .slice(0, 15)
-    .map((t: any) => `- [${t.date}] ${t.title} (${t.volumeUnit || '1 kegiatan'}) - Status: ${t.status}`)
+    .map((t) => `- [${t.date}] ${t.title} (${t.volumeUnit || '1 kegiatan'}) - Status: ${t.status}`)
     .join('\n');
 
   try {
@@ -59,7 +68,7 @@ Sampel:\n${sampleTasks || '(Tugas rutin standar operasional)'}
 Kembalikan HANYA JSON valid:
 {"summary":"...","achievements":["..."],"obstacles":["..."],"solutions":["..."]}`;
 
-      const response = await ai.models.generateContent({
+      const response = await generateWithTimeout(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' }
@@ -74,9 +83,9 @@ Kembalikan HANYA JSON valid:
     console.warn('Gemini monthly analysis fallback triggered:', err);
   }
 
-  let achievements: string[] = [];
-  let obstacles: string[] = [];
-  let solutions: string[] = [];
+  let achievements = [];
+  let obstacles = [];
+  let solutions = [];
   let summary = '';
 
   if (role === 'PENJAGA') {
@@ -164,7 +173,7 @@ Kembalikan HANYA JSON valid:
   return { success: true, isAi: false, data: { summary, achievements, obstacles, solutions } };
 }
 
-export async function handleAnalyzeAnnual(body: any) {
+export async function handleAnalyzeAnnual(body) {
   const { role, year, tasks = [], schoolConfig = {} } = body || {};
   const roleTitle =
     role === 'TU'
@@ -178,7 +187,7 @@ export async function handleAnalyzeAnnual(body: any) {
       : 'Laboratorium IPA';
 
   const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t: any) => t.status === 'selesai').length;
+  const completedTasks = tasks.filter((t) => t.status === 'selesai').length;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 98;
 
   try {
@@ -188,7 +197,7 @@ export async function handleAnalyzeAnnual(body: any) {
 Kembalikan HANYA JSON valid:
 {"summary":"...","annualMilestones":["..."],"obstacles":["..."],"solutions":["..."],"strategicRecommendations":["..."]}`;
 
-      const response = await ai.models.generateContent({
+      const response = await generateWithTimeout(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' }
@@ -222,7 +231,7 @@ Kembalikan HANYA JSON valid:
   };
 }
 
-export async function handleDraftTask(body: any) {
+export async function handleDraftTask(body) {
   const { role, roughPrompt = '', date = '', category = '' } = body || {};
   const roleTitle =
     role === 'TU'
@@ -241,7 +250,7 @@ export async function handleDraftTask(body: any) {
       const prompt = `Rumuskan tugas dinas ${roleTitle} dari kata kunci "${roughPrompt || 'tugas rutin'}", kategori "${category || 'otomatis'}", tanggal "${date || 'hari ini'}".
 Kembalikan HANYA JSON valid:
 {"title":"...","description":"...","location":"...","volumeUnit":"...","timeStart":"07:30","timeEnd":"09:00","status":"selesai","taskType":"pokok","categoryRecommendation":"..."}`;
-      const response = await ai.models.generateContent({
+      const response = await generateWithTimeout(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' }
@@ -296,7 +305,7 @@ Kembalikan HANYA JSON valid:
   };
 }
 
-export async function handleSuggestCategories(body: any) {
+export async function handleSuggestCategories(body) {
   const { role, existingCategories = [] } = body || {};
   const roleTitle =
     role === 'TU'
@@ -312,10 +321,10 @@ export async function handleSuggestCategories(body: any) {
   try {
     const ai = await getGeminiClient();
     if (ai) {
-      const prompt = `Berikan 4 rekomendasi kategori layanan baru untuk ${roleTitle}. Sudah ada: ${existingCategories.map((c: any) => c.name || c).join(', ') || 'standar'}.
+      const prompt = `Berikan 4 rekomendasi kategori layanan baru untuk ${roleTitle}. Sudah ada: ${existingCategories.map((c) => c.name || c).join(', ') || 'standar'}.
 Kembalikan HANYA array JSON valid:
 [{"name":"...","classification":"pokok","description":"...","reason":"..."}]`;
-      const response = await ai.models.generateContent({
+      const response = await generateWithTimeout(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' }
@@ -329,7 +338,7 @@ Kembalikan HANYA array JSON valid:
     console.warn('Gemini suggest-categories fallback:', err);
   }
 
-  const suggestionsMap: Record<string, any[]> = {
+  const suggestionsMap = {
     TU: [
       { name: 'Pengarsipan Dokumen Digital (e-Arsip)', classification: 'pokok', description: 'Digitalisasi warkat dinas, scan ijazah, dan pencadangan dokumen.', reason: 'Mempercepat pencarian arsip.' },
       { name: 'Layanan Mutasi & Legalisir Cepat', classification: 'pokok', description: 'Pelayanan berkas pindah sekolah dan legalisasi.', reason: 'Meningkatkan kepuasan wali murid.' }
@@ -355,7 +364,7 @@ Kembalikan HANYA array JSON valid:
   return { success: true, isAi: false, data: suggestionsMap[role] || suggestionsMap.TU };
 }
 
-export async function handleAnalyzeInventory(body: any) {
+export async function handleAnalyzeInventory(body) {
   const { role, inventories = [], schoolConfig = {} } = body || {};
   const roleTitle =
     role === 'TU'
@@ -369,9 +378,9 @@ export async function handleAnalyzeInventory(body: any) {
       : 'Laboratorium IPA';
 
   const total = inventories.length;
-  const baik = inventories.filter((i: any) => i.kondisi === 'Baik').length;
-  const rusakRingan = inventories.filter((i: any) => i.kondisi === 'Rusak Ringan').length;
-  const rusakBerat = inventories.filter((i: any) => i.kondisi === 'Rusak Berat').length;
+  const baik = inventories.filter((i) => i.kondisi === 'Baik').length;
+  const rusakRingan = inventories.filter((i) => i.kondisi === 'Rusak Ringan').length;
+  const rusakBerat = inventories.filter((i) => i.kondisi === 'Rusak Berat').length;
   const healthRate = total > 0 ? Math.round((baik / total) * 100) : 100;
 
   try {
@@ -380,7 +389,7 @@ export async function handleAnalyzeInventory(body: any) {
       const prompt = `Analisis inventaris ${roleTitle} (${schoolConfig.namaSekolah || 'Sekolah'}): Total ${total}, Baik ${baik}, Rusak Ringan ${rusakRingan}, Rusak Berat ${rusakBerat}.
 Kembalikan HANYA JSON valid:
 {"conditionSummary":"...","readinessScore":${healthRate},"priorityAction":"...","recommendations":["..."]}`;
-      const response = await ai.models.generateContent({
+      const response = await generateWithTimeout(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' }
@@ -410,7 +419,7 @@ Kembalikan HANYA JSON valid:
   };
 }
 
-export async function handleGenerateTaskDescription(body: any) {
+export async function handleGenerateTaskDescription(body) {
   const { title = '', category = '', role = 'TU', location = '', volumeUnit = '' } = body || {};
   if (!title.trim()) {
     return { status: 400, payload: { error: 'Judul kegiatan tugas harian wajib diisi.' } };
@@ -433,7 +442,7 @@ export async function handleGenerateTaskDescription(body: any) {
       const prompt = `Buat uraian rincian pekerjaan dinas ${roleTitle}: Judul "${title}", Kategori "${category}", Lokasi "${location}", Volume "${volumeUnit}".
 Kembalikan HANYA JSON valid:
 {"description":"...","suggestedLocation":"...","suggestedVolume":"...","notes":"..."}`;
-      const response = await ai.models.generateContent({
+      const response = await generateWithTimeout(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' }
@@ -472,7 +481,7 @@ Kembalikan HANYA JSON valid:
   };
 }
 
-export async function handleAuditDocument(body: any) {
+export async function handleAuditDocument(body) {
   const { documentTitle = '', role = 'TU', checklist = {}, period = '', approvalStatus = 'disahkan_kepsek' } = body || {};
 
   try {
@@ -481,7 +490,7 @@ export async function handleAuditDocument(body: any) {
       const prompt = `Nilai kesiapan audit dokumen "${documentTitle}", bidang ${role}, periode ${period}, status ${approvalStatus}.
 Kembalikan HANYA JSON valid:
 {"auditRating":"Sangat Baik (A)","complianceSummary":"...","complianceNotes":["..."],"riskAssessment":"Rendah","actionItems":["..."]}`;
-      const response = await ai.models.generateContent({
+      const response = await generateWithTimeout(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { responseMimeType: 'application/json' }
@@ -524,7 +533,7 @@ Kembalikan HANYA JSON valid:
   };
 }
 
-export async function handleAssistant(body: any) {
+export async function handleAssistant(body) {
   const { message = '', mode = 'chat', role = 'TU', schoolConfig = {} } = body || {};
   const roleTitle =
     role === 'TU'
@@ -541,7 +550,7 @@ export async function handleAssistant(body: any) {
     const ai = await getGeminiClient();
     if (ai) {
       const prompt = `Anda adalah Asisten AI SI-OPS untuk ${roleTitle} di ${schoolConfig.namaSekolah || 'Satuan Pendidikan'}. Mode: ${mode}. Permintaan: ${message}`;
-      const response = await ai.models.generateContent({
+      const response = await generateWithTimeout(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: { temperature: 0.3 }

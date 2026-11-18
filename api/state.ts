@@ -1,4 +1,4 @@
-import { applyCorsHeaders, applyStateUpdate, getStorageInfo, readDb } from '../src/server/cloudDb';
+import { applyCorsHeaders, applyStateUpdate, getStorageInfo, readDb } from '../src/server/cloudDb.mjs';
 
 function parseBody(raw: any): any {
   if (!raw) return {};

@@ -126,6 +126,48 @@ class StorageService {
     }
   }
 
+  private async fetchJsonWithFallback(path: string, init?: RequestInit): Promise<any | null> {
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const primaryUrl = this.getApiUrl(cleanPath);
+
+    const attempt = async (targetUrl: string): Promise<any | null> => {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
+      try {
+        const response = await fetch(targetUrl, {
+          ...init,
+          ...(controller ? { signal: controller.signal } : {})
+        });
+        if (!response.ok) return null;
+        return await parseJsonResponse(response);
+      } catch {
+        return null;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+
+    const primaryResult = await attempt(primaryUrl);
+    if (primaryResult) return primaryResult;
+
+    // If a custom hub URL failed or returned HTML/404, fall back to same-origin /api/*
+    if (primaryUrl !== cleanPath) {
+      const fallbackResult = await attempt(cleanPath);
+      if (fallbackResult) {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem('siops_central_api_base');
+          } catch {
+            // Ignore storage removal errors
+          }
+        }
+        return fallbackResult;
+      }
+    }
+
+    return null;
+  }
+
   // =========================================================================
   // FULL STATE SYNC & HYDRATION (Server / Cloud Database <-> Client)
   // =========================================================================
@@ -138,13 +180,10 @@ class StorageService {
     label?: string;
   } | null> {
     try {
-      const response = await fetch(this.getApiUrl('/api/state'), {
+      return await this.fetchJsonWithFallback('/api/state', {
         headers: { Accept: 'application/json' },
         cache: 'no-store'
       });
-      if (!response.ok) return null;
-      const json = await parseJsonResponse(response);
-      return json;
     } catch (error) {
       console.warn('[StorageService] Gagal memuat state dari database server:', error);
       return null;
@@ -153,13 +192,11 @@ class StorageService {
 
   async syncServerStateDetailed(data: Partial<AppStateData>): Promise<StateSyncResponse> {
     try {
-      const response = await fetch(this.getApiUrl('/api/state'), {
+      const json = await this.fetchJsonWithFallback('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(data)
       });
-      if (!response.ok) return { ok: false };
-      const json = await parseJsonResponse(response);
       if (!json) return { ok: false };
       return {
         ok: true,
@@ -181,11 +218,11 @@ class StorageService {
 
   async deleteAccessUser(id: string): Promise<boolean> {
     try {
-      const response = await fetch(this.getApiUrl(`/api/access-users/${encodeURIComponent(id)}`), {
+      const json = await this.fetchJsonWithFallback(`/api/access-users/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { Accept: 'application/json' }
       });
-      return response.ok;
+      return Boolean(json?.success);
     } catch (error) {
       console.warn('[StorageService] Gagal hapus akun pengguna di server:', error);
       return false;

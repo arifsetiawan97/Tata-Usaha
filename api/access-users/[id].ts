@@ -1,4 +1,4 @@
-import { applyCorsHeaders, deleteAccessUserFromDb } from '../../src/server/cloudDb';
+import { applyCorsHeaders, deleteAccessUserFromDb } from '../../src/server/cloudDb.mjs';
 
 export default async function handler(req: any, res: any) {
   applyCorsHeaders(res);

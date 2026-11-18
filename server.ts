@@ -9,7 +9,7 @@ import {
   readDb,
   VALID_COLLECTIONS,
   writeDb
-} from './src/server/cloudDb';
+} from './src/server/cloudDb.mjs';
 import {
   handleAnalyzeAnnual,
   handleAnalyzeInventory,
@@ -19,7 +19,7 @@ import {
   handleDraftTask,
   handleGenerateTaskDescription,
   handleSuggestCategories
-} from './src/server/geminiHandlers';
+} from './src/server/geminiHandlers.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -111,7 +111,7 @@ app.delete('/api/access-users/:id', async (req, res) => {
 // ========================================================
 app.get('/api/crud/:collection', async (req, res) => {
   const { collection } = req.params;
-  if (!VALID_COLLECTIONS.includes(collection as any)) {
+  if (!VALID_COLLECTIONS.includes(collection)) {
     return res.status(400).json({ error: `Koleksi tidak valid: ${collection}` });
   }
   const db = (await readDb()) || {};
@@ -121,12 +121,12 @@ app.get('/api/crud/:collection', async (req, res) => {
 
 app.get('/api/crud/:collection/:id', async (req, res) => {
   const { collection, id } = req.params;
-  if (!VALID_COLLECTIONS.includes(collection as any)) {
+  if (!VALID_COLLECTIONS.includes(collection)) {
     return res.status(400).json({ error: `Koleksi tidak valid: ${collection}` });
   }
   const db = (await readDb()) || {};
   const items = Array.isArray(db[collection]) ? db[collection] : [];
-  const found = items.find((item: any) => item.id === id);
+  const found = items.find((item) => item.id === id);
   if (!found) {
     return res.status(404).json({ error: `Item id ${id} tidak ditemukan pada ${collection}` });
   }
@@ -135,7 +135,7 @@ app.get('/api/crud/:collection/:id', async (req, res) => {
 
 app.post('/api/crud/:collection', async (req, res) => {
   const { collection } = req.params;
-  if (!VALID_COLLECTIONS.includes(collection as any)) {
+  if (!VALID_COLLECTIONS.includes(collection)) {
     return res.status(400).json({ error: `Koleksi tidak valid: ${collection}` });
   }
   const newItem = req.body;
@@ -162,7 +162,7 @@ app.post('/api/crud/:collection', async (req, res) => {
 
 app.put('/api/crud/:collection/:id', async (req, res) => {
   const { collection, id } = req.params;
-  if (!VALID_COLLECTIONS.includes(collection as any)) {
+  if (!VALID_COLLECTIONS.includes(collection)) {
     return res.status(400).json({ error: `Koleksi tidak valid: ${collection}` });
   }
   const updates = req.body;
@@ -172,7 +172,7 @@ app.put('/api/crud/:collection/:id', async (req, res) => {
 
   const db = (await readDb()) || {};
   const items = Array.isArray(db[collection]) ? [...db[collection]] : [];
-  const index = items.findIndex((item: any) => item.id === id);
+  const index = items.findIndex((item) => item.id === id);
 
   if (index === -1) {
     items.unshift({ ...updates, id });
@@ -193,13 +193,13 @@ app.put('/api/crud/:collection/:id', async (req, res) => {
 
 app.delete('/api/crud/:collection/:id', async (req, res) => {
   const { collection, id } = req.params;
-  if (!VALID_COLLECTIONS.includes(collection as any)) {
+  if (!VALID_COLLECTIONS.includes(collection)) {
     return res.status(400).json({ error: `Koleksi tidak valid: ${collection}` });
   }
 
   const db = (await readDb()) || {};
   const items = Array.isArray(db[collection]) ? [...db[collection]] : [];
-  const filtered = items.filter((item: any) => item.id !== id);
+  const filtered = items.filter((item) => item.id !== id);
 
   db[collection] = filtered;
   db.lastUpdated = new Date().toISOString();
@@ -258,6 +258,10 @@ app.post('/api/gemini/assistant', async (req, res) => {
 
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
+
+  app.use('/api', (req, res) => {
+    res.status(404).json({ error: `Endpoint API tidak ditemukan: ${req.originalUrl}` });
+  });
 
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');

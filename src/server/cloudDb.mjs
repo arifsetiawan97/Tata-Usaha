@@ -1,25 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import {
-  initialTasks,
-  initialInventories,
-  initialMonthlyReports,
-  initialAnnualReports,
-  initialArchives,
-  initialSchoolConfig,
-  initialCustomCategories,
-  initialLibraryBooks,
-  initialLibraryMembers,
-  initialLibraryMemberStats
-} from '../data/initialData';
-import { OFFICIAL_TUPOKSI_DEFINITIONS } from '../utils/taskClassification';
-import {
-  DEFAULT_ACCESS_RULES,
-  DEFAULT_ADMIN_PASSWORD,
-  mergeRegisteredUsers
-} from '../utils/accessSync';
-
-export type StorageMode = 'upstash' | 'supabase' | 'local-file' | 'vercel-ephemeral';
 
 export const VALID_COLLECTIONS = [
   'tasks',
@@ -30,11 +10,151 @@ export const VALID_COLLECTIONS = [
   'customCategories',
   'libraryBooks',
   'libraryMembers'
-] as const;
+];
+
+export const DEFAULT_ACCESS_RULES = {
+  requireAdminApproval: true,
+  enforceUniquePassword: true,
+  enforceSingleServicePerUser: true
+};
+
+export const DEFAULT_ADMIN_PASSWORD = 'admin123';
+
+const VALID_ROLES = ['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'];
+const VALID_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'];
 
 const UPSTASH_KEY = 'siops:app_state:v1';
 const SUPABASE_TABLE = 'siops_kv';
 const SUPABASE_ROW_ID = 'main';
+
+function parseTimestamp(iso) {
+  if (!iso || typeof iso !== 'string') return 0;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function getUserLatestActivityTimestamp(user) {
+  return Math.max(
+    parseTimestamp(user.passwordUpdatedAt),
+    parseTimestamp(user.resetIssuedAt),
+    parseTimestamp(user.resetRequestedAt),
+    parseTimestamp(user.rejectedAt),
+    parseTimestamp(user.approvedAt),
+    parseTimestamp(user.lastLoginAt),
+    parseTimestamp(user.createdAt)
+  );
+}
+
+function mergePasswordHistory(a, b) {
+  const map = new Map();
+  const combined = [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])];
+  for (const entry of combined) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (!entry.changedAt || !entry.newPassword) continue;
+    const key = `${entry.changedAt}::${entry.source || 'USER_CHANGE'}::${entry.newPassword}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        changedAt: entry.changedAt,
+        source: entry.source || 'USER_CHANGE',
+        newPassword: String(entry.newPassword)
+      });
+    }
+  }
+  return Array.from(map.values()).sort(
+    (x, y) => parseTimestamp(y.changedAt) - parseTimestamp(x.changedAt)
+  );
+}
+
+function normalizeRegisteredUser(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const username = typeof raw.username === 'string' ? raw.username.trim() : '';
+  const password = typeof raw.password === 'string' ? raw.password.trim() : '';
+  if (!username || !password) return null;
+
+  const role = VALID_ROLES.includes(raw.role) ? raw.role : 'TU';
+  const status = VALID_STATUSES.includes(raw.status) ? raw.status : 'PENDING';
+  const id =
+    typeof raw.id === 'string' && raw.id.trim()
+      ? raw.id.trim()
+      : `usr-${username.toLowerCase()}-${role.toLowerCase()}`;
+
+  return {
+    id,
+    namaLengkap:
+      typeof raw.namaLengkap === 'string' && raw.namaLengkap.trim()
+        ? raw.namaLengkap.trim()
+        : username,
+    username,
+    role,
+    password,
+    status,
+    createdAt:
+      typeof raw.createdAt === 'string' && raw.createdAt
+        ? raw.createdAt
+        : new Date(0).toISOString(),
+    approvedAt: typeof raw.approvedAt === 'string' ? raw.approvedAt : undefined,
+    rejectedAt: typeof raw.rejectedAt === 'string' ? raw.rejectedAt : undefined,
+    lastLoginAt: typeof raw.lastLoginAt === 'string' ? raw.lastLoginAt : undefined,
+    resetRequestStatus: raw.resetRequestStatus,
+    resetRequestedAt: typeof raw.resetRequestedAt === 'string' ? raw.resetRequestedAt : undefined,
+    resetRequestNote: typeof raw.resetRequestNote === 'string' ? raw.resetRequestNote : undefined,
+    resetIssuedAt: typeof raw.resetIssuedAt === 'string' ? raw.resetIssuedAt : undefined,
+    mustChangePassword: typeof raw.mustChangePassword === 'boolean' ? raw.mustChangePassword : false,
+    passwordUpdatedAt: typeof raw.passwordUpdatedAt === 'string' ? raw.passwordUpdatedAt : undefined,
+    passwordChangeHistory: mergePasswordHistory(raw.passwordChangeHistory, [])
+  };
+}
+
+export function mergeRegisteredUsers(
+  primaryUsers = [],
+  secondaryUsers = [],
+  deletedIds = []
+) {
+  const deletedSet = new Set(Array.isArray(deletedIds) ? deletedIds.filter(Boolean) : []);
+  const byId = new Map();
+
+  const ingest = (rawList) => {
+    if (!Array.isArray(rawList)) return;
+    for (const raw of rawList) {
+      const norm = normalizeRegisteredUser(raw);
+      if (!norm) continue;
+      if (deletedSet.has(norm.id)) continue;
+
+      const existing = byId.get(norm.id);
+      if (!existing) {
+        byId.set(norm.id, norm);
+      } else {
+        const existingTs = getUserLatestActivityTimestamp(existing);
+        const incomingTs = getUserLatestActivityTimestamp(norm);
+        const newer = incomingTs >= existingTs ? norm : existing;
+        const older = incomingTs >= existingTs ? existing : norm;
+
+        byId.set(norm.id, {
+          ...older,
+          ...newer,
+          approvedAt: newer.approvedAt || older.approvedAt,
+          rejectedAt: newer.rejectedAt || older.rejectedAt,
+          createdAt: older.createdAt || newer.createdAt,
+          lastLoginAt:
+            parseTimestamp(newer.lastLoginAt) >= parseTimestamp(older.lastLoginAt)
+              ? newer.lastLoginAt
+              : older.lastLoginAt,
+          passwordChangeHistory: mergePasswordHistory(
+            newer.passwordChangeHistory,
+            older.passwordChangeHistory
+          )
+        });
+      }
+    }
+  };
+
+  ingest(primaryUsers);
+  ingest(secondaryUsers);
+
+  return Array.from(byId.values()).sort(
+    (a, b) => parseTimestamp(b.createdAt) - parseTimestamp(a.createdAt)
+  );
+}
 
 function getUpstashConfig() {
   const url = (
@@ -62,15 +182,11 @@ function getSupabaseConfig() {
   return url && key ? { url, key } : null;
 }
 
-function isVercelRuntime(): boolean {
+function isVercelRuntime() {
   return process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV);
 }
 
-export function getStorageInfo(): {
-  storageMode: StorageMode;
-  cloudPersistent: boolean;
-  label: string;
-} {
+export function getStorageInfo() {
   if (getUpstashConfig()) {
     return {
       storageMode: 'upstash',
@@ -99,7 +215,7 @@ export function getStorageInfo(): {
   };
 }
 
-export function applyCorsHeaders(res: any) {
+export function applyCorsHeaders(res) {
   if (!res || typeof res.setHeader !== 'function') return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -107,32 +223,19 @@ export function applyCorsHeaders(res: any) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 }
 
-export function createInitialDbData(): any {
-  // Check if a bundled seed file exists in data/db.json
-  const bundledDbPath = path.join(process.cwd(), 'data', 'db.json');
-  if (fs.existsSync(bundledDbPath)) {
-    try {
-      const raw = JSON.parse(fs.readFileSync(bundledDbPath, 'utf-8'));
-      if (raw && typeof raw === 'object') {
-        return migrateAndNormalizeDb(raw).data;
-      }
-    } catch {
-      // Fall through to code defaults
-    }
-  }
-
+function buildFallbackSeedData() {
   return {
-    tasks: initialTasks,
-    inventories: initialInventories,
-    monthlyReports: initialMonthlyReports,
-    annualReports: initialAnnualReports,
-    schoolConfig: initialSchoolConfig,
-    archives: initialArchives,
-    tupoksiDefinitions: OFFICIAL_TUPOKSI_DEFINITIONS,
-    customCategories: initialCustomCategories,
-    libraryBooks: initialLibraryBooks,
-    libraryMembers: initialLibraryMembers,
-    libraryMemberStats: initialLibraryMemberStats,
+    tasks: [],
+    inventories: [],
+    monthlyReports: [],
+    annualReports: [],
+    schoolConfig: null,
+    archives: [],
+    tupoksiDefinitions: null,
+    customCategories: [],
+    libraryBooks: [],
+    libraryMembers: [],
+    libraryMemberStats: { siswa: 0, guru: 0, staff: 0 },
     accessUsers: [],
     deletedAccessUserIds: [],
     accessRules: { ...DEFAULT_ACCESS_RULES },
@@ -141,15 +244,29 @@ export function createInitialDbData(): any {
   };
 }
 
-function migrateAndNormalizeDb(parsed: any): { data: any; patched: boolean } {
-  let patched = false;
-
-  if (!parsed.libraryBooks || !parsed.libraryMembers || !parsed.libraryMemberStats) {
-    parsed.libraryBooks = parsed.libraryBooks || initialLibraryBooks;
-    parsed.libraryMembers = parsed.libraryMembers || initialLibraryMembers;
-    parsed.libraryMemberStats = parsed.libraryMemberStats || initialLibraryMemberStats;
-    patched = true;
+export function createInitialDbData() {
+  const candidatePaths = [
+    path.join(process.cwd(), 'data', 'db.json'),
+    path.join(process.cwd(), 'data', 'db.backup.json')
+  ];
+  for (const bundledDbPath of candidatePaths) {
+    if (fs.existsSync(bundledDbPath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(bundledDbPath, 'utf-8'));
+        if (raw && typeof raw === 'object') {
+          return migrateAndNormalizeDb(raw).data;
+        }
+      } catch {
+        // Try next candidate
+      }
+    }
   }
+
+  return buildFallbackSeedData();
+}
+
+function migrateAndNormalizeDb(parsed) {
+  let patched = false;
 
   if (!Array.isArray(parsed.deletedAccessUserIds)) {
     parsed.deletedAccessUserIds = [];
@@ -184,11 +301,7 @@ function migrateAndNormalizeDb(parsed: any): { data: any; patched: boolean } {
   return { data: parsed, patched };
 }
 
-// =========================================================================
-// BACKEND ADAPTERS (Upstash Redis -> Supabase REST -> Local FS / Vercel Tmp)
-// =========================================================================
-
-async function readFromUpstash(cfg: { url: string; token: string }): Promise<any | null> {
+async function readFromUpstash(cfg) {
   const res = await fetch(cfg.url, {
     method: 'POST',
     headers: {
@@ -200,7 +313,7 @@ async function readFromUpstash(cfg: { url: string; token: string }): Promise<any
   if (!res.ok) {
     throw new Error(`Upstash GET failed with status ${res.status}`);
   }
-  const json: any = await res.json();
+  const json = await res.json();
   if (!json || json.result === null || json.result === undefined) {
     return null;
   }
@@ -210,7 +323,7 @@ async function readFromUpstash(cfg: { url: string; token: string }): Promise<any
   return json.result;
 }
 
-async function writeToUpstash(cfg: { url: string; token: string }, data: any): Promise<boolean> {
+async function writeToUpstash(cfg, data) {
   const serialized = JSON.stringify(data);
   const res = await fetch(cfg.url, {
     method: 'POST',
@@ -223,7 +336,7 @@ async function writeToUpstash(cfg: { url: string; token: string }, data: any): P
   return res.ok;
 }
 
-async function readFromSupabase(cfg: { url: string; key: string }): Promise<any | null> {
+async function readFromSupabase(cfg) {
   const res = await fetch(
     `${cfg.url}/rest/v1/${SUPABASE_TABLE}?id=eq.${encodeURIComponent(SUPABASE_ROW_ID)}&select=payload`,
     {
@@ -237,14 +350,14 @@ async function readFromSupabase(cfg: { url: string; key: string }): Promise<any 
   if (!res.ok) {
     throw new Error(`Supabase GET failed with status ${res.status}`);
   }
-  const rows: any = await res.json();
+  const rows = await res.json();
   if (Array.isArray(rows) && rows.length > 0 && rows[0]?.payload) {
     return rows[0].payload;
   }
   return null;
 }
 
-async function writeToSupabase(cfg: { url: string; key: string }, data: any): Promise<boolean> {
+async function writeToSupabase(cfg, data) {
   const res = await fetch(`${cfg.url}/rest/v1/${SUPABASE_TABLE}`, {
     method: 'POST',
     headers: {
@@ -272,9 +385,9 @@ function getLocalPaths() {
   };
 }
 
-function readFromLocalDisk(): { parsed: any | null; recoveredFromBackup: boolean } {
+function readFromLocalDisk() {
   const { dbFile, backupFile } = getLocalPaths();
-  let parsed: any = null;
+  let parsed = null;
   let recoveredFromBackup = false;
 
   if (fs.existsSync(dbFile)) {
@@ -294,15 +407,15 @@ function readFromLocalDisk(): { parsed: any | null; recoveredFromBackup: boolean
     }
   }
 
-  if (!parsed && (globalThis as any).__siopsMemDb) {
-    parsed = (globalThis as any).__siopsMemDb;
+  if (!parsed && globalThis.__siopsMemDb) {
+    parsed = globalThis.__siopsMemDb;
   }
 
   return { parsed, recoveredFromBackup };
 }
 
-function writeToLocalDisk(data: any): boolean {
-  (globalThis as any).__siopsMemDb = data;
+function writeToLocalDisk(data) {
+  globalThis.__siopsMemDb = data;
   try {
     const { dataDir, dbFile, backupFile, tmpFile } = getLocalPaths();
     if (!fs.existsSync(dataDir)) {
@@ -330,7 +443,7 @@ function writeToLocalDisk(data: any): boolean {
   }
 }
 
-export async function readDb(): Promise<any> {
+export async function readDb() {
   const upstash = getUpstashConfig();
   if (upstash) {
     try {
@@ -383,7 +496,7 @@ export async function readDb(): Promise<any> {
   return data;
 }
 
-export async function writeDb(data: any): Promise<boolean> {
+export async function writeDb(data) {
   const upstash = getUpstashConfig();
   if (upstash) {
     try {
@@ -407,7 +520,7 @@ export async function writeDb(data: any): Promise<boolean> {
   return writeToLocalDisk(data);
 }
 
-export async function applyStateUpdate(body: any): Promise<{ ok: boolean; updated?: any }> {
+export async function applyStateUpdate(body) {
   const {
     tasks,
     inventories,
@@ -430,21 +543,20 @@ export async function applyStateUpdate(body: any): Promise<{ ok: boolean; update
   const current = (await readDb()) || {};
   const canReplaceOperational = clientHydratedFromServer === true || !current.lastUpdated;
 
-  const pickCollection = (incoming: any, existing: any) => {
+  const pickCollection = (incoming, existing) => {
     if (incoming === undefined) return existing;
     if (canReplaceOperational) return incoming;
     if (Array.isArray(existing) && existing.length > 0) return existing;
     return incoming;
   };
 
-  const mergedDeletedIds: string[] = Array.from(
+  const mergedDeletedIds = Array.from(
     new Set([
       ...(Array.isArray(current.deletedAccessUserIds) ? current.deletedAccessUserIds : []),
       ...(Array.isArray(deletedAccessUserIds) ? deletedAccessUserIds : [])
     ])
   ).slice(-1000);
 
-  // Non-destructive merge: existing users are ALWAYS preserved unless explicitly deleted by Admin
   const mergedAccessUsers = mergeRegisteredUsers(
     Array.isArray(current.accessUsers) ? current.accessUsers : [],
     Array.isArray(accessUsers) ? accessUsers : [],
@@ -496,16 +608,16 @@ export async function applyStateUpdate(body: any): Promise<{ ok: boolean; update
   return ok ? { ok: true, updated } : { ok: false };
 }
 
-export async function deleteAccessUserFromDb(id: string): Promise<{ ok: boolean; lastUpdated?: string }> {
+export async function deleteAccessUserFromDb(id) {
   const current = (await readDb()) || {};
-  const deletedSet = new Set<string>(
+  const deletedSet = new Set(
     Array.isArray(current.deletedAccessUserIds) ? current.deletedAccessUserIds : []
   );
   deletedSet.add(id);
 
   const mergedDeletedIds = Array.from(deletedSet).slice(-1000);
   const existingUsers = Array.isArray(current.accessUsers) ? current.accessUsers : [];
-  const nextUsers = existingUsers.filter((u: any) => u && u.id !== id);
+  const nextUsers = existingUsers.filter((u) => u && u.id !== id);
 
   const updated = {
     ...current,

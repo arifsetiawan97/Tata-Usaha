@@ -1122,7 +1122,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSyncStatus('saving');
       const timer = setTimeout(async () => {
         try {
-          const ok = await storageService.syncServerState({
+          const res = await storageService.syncServerStateDetailed({
             tasks,
             inventories,
             monthlyReports,
@@ -1140,8 +1140,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             adminPassword,
             clientHydratedFromServer: hasHydratedFromServerRef.current
           });
-          if (ok) {
+          if (res.ok) {
             setSyncStatus('synced');
+            if (res.storageMode) setServerStorageMode(res.storageMode);
+            if (typeof res.cloudPersistent === 'boolean') setCloudPersistent(res.cloudPersistent);
             pendingDeletedAccessUserIdsRef.current = [];
           } else {
             setSyncStatus('offline');

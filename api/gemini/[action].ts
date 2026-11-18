@@ -1,4 +1,4 @@
-import { applyCorsHeaders } from '../../src/server/cloudDb';
+import { applyCorsHeaders } from '../../src/server/cloudDb.mjs';
 import {
   handleAnalyzeAnnual,
   handleAnalyzeInventory,
@@ -8,7 +8,7 @@ import {
   handleDraftTask,
   handleGenerateTaskDescription,
   handleSuggestCategories
-} from '../../src/server/geminiHandlers';
+} from '../../src/server/geminiHandlers.mjs';
 
 function parseBody(raw: any): any {
   if (!raw) return {};
