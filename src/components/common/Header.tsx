@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp, RoleSubTab } from '../../context/AppContext';
 import { SchoolConfigModal } from '../settings/SchoolConfigModal';
 import { 
@@ -21,7 +21,10 @@ import {
   Check,
   Lock,
   Bot,
-  Database
+  Database,
+  AlertCircle,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { initialSchoolConfig } from '../../data/initialData';
 import { AiAssistantModal } from './AiAssistantModal';
@@ -31,7 +34,6 @@ import { LogoKabupatenDefault } from './KopSurat';
 export const Header: React.FC = () => {
   const { 
     currentRole, 
-    setCurrentRole, 
     activeNavTab, 
     setActiveNavTab, 
     roleSubTabs,
@@ -39,11 +41,14 @@ export const Header: React.FC = () => {
     schoolConfig,
     resetToDefaultData,
     tasks,
-    tupoksiDefinitions,
     inventories,
     archives,
-    rolePins,
     updateRolePin,
+    currentUser,
+    logoutAccessUser,
+    updateAccessUserPassword,
+    completePasswordResetWithNewPassword,
+    accessRules,
     syncStatus
   } = useApp();
 
@@ -52,9 +57,37 @@ export const Header: React.FC = () => {
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [newPinInput, setNewPinInput] = useState('');
-  const [pinChangeNotice, setPinChangeNotice] = useState<string | null>(null);
+  const [confirmPinInput, setConfirmPinInput] = useState('');
+  const [showPinInput, setShowPinInput] = useState(false);
+  const [pinChangeNotice, setPinChangeNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const [isSecretAiOpen, setIsSecretAiOpen] = useState(false);
+
+  // Automatically open in-service "Buat Sandi Baru" modal when user enters with temporary reset password
+  useEffect(() => {
+    if (currentRole && currentUser?.mustChangePassword) {
+      setNewPinInput('');
+      setConfirmPinInput('');
+      setShowPinInput(false);
+      setPinChangeNotice(null);
+      setIsPinModalOpen(true);
+    }
+  }, [currentRole, currentUser?.id, currentUser?.mustChangePassword]);
+
+  const logoTapRef = useRef<{ count: number; lastTap: number }>({ count: 0, lastTap: 0 });
+  const handleLogoTap = () => {
+    const now = Date.now();
+    if (now - logoTapRef.current.lastTap > 2500) {
+      logoTapRef.current.count = 1;
+    } else {
+      logoTapRef.current.count += 1;
+    }
+    logoTapRef.current.lastTap = now;
+    if (logoTapRef.current.count >= 5) {
+      logoTapRef.current.count = 0;
+      window.dispatchEvent(new CustomEvent('siops-open-owner-panel'));
+    }
+  };
 
   if (!currentRole) return null;
 
@@ -149,8 +182,7 @@ export const Header: React.FC = () => {
   };
 
   const handleLogout = () => {
-    setCurrentRole(null);
-    setActiveNavTab('dashboard');
+    logoutAccessUser();
     setIsLogoutConfirmOpen(false);
   };
 
@@ -162,7 +194,10 @@ export const Header: React.FC = () => {
           <div className="flex items-center justify-between h-16 gap-3">
             {/* Left: School Identity */}
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+              <div
+                onClick={handleLogoTap}
+                className="w-10 h-10 shrink-0 flex items-center justify-center select-none"
+              >
                 {schoolConfig.logoAplikasiUrl ? (
                   <img 
                     src={schoolConfig.logoAplikasiUrl} 
@@ -218,22 +253,24 @@ export const Header: React.FC = () => {
                   <p className="font-extrabold leading-tight">
                     {roleMeta.label}
                   </p>
-                  <p className="text-[10px] opacity-80 truncate max-w-[120px] sm:max-w-[170px]">
-                    {operator.nama}
+                  <p className="text-[10px] opacity-80 truncate max-w-[140px] sm:max-w-[190px]">
+                    {currentUser ? `${currentUser.namaLengkap} (@${currentUser.username})` : operator.nama}
                   </p>
                 </div>
               </div>
 
-              {/* Change PIN Security Button */}
+              {/* Change Password / PIN Security Button */}
               <button
                 type="button"
                 onClick={() => {
                   setNewPinInput('');
+                  setConfirmPinInput('');
+                  setShowPinInput(false);
                   setPinChangeNotice(null);
                   setIsPinModalOpen(true);
                 }}
-                className="p-2 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors border border-slate-200 cursor-pointer"
-                title="Ganti PIN Keamanan Akun Ini"
+                className="p-2 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors border border-slate-200 cursor-pointer"
+                title="Ganti Sandi Akun Ini"
               >
                 <KeyRound className="w-4 h-4" />
               </button>
@@ -330,6 +367,33 @@ export const Header: React.FC = () => {
             })}
           </div>
         </div>
+
+        {/* In-service Reminder Banner when logged in with Temporary Reset Password */}
+        {currentUser?.mustChangePassword && (
+          <div className="bg-amber-50 border-t border-amber-200">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 text-amber-900">
+                <KeyRound className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Sandi Sementara Aktif:</strong> Anda saat ini masuk ke layanan menggunakan sandi reset sementara dari Admin. Segera buat sandi baru pribadi Anda agar tercatat di Admin.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewPinInput('');
+                  setConfirmPinInput('');
+                  setShowPinInput(false);
+                  setPinChangeNotice(null);
+                  setIsPinModalOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-2xs cursor-pointer"
+              >
+                Ganti ke Sandi Baru Sekarang
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Settings Modal */}
@@ -416,7 +480,7 @@ export const Header: React.FC = () => {
           </div>
         </div>
       )}
-      {/* In-UI Change PIN Modal */}
+      {/* In-UI Change Password Modal (Also used after entering service with Temp Reset Password) */}
       {isPinModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-2xs p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-sm w-full p-5 space-y-4">
@@ -426,10 +490,18 @@ export const Header: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-slate-900">
-                  Ganti PIN Keamanan Akun {roleMeta.label}
+                  {currentUser?.mustChangePassword
+                    ? `Buat Sandi Baru (@${currentUser.username})`
+                    : currentUser
+                    ? `Ubah Sandi Akun (@${currentUser.username})`
+                    : `Ganti Sandi Akun ${roleMeta.label}`}
                 </h3>
-                <p className="text-xs text-slate-500">
-                  Pastikan PIN bersifat rahasia agar petugas operasional lain tidak dapat masuk ke akun Anda.
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {currentUser?.mustChangePassword
+                    ? 'Anda sudah masuk ke layanan menggunakan sandi sementara. Buat sandi baru Anda agar otomatis tercatat di Admin.'
+                    : accessRules.enforceUniquePassword
+                    ? 'Setiap sandi bersifat unik dan hanya bisa dikaitkan dengan satu nama pengguna saja.'
+                    : 'Masukkan sandi baru minimal 4 karakter.'}
                 </p>
               </div>
             </div>
@@ -438,34 +510,106 @@ export const Header: React.FC = () => {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!newPinInput.trim()) return;
-                updateRolePin(currentRole, newPinInput.trim());
-                setPinChangeNotice('PIN Keamanan Akun berhasil diperbarui!');
-                setTimeout(() => {
-                  setIsPinModalOpen(false);
-                  setPinChangeNotice(null);
-                }, 1500);
+                if (currentUser?.mustChangePassword) {
+                  if (newPinInput.trim() !== confirmPinInput.trim()) {
+                    setPinChangeNotice({
+                      ok: false,
+                      text: 'Konfirmasi sandi baru tidak cocok. Pastikan kedua kolom sandi baru sama.'
+                    });
+                    return;
+                  }
+                  const res = completePasswordResetWithNewPassword(currentUser.id, newPinInput.trim());
+                  setPinChangeNotice({ ok: res.ok, text: res.message });
+                  if (res.ok) {
+                    setTimeout(() => {
+                      setIsPinModalOpen(false);
+                      setPinChangeNotice(null);
+                    }, 1400);
+                  }
+                } else if (currentUser) {
+                  const res = updateAccessUserPassword(currentUser.id, newPinInput.trim());
+                  setPinChangeNotice({ ok: res.ok, text: res.message });
+                  if (res.ok) {
+                    setTimeout(() => {
+                      setIsPinModalOpen(false);
+                      setPinChangeNotice(null);
+                    }, 1500);
+                  }
+                } else {
+                  updateRolePin(currentRole, newPinInput.trim());
+                  setPinChangeNotice({ ok: true, text: 'Sandi akun berhasil diperbarui!' });
+                  setTimeout(() => {
+                    setIsPinModalOpen(false);
+                    setPinChangeNotice(null);
+                  }, 1500);
+                }
               }}
               className="space-y-3 pt-2"
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  PIN Baru (4–8 Karakter / Angka):
+                  Sandi Baru (Min. 4 Karakter):
                 </label>
-                <input
-                  type="password"
-                  required
-                  maxLength={8}
-                  value={newPinInput}
-                  onChange={(e) => setNewPinInput(e.target.value)}
-                  placeholder="Ketik PIN baru Anda..."
-                  className="w-full px-3 py-2 text-sm text-center font-mono tracking-widest bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="relative">
+                  <input
+                    type={showPinInput ? 'text' : 'password'}
+                    required
+                    autoFocus
+                    minLength={4}
+                    maxLength={24}
+                    value={newPinInput}
+                    onChange={(e) => {
+                      setNewPinInput(e.target.value);
+                      if (pinChangeNotice) setPinChangeNotice(null);
+                    }}
+                    placeholder="Ketik sandi baru Anda..."
+                    className="w-full pl-3 pr-9 py-2 text-sm text-center font-mono tracking-widest bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPinInput(!showPinInput)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  >
+                    {showPinInput ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
+              {currentUser?.mustChangePassword && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Konfirmasi Sandi Baru:
+                  </label>
+                  <input
+                    type={showPinInput ? 'text' : 'password'}
+                    required
+                    minLength={4}
+                    maxLength={24}
+                    value={confirmPinInput}
+                    onChange={(e) => {
+                      setConfirmPinInput(e.target.value);
+                      if (pinChangeNotice) setPinChangeNotice(null);
+                    }}
+                    placeholder="Ketik ulang sandi baru..."
+                    className="w-full px-3 py-2 text-sm text-center font-mono tracking-widest bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
               {pinChangeNotice && (
-                <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{pinChangeNotice}</span>
+                <div
+                  className={`p-2.5 rounded-lg border text-xs font-semibold flex items-start gap-2 ${
+                    pinChangeNotice.ok
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  {pinChangeNotice.ok ? (
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  )}
+                  <span>{pinChangeNotice.text}</span>
                 </div>
               )}
 
@@ -475,14 +619,14 @@ export const Header: React.FC = () => {
                   onClick={() => setIsPinModalOpen(false)}
                   className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
                 >
-                  Tutup
+                  {currentUser?.mustChangePassword ? 'Nanti' : 'Tutup'}
                 </button>
                 <button
                   type="submit"
                   disabled={!newPinInput.trim()}
                   className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg shadow-xs cursor-pointer"
                 >
-                  Simpan PIN
+                  Simpan Sandi Baru
                 </button>
               </div>
             </form>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { RoleSelectView } from './components/common/RoleSelectView';
@@ -10,11 +10,45 @@ import { PrintDocumentView } from './components/reports/PrintDocumentView';
 import { InventoryTable } from './components/common/InventoryTable';
 import { DocumentArchiveView } from './components/archive/DocumentArchiveView';
 import { AiAssistantModal } from './components/common/AiAssistantModal';
+import { AdminAccessPanelModal } from './components/common/AdminAccessPanelModal';
 import { Bot, Sparkles } from 'lucide-react';
 
 function MainLayout() {
   const { currentRole, activeNavTab } = useApp();
   const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
+  const [isOwnerAdminOpen, setIsOwnerAdminOpen] = useState(false);
+
+  // Private owner-only triggers: Ctrl+Shift+A, 5x tap logo event, or #owner-admin / ?owner=admin
+  useEffect(() => {
+    const checkUrlTrigger = () => {
+      const hash = window.location.hash.toLowerCase();
+      const params = new URLSearchParams(window.location.search);
+      if (hash === '#owner-admin' || params.get('owner') === 'admin') {
+        setIsOwnerAdminOpen(true);
+      }
+    };
+    checkUrlTrigger();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        setIsOwnerAdminOpen(true);
+      }
+    };
+
+    const handleCustomOpen = () => {
+      setIsOwnerAdminOpen(true);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('hashchange', checkUrlTrigger);
+    window.addEventListener('siops-open-owner-panel', handleCustomOpen);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('hashchange', checkUrlTrigger);
+      window.removeEventListener('siops-open-owner-panel', handleCustomOpen);
+    };
+  }, []);
 
   // Print view state
   const [printState, setPrintState] = useState<{
@@ -25,7 +59,15 @@ function MainLayout() {
   } | null>(null);
 
   if (!currentRole) {
-    return <RoleSelectView />;
+    return (
+      <>
+        <RoleSelectView />
+        <AdminAccessPanelModal
+          isOpen={isOwnerAdminOpen}
+          onClose={() => setIsOwnerAdminOpen(false)}
+        />
+      </>
+    );
   }
 
   if (printState && printState.isOpen) {
@@ -97,6 +139,12 @@ function MainLayout() {
           initialRole={currentRole}
         />
       )}
+
+      {/* Hidden Owner-Only Admin Panel Modal */}
+      <AdminAccessPanelModal
+        isOpen={isOwnerAdminOpen}
+        onClose={() => setIsOwnerAdminOpen(false)}
+      />
     </div>
   );
 }

@@ -380,3 +380,44 @@ export interface SavedBeritaAcaraRecord {
   updatedAt: string;
 }
 
+export type UserAccountStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export type PasswordResetStatus = 'NONE' | 'REQUESTED' | 'RESET_ISSUED' | 'COMPLETED';
+
+export interface AccessSecurityRules {
+  requireAdminApproval: boolean;
+  enforceUniquePassword: boolean;
+  enforceSingleServicePerUser: boolean;
+}
+
+export interface PasswordChangeLogEntry {
+  changedAt: string;
+  source: 'USER_CHANGE' | 'RESET_BY_ADMIN' | 'USER_AFTER_RESET' | 'ADMIN_CREATE' | 'LEGACY_MIGRATION';
+  newPassword: string;
+}
+
+export interface RegisteredAccessUser {
+  id: string;
+  namaLengkap: string;
+  username: string;
+  role: RoleType;
+  password: string;
+  status: UserAccountStatus;
+  createdAt: string;
+  approvedAt?: string;
+  lastLoginAt?: string;
+  resetRequestStatus?: PasswordResetStatus;
+  resetRequestedAt?: string;
+  resetRequestNote?: string;
+  resetIssuedAt?: string;
+  mustChangePassword?: boolean;
+  passwordUpdatedAt?: string;
+  passwordChangeHistory?: PasswordChangeLogEntry[];
+}
+
+export interface AuthActionResult {
+  ok: boolean;
+  message: string;
+  user?: RegisteredAccessUser;
+  requiresPasswordChange?: boolean;
+}

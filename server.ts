@@ -25,16 +25,23 @@ import {
   initialLibraryMemberStats
 } from './src/data/initialData';
 import { OFFICIAL_TUPOKSI_DEFINITIONS } from './src/utils/taskClassification';
+import {
+  DEFAULT_ACCESS_RULES,
+  DEFAULT_ADMIN_PASSWORD,
+  mergeRegisteredUsers
+} from './src/utils/accessSync';
 
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
+const DB_BACKUP_FILE = path.join(DATA_DIR, 'db.backup.json');
+const DB_TMP_FILE = path.join(DATA_DIR, 'db.json.tmp');
 
 // Ensure data directory and initial persistent database exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-if (!fs.existsSync(DB_FILE)) {
+if (!fs.existsSync(DB_FILE) && !fs.existsSync(DB_BACKUP_FILE)) {
   try {
     const initialDbData = {
       tasks: initialTasks,
@@ -48,44 +55,114 @@ if (!fs.existsSync(DB_FILE)) {
       libraryBooks: initialLibraryBooks,
       libraryMembers: initialLibraryMembers,
       libraryMemberStats: initialLibraryMemberStats,
+      accessUsers: [],
+      deletedAccessUserIds: [],
+      accessRules: DEFAULT_ACCESS_RULES,
+      adminPassword: DEFAULT_ADMIN_PASSWORD,
       lastUpdated: new Date().toISOString()
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(initialDbData, null, 2), 'utf-8');
+    fs.writeFileSync(DB_BACKUP_FILE, JSON.stringify(initialDbData, null, 2), 'utf-8');
     console.log('[Server DB] Basis data awal berhasil di-seed ke data/db.json');
   } catch (err) {
     console.error('[Server DB] Gagal inisialisasi basis data awal:', err);
   }
 }
 
-// Helper to read DB
-function readDb() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const data = fs.readFileSync(DB_FILE, 'utf-8');
-      const parsed = JSON.parse(data);
-      if (parsed && (!parsed.libraryBooks || !parsed.libraryMembers || !parsed.libraryMemberStats)) {
-        parsed.libraryBooks = parsed.libraryBooks || initialLibraryBooks;
-        parsed.libraryMembers = parsed.libraryMembers || initialLibraryMembers;
-        parsed.libraryMemberStats = parsed.libraryMemberStats || initialLibraryMemberStats;
-        fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
-      }
-      return parsed;
-    }
-  } catch (err) {
-    console.error('Error reading db.json:', err);
-  }
-  return null;
-}
-
-// Helper to write DB
+// Helper to write DB atomically with backup snapshot
 function writeDb(data: any) {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    const serialized = JSON.stringify(data, null, 2);
+    // Verify serialization & valid JSON before touching disk
+    JSON.parse(serialized);
+
+    if (fs.existsSync(DB_FILE)) {
+      try {
+        const existingRaw = fs.readFileSync(DB_FILE, 'utf-8');
+        JSON.parse(existingRaw);
+        fs.writeFileSync(DB_BACKUP_FILE, existingRaw, 'utf-8');
+      } catch {
+        // Ignore corrupt primary before replacing
+      }
+    }
+
+    fs.writeFileSync(DB_TMP_FILE, serialized, 'utf-8');
+    fs.renameSync(DB_TMP_FILE, DB_FILE);
     return true;
   } catch (err) {
     console.error('Error writing db.json:', err);
     return false;
   }
+}
+
+// Helper to read DB with automatic backup recovery and non-destructive schema migration
+function readDb() {
+  let parsed: any = null;
+  let recoveredFromBackup = false;
+
+  if (fs.existsSync(DB_FILE)) {
+    try {
+      parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+    } catch (err) {
+      console.error('[Server DB] db.json gagal dibaca, mencoba pemulihan otomatis dari db.backup.json:', err);
+    }
+  }
+
+  if (!parsed && fs.existsSync(DB_BACKUP_FILE)) {
+    try {
+      parsed = JSON.parse(fs.readFileSync(DB_BACKUP_FILE, 'utf-8'));
+      recoveredFromBackup = true;
+      console.log('[Server DB] Pemulihan otomatis berhasil dari data/db.backup.json');
+    } catch (err) {
+      console.error('[Server DB] db.backup.json juga gagal dibaca:', err);
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  let patched = recoveredFromBackup;
+
+  if (!parsed.libraryBooks || !parsed.libraryMembers || !parsed.libraryMemberStats) {
+    parsed.libraryBooks = parsed.libraryBooks || initialLibraryBooks;
+    parsed.libraryMembers = parsed.libraryMembers || initialLibraryMembers;
+    parsed.libraryMemberStats = parsed.libraryMemberStats || initialLibraryMemberStats;
+    patched = true;
+  }
+
+  if (!Array.isArray(parsed.deletedAccessUserIds)) {
+    parsed.deletedAccessUserIds = [];
+    patched = true;
+  }
+
+  const rawUsers = Array.isArray(parsed.accessUsers) ? parsed.accessUsers : [];
+  const normalizedUsers = mergeRegisteredUsers(rawUsers, [], parsed.deletedAccessUserIds);
+  if (!Array.isArray(parsed.accessUsers) || normalizedUsers.length !== rawUsers.length) {
+    parsed.accessUsers = normalizedUsers;
+    patched = true;
+  } else {
+    parsed.accessUsers = normalizedUsers;
+  }
+
+  if (!parsed.accessRules || typeof parsed.accessRules !== 'object') {
+    parsed.accessRules = { ...DEFAULT_ACCESS_RULES };
+    patched = true;
+  } else {
+    const mergedRules = { ...DEFAULT_ACCESS_RULES, ...parsed.accessRules };
+    if (JSON.stringify(mergedRules) !== JSON.stringify(parsed.accessRules)) {
+      parsed.accessRules = mergedRules;
+      patched = true;
+    }
+  }
+
+  if (typeof parsed.adminPassword !== 'string' || !parsed.adminPassword.trim()) {
+    parsed.adminPassword = DEFAULT_ADMIN_PASSWORD;
+    patched = true;
+  }
+
+  if (patched) {
+    writeDb(parsed);
+  }
+  return parsed;
 }
 
 // API Routes
@@ -102,7 +179,7 @@ app.get('/api/state', (req, res) => {
   res.json({ initialized: true, data });
 });
 
-// POST update entire application state
+// POST update application state (non-destructive merge for users & protected against unhydrated overwrites)
 app.post('/api/state', (req, res) => {
   const { 
     tasks, 
@@ -115,29 +192,117 @@ app.post('/api/state', (req, res) => {
     customCategories,
     libraryBooks,
     libraryMembers,
-    libraryMemberStats
-  } = req.body;
+    libraryMemberStats,
+    accessUsers,
+    deletedAccessUserIds,
+    accessRules,
+    adminPassword,
+    clientHydratedFromServer
+  } = req.body || {};
+
   const current = readDb() || {};
+  const canReplaceOperational =
+    clientHydratedFromServer === true || !current.lastUpdated;
+
+  const pickCollection = (incoming: any, existing: any) => {
+    if (incoming === undefined) return existing;
+    if (canReplaceOperational) return incoming;
+    // If client was NOT hydrated from server yet, never overwrite non-empty server data
+    if (Array.isArray(existing) && existing.length > 0) return existing;
+    return incoming;
+  };
+
+  const mergedDeletedIds: string[] = Array.from(
+    new Set([
+      ...(Array.isArray(current.deletedAccessUserIds) ? current.deletedAccessUserIds : []),
+      ...(Array.isArray(deletedAccessUserIds) ? deletedAccessUserIds : [])
+    ])
+  ).slice(-1000);
+
+  // Non-destructive merge: existing users are ALWAYS preserved unless explicitly deleted by Admin
+  const mergedAccessUsers = mergeRegisteredUsers(
+    Array.isArray(current.accessUsers) ? current.accessUsers : [],
+    Array.isArray(accessUsers) ? accessUsers : [],
+    mergedDeletedIds
+  );
+
+  const mergedAccessRules =
+    accessRules && typeof accessRules === 'object' && (canReplaceOperational || !current.accessRules)
+      ? { ...DEFAULT_ACCESS_RULES, ...current.accessRules, ...accessRules }
+      : { ...DEFAULT_ACCESS_RULES, ...(current.accessRules || {}) };
+
+  const nextAdminPassword =
+    typeof adminPassword === 'string' &&
+    adminPassword.trim() &&
+    (canReplaceOperational || !current.adminPassword)
+      ? adminPassword.trim()
+      : (current.adminPassword || DEFAULT_ADMIN_PASSWORD);
+
   const updated = {
     ...current,
-    tasks: tasks !== undefined ? tasks : current.tasks,
-    inventories: inventories !== undefined ? inventories : current.inventories,
-    monthlyReports: monthlyReports !== undefined ? monthlyReports : current.monthlyReports,
-    annualReports: annualReports !== undefined ? annualReports : current.annualReports,
-    schoolConfig: schoolConfig !== undefined ? schoolConfig : current.schoolConfig,
-    archives: archives !== undefined ? archives : current.archives,
-    tupoksiDefinitions: tupoksiDefinitions !== undefined ? tupoksiDefinitions : current.tupoksiDefinitions,
-    customCategories: customCategories !== undefined ? customCategories : current.customCategories,
-    libraryBooks: libraryBooks !== undefined ? libraryBooks : current.libraryBooks,
-    libraryMembers: libraryMembers !== undefined ? libraryMembers : current.libraryMembers,
-    libraryMemberStats: libraryMemberStats !== undefined ? libraryMemberStats : current.libraryMemberStats,
+    tasks: pickCollection(tasks, current.tasks),
+    inventories: pickCollection(inventories, current.inventories),
+    monthlyReports: pickCollection(monthlyReports, current.monthlyReports),
+    annualReports: pickCollection(annualReports, current.annualReports),
+    schoolConfig:
+      schoolConfig !== undefined && (canReplaceOperational || !current.schoolConfig)
+        ? schoolConfig
+        : current.schoolConfig,
+    archives: pickCollection(archives, current.archives),
+    tupoksiDefinitions:
+      tupoksiDefinitions !== undefined && (canReplaceOperational || !current.tupoksiDefinitions)
+        ? tupoksiDefinitions
+        : current.tupoksiDefinitions,
+    customCategories: pickCollection(customCategories, current.customCategories),
+    libraryBooks: pickCollection(libraryBooks, current.libraryBooks),
+    libraryMembers: pickCollection(libraryMembers, current.libraryMembers),
+    libraryMemberStats:
+      libraryMemberStats !== undefined && (canReplaceOperational || !current.libraryMemberStats)
+        ? libraryMemberStats
+        : current.libraryMemberStats,
+    accessUsers: mergedAccessUsers,
+    deletedAccessUserIds: mergedDeletedIds,
+    accessRules: mergedAccessRules,
+    adminPassword: nextAdminPassword,
     lastUpdated: new Date().toISOString()
   };
+
   const success = writeDb(updated);
   if (success) {
-    res.json({ success: true, lastUpdated: updated.lastUpdated });
+    res.json({ success: true, lastUpdated: updated.lastUpdated, data: updated });
   } else {
     res.status(500).json({ error: 'Gagal menyimpan basis data ke server' });
+  }
+});
+
+// Explicit Admin Deletion for Registered Access User
+app.delete('/api/access-users/:id', (req, res) => {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({ error: 'ID pengguna wajib disertakan.' });
+  }
+  const current = readDb() || {};
+  const deletedSet = new Set<string>(
+    Array.isArray(current.deletedAccessUserIds) ? current.deletedAccessUserIds : []
+  );
+  deletedSet.add(id);
+
+  const mergedDeletedIds = Array.from(deletedSet).slice(-1000);
+  const existingUsers = Array.isArray(current.accessUsers) ? current.accessUsers : [];
+  const nextUsers = existingUsers.filter((u: any) => u && u.id !== id);
+
+  const updated = {
+    ...current,
+    accessUsers: nextUsers,
+    deletedAccessUserIds: mergedDeletedIds,
+    lastUpdated: new Date().toISOString()
+  };
+
+  const success = writeDb(updated);
+  if (success) {
+    res.json({ success: true, deletedId: id, lastUpdated: updated.lastUpdated });
+  } else {
+    res.status(500).json({ error: 'Gagal menghapus akun pengguna dari basis data server.' });
   }
 });
 

@@ -18,7 +18,9 @@ import {
   TupoksiDefinitionsMap,
   LibraryBookItem,
   LibraryMemberItem,
-  LibraryMemberStats
+  LibraryMemberStats,
+  RegisteredAccessUser,
+  AccessSecurityRules
 } from '../types';
 
 export interface AppStateData {
@@ -33,6 +35,11 @@ export interface AppStateData {
   libraryBooks?: LibraryBookItem[];
   libraryMembers?: LibraryMemberItem[];
   libraryMemberStats?: LibraryMemberStats;
+  accessUsers?: RegisteredAccessUser[];
+  deletedAccessUserIds?: string[];
+  accessRules?: AccessSecurityRules;
+  adminPassword?: string;
+  clientHydratedFromServer?: boolean;
   lastUpdated?: string;
 }
 
@@ -58,7 +65,8 @@ class StorageService {
   async fetchServerState(): Promise<{ initialized: boolean; data?: AppStateData } | null> {
     try {
       const response = await fetch('/api/state', {
-        headers: { 'Accept': 'application/json' }
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
       });
       if (!response.ok) return null;
       return await response.json();
@@ -69,7 +77,7 @@ class StorageService {
   }
 
   /**
-   * Menyimpan batch seluruh state aplikasi langsung ke basis data server
+   * Menyimpan batch seluruh state aplikasi langsung ke basis data server (non-destructive merge)
    */
   async syncServerState(data: Partial<AppStateData>): Promise<boolean> {
     try {
@@ -81,6 +89,18 @@ class StorageService {
       return response.ok;
     } catch (error) {
       console.error('[StorageService] Gagal sinkronisasi data ke server database:', error);
+      return false;
+    }
+  }
+
+  async deleteAccessUser(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`/api/access-users/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+      return response.ok;
+    } catch (error) {
+      console.warn('[StorageService] Gagal hapus akun pengguna di server (akan disinkronkan ulang):', error);
       return false;
     }
   }

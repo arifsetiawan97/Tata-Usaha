@@ -12,7 +12,11 @@ import {
   LibraryBookItem,
   LibraryMemberItem,
   LibraryMemberStats,
-  RoleSubTab
+  RoleSubTab,
+  RegisteredAccessUser,
+  AccessSecurityRules,
+  UserAccountStatus,
+  AuthActionResult
 } from '../types';
 import { 
   initialSchoolConfig, 
@@ -35,6 +39,11 @@ import {
   OFFICIAL_TUPOKSI_DEFINITIONS, 
   parseTaskMonthYear 
 } from '../utils/taskClassification';
+import {
+  DEFAULT_ACCESS_RULES,
+  DEFAULT_ADMIN_PASSWORD,
+  mergeRegisteredUsers
+} from '../utils/accessSync';
 
 export type { RoleSubTab };
 
@@ -105,13 +114,63 @@ interface AppContextType {
   rolePins: Record<RoleType, string>;
   verifyRolePin: (role: RoleType, pin: string) => boolean;
   updateRolePin: (role: RoleType, newPin: string) => void;
+  accessUsers: RegisteredAccessUser[];
+  accessRules: AccessSecurityRules;
+  currentUser: RegisteredAccessUser | null;
+  setCurrentUser: (user: RegisteredAccessUser | null) => void;
+  registerAccessUser: (payload: {
+    namaLengkap: string;
+    username: string;
+    role: RoleType;
+    password: string;
+  }) => AuthActionResult;
+  loginAccessUser: (payload: {
+    username: string;
+    password: string;
+    expectedRole?: RoleType;
+  }) => AuthActionResult;
+  logoutAccessUser: () => void;
+  approveAccessUser: (userId: string, assignedPassword?: string) => AuthActionResult;
+  rejectAccessUser: (userId: string) => void;
+  deleteAccessUser: (userId: string) => void;
+  updateAccessUserPassword: (userId: string, newPassword: string) => AuthActionResult;
+  createAccessUserByAdmin: (payload: {
+    namaLengkap: string;
+    username: string;
+    role: RoleType;
+    password: string;
+    status?: UserAccountStatus;
+  }) => AuthActionResult;
+  updateAccessRules: (updates: Partial<AccessSecurityRules>) => void;
+  verifyAdminPassword: (password: string) => boolean;
+  updateAdminPassword: (newPassword: string) => AuthActionResult;
+  adminPassword: string;
+  requestPasswordReset: (payload: { username: string; note?: string }) => AuthActionResult;
+  issueResetPasswordByAdmin: (userId: string, tempResetPassword: string) => AuthActionResult;
+  completePasswordResetWithNewPassword: (userId: string, newPassword: string) => AuthActionResult;
+  trackedUsername: string | null;
+  setTrackedUsername: (username: string | null) => void;
+  refreshAccessState: () => Promise<RegisteredAccessUser[]>;
   syncStatus: 'synced' | 'saving' | 'offline';
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const ROLE_LABELS_MAP: Record<RoleType, string> = {
+  TU: 'Tata Usaha (TU)',
+  PENJAGA: 'Penjaga Sekolah',
+  SERVICE: 'Service (Kebersihan)',
+  PERPUS: 'Layanan Perpustakaan',
+  LAB_IPA: 'Laboratorium IPA'
+};
+
 const STORAGE_KEYS = {
   ROLE: 'siops_current_role',
+  CURRENT_USER: 'siops_current_user',
+  TRACKED_USERNAME: 'siops_tracked_username',
+  ACCESS_USERS: 'siops_access_users',
+  ACCESS_RULES: 'siops_access_rules',
+  ADMIN_PASSWORD: 'siops_admin_password',
   TASKS: 'siops_tasks',
   INVENTORY: 'siops_inventory',
   LIBRARY_BOOKS: 'siops_library_books',
@@ -128,67 +187,19 @@ const STORAGE_KEYS = {
 };
 export const mergeSchoolConfigWithDefaults = (sourceConfig: any): SchoolConfig => {
   if (!sourceConfig || typeof sourceConfig !== 'object') return initialSchoolConfig;
-  const cleaned: any = { ...sourceConfig };
-
-  // Pembersihan otomatis: Hapus sisa-sisa default 'Jawa Barat' agar 100% fleksibel sesuai keinginan pengguna
-  if (typeof cleaned.provinsi === 'string' && /jawa\s*barat/i.test(cleaned.provinsi)) {
-    cleaned.provinsi = '';
-  }
-  if (typeof cleaned.pemerintahDaerah === 'string' && /jawa\s*barat/i.test(cleaned.pemerintahDaerah)) {
-    cleaned.pemerintahDaerah = cleaned.pemerintahDaerah
-      .replace(/provinsi\s+jawa\s+barat/gi, '')
-      .replace(/jawa\s+barat/gi, '')
-      .trim();
-  }
-  if (typeof cleaned.alamat === 'string' && /jawa\s*barat/i.test(cleaned.alamat)) {
-    cleaned.alamat = cleaned.alamat
-      .replace(/,\s*provinsi\s+jawa\s+barat/gi, '')
-      .replace(/,\s*jawa\s+barat/gi, '')
-      .trim();
-  }
-  if (typeof cleaned.stempelTextLine1 === 'string' && /jawa\s*barat/i.test(cleaned.stempelTextLine1)) {
-    cleaned.stempelTextLine1 = cleaned.stempelTextLine1.replace(/jawa\s+barat/gi, '').trim();
-  }
-
-  // Pembersihan otomatis: Hapus default dummy nama & tanda tangan Rahmat Hidayat & Nurul Hidayat
-  if (cleaned.kepalaSekolah) {
-    if (typeof cleaned.kepalaSekolah.nama === 'string' && /rahmat|hidayat/i.test(cleaned.kepalaSekolah.nama)) {
-      cleaned.kepalaSekolah.nama = '';
-      cleaned.kepalaSekolah.nip = 'NIP. .................................................';
-    }
-    if (typeof cleaned.kepalaSekolah.signatureData === 'string' && /rahmat|nurul|hidayat/i.test(cleaned.kepalaSekolah.signatureData)) {
-      cleaned.kepalaSekolah.signatureData = '';
-    }
-  }
-
-  if (cleaned.operatorProfiles) {
-    Object.keys(cleaned.operatorProfiles).forEach((k) => {
-      const prof = cleaned.operatorProfiles?.[k as RoleType];
-      if (prof) {
-        if (typeof prof.nama === 'string' && /nurul|hidayat|rahmat/i.test(prof.nama)) {
-          prof.nama = '';
-          prof.nip = 'NIPPK. .................................................';
-        }
-        if (typeof prof.signatureData === 'string' && /rahmat|nurul|hidayat/i.test(prof.signatureData)) {
-          prof.signatureData = '';
-        }
-      }
-    });
-  }
-
   return {
     ...initialSchoolConfig,
-    ...cleaned,
+    ...sourceConfig,
     kepalaSekolah: {
       ...initialSchoolConfig.kepalaSekolah,
-      ...(cleaned.kepalaSekolah || {})
+      ...(sourceConfig.kepalaSekolah || {})
     },
     operatorProfiles: {
-      TU: { ...initialSchoolConfig.operatorProfiles.TU, ...(cleaned.operatorProfiles?.TU || {}) },
-      PENJAGA: { ...initialSchoolConfig.operatorProfiles.PENJAGA, ...(cleaned.operatorProfiles?.PENJAGA || {}) },
-      SERVICE: { ...initialSchoolConfig.operatorProfiles.SERVICE, ...(cleaned.operatorProfiles?.SERVICE || {}) },
-      PERPUS: { ...initialSchoolConfig.operatorProfiles.PERPUS, ...(cleaned.operatorProfiles?.PERPUS || {}) },
-      LAB_IPA: { ...initialSchoolConfig.operatorProfiles.LAB_IPA, ...(cleaned.operatorProfiles?.LAB_IPA || {}) },
+      TU: { ...initialSchoolConfig.operatorProfiles.TU, ...(sourceConfig.operatorProfiles?.TU || {}) },
+      PENJAGA: { ...initialSchoolConfig.operatorProfiles.PENJAGA, ...(sourceConfig.operatorProfiles?.PENJAGA || {}) },
+      SERVICE: { ...initialSchoolConfig.operatorProfiles.SERVICE, ...(sourceConfig.operatorProfiles?.SERVICE || {}) },
+      PERPUS: { ...initialSchoolConfig.operatorProfiles.PERPUS, ...(sourceConfig.operatorProfiles?.PERPUS || {}) },
+      LAB_IPA: { ...initialSchoolConfig.operatorProfiles.LAB_IPA, ...(sourceConfig.operatorProfiles?.LAB_IPA || {}) }
     }
   };
 };
@@ -244,9 +255,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const [accessUsers, setAccessUsers] = useState<RegisteredAccessUser[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ACCESS_USERS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) { console.error(e); }
+    }
+    return [];
+  });
+
+  const [accessRules, setAccessRules] = useState<AccessSecurityRules>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ACCESS_RULES);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...DEFAULT_ACCESS_RULES, ...parsed };
+      } catch (e) { console.error(e); }
+    }
+    return DEFAULT_ACCESS_RULES;
+  });
+
+  const [adminPassword, setAdminPassword] = useState<string>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ADMIN_PASSWORD);
+    return saved && saved.trim() ? saved.trim() : DEFAULT_ADMIN_PASSWORD;
+  });
+
+  const [currentUser, setCurrentUserState] = useState<RegisteredAccessUser | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return null;
+  });
+
+  const setCurrentUser = (user: RegisteredAccessUser | null) => {
+    setCurrentUserState(user);
+    if (user) {
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    }
+  };
+
+  const [trackedUsername, setTrackedUsernameState] = useState<string | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.TRACKED_USERNAME);
+    return saved && saved.trim() ? saved.trim() : null;
+  });
+
+  const setTrackedUsername = (username: string | null) => {
+    const clean = username && username.trim() ? username.trim() : null;
+    setTrackedUsernameState(clean);
+    if (clean) {
+      localStorage.setItem(STORAGE_KEYS.TRACKED_USERNAME, clean);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.TRACKED_USERNAME);
+    }
+  };
+
   const [activeNavTab, setActiveNavTab] = useState<string>('dashboard');
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'offline'>('synced');
   const isInitialLoad = useRef(true);
+  const hasHydratedFromServerRef = useRef(false);
+  const skipNextServerSyncRef = useRef(false);
+  const isPendingLocalSaveRef = useRef(false);
+  const pendingDeletedAccessUserIdsRef = useRef<string[]>([]);
 
   const [tasks, setTasks] = useState<TaskLog[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.TASKS);
@@ -636,6 +710,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const applyHydratedStateFromServer = (serverData: any) => {
+    skipNextServerSyncRef.current = true;
+    const serverDeletedIds: string[] = Array.isArray(serverData.deletedAccessUserIds)
+      ? serverData.deletedAccessUserIds
+      : [];
+    const combinedDeletedIds = Array.from(
+      new Set([...serverDeletedIds, ...pendingDeletedAccessUserIdsRef.current])
+    );
+
+    if (Array.isArray(serverData.tasks) && serverData.tasks.length > 0) {
+      setTasks(serverData.tasks);
+      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(serverData.tasks));
+    }
+    if (Array.isArray(serverData.inventories) && serverData.inventories.length > 0) {
+      setInventories(serverData.inventories);
+      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(serverData.inventories));
+    }
+    if (Array.isArray(serverData.monthlyReports) && serverData.monthlyReports.length > 0) {
+      setMonthlyReports(serverData.monthlyReports);
+      localStorage.setItem(STORAGE_KEYS.MONTHLY, JSON.stringify(serverData.monthlyReports));
+    }
+    if (Array.isArray(serverData.annualReports) && serverData.annualReports.length > 0) {
+      setAnnualReports(serverData.annualReports);
+      localStorage.setItem(STORAGE_KEYS.ANNUAL, JSON.stringify(serverData.annualReports));
+    }
+    if (Array.isArray(serverData.archives) && serverData.archives.length > 0) {
+      setArchives(serverData.archives);
+      localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(serverData.archives));
+    }
+    if (serverData.schoolConfig) {
+      const mergedConfig = mergeSchoolConfigWithDefaults(serverData.schoolConfig);
+      setSchoolConfig(mergedConfig);
+      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(mergedConfig));
+    }
+    if (serverData.tupoksiDefinitions) {
+      const mergedTupoksi: TupoksiDefinitionsMap = {
+        ...OFFICIAL_TUPOKSI_DEFINITIONS,
+        ...serverData.tupoksiDefinitions
+      };
+      setTupoksiDefinitions(mergedTupoksi);
+      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(mergedTupoksi));
+    }
+    if (Array.isArray(serverData.customCategories)) {
+      setCustomCategories(serverData.customCategories);
+      localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(serverData.customCategories));
+    }
+    if (Array.isArray(serverData.libraryBooks)) {
+      setLibraryBooks(serverData.libraryBooks);
+      localStorage.setItem(STORAGE_KEYS.LIBRARY_BOOKS, JSON.stringify(serverData.libraryBooks));
+    }
+    if (Array.isArray(serverData.libraryMembers)) {
+      setLibraryMembers(serverData.libraryMembers);
+      localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBERS, JSON.stringify(serverData.libraryMembers));
+    }
+    if (serverData.libraryMemberStats && typeof serverData.libraryMemberStats === 'object') {
+      setLibraryMemberStats(serverData.libraryMemberStats);
+      localStorage.setItem(
+        STORAGE_KEYS.LIBRARY_MEMBER_STATS,
+        JSON.stringify(serverData.libraryMemberStats)
+      );
+    }
+
+    // Non-destructive merge: preserve any local unsynced users + all server users (unless explicitly deleted)
+    let localUsersRaw: RegisteredAccessUser[] = [];
+    try {
+      const localSaved = localStorage.getItem(STORAGE_KEYS.ACCESS_USERS);
+      if (localSaved) {
+        const parsedLocal = JSON.parse(localSaved);
+        if (Array.isArray(parsedLocal)) localUsersRaw = parsedLocal;
+      }
+    } catch {
+      localUsersRaw = [];
+    }
+    const serverUsersRaw = Array.isArray(serverData.accessUsers) ? serverData.accessUsers : [];
+    const mergedUsers = mergeRegisteredUsers(serverUsersRaw, localUsersRaw, combinedDeletedIds);
+    setAccessUsers(mergedUsers);
+    localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, JSON.stringify(mergedUsers));
+
+    // Sync active logged-in user record non-destructively if present
+    setCurrentUserState(prevUser => {
+      if (!prevUser) return prevUser;
+      const freshMatch = mergedUsers.find(u => u.id === prevUser.id);
+      if (freshMatch) {
+        localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(freshMatch));
+        return freshMatch;
+      }
+      return prevUser;
+    });
+
+    if (serverData.accessRules && typeof serverData.accessRules === 'object') {
+      const mergedRules = { ...DEFAULT_ACCESS_RULES, ...serverData.accessRules };
+      setAccessRules(mergedRules);
+      localStorage.setItem(STORAGE_KEYS.ACCESS_RULES, JSON.stringify(mergedRules));
+    }
+    if (typeof serverData.adminPassword === 'string' && serverData.adminPassword.trim()) {
+      setAdminPassword(serverData.adminPassword.trim());
+      localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, serverData.adminPassword.trim());
+    }
+
+    hasHydratedFromServerRef.current = true;
+    setSyncStatus('synced');
+
+    // If local storage had accounts not yet on the server, push them back non-destructively right away
+    if (mergedUsers.length > serverUsersRaw.length) {
+      storageService.syncServerState({
+        accessUsers: mergedUsers,
+        deletedAccessUserIds: combinedDeletedIds,
+        clientHydratedFromServer: true
+      });
+    }
+  };
+
   // Sync from server database on first load (to ensure shared URL gets stored data!)
   useEffect(() => {
     let isMounted = true;
@@ -643,56 +829,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const json = await storageService.fetchServerState();
         if (json && json.initialized && json.data && isMounted) {
-          if (json.data.tasks && json.data.tasks.length > 0) {
-            setTasks(json.data.tasks);
-            localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(json.data.tasks));
-          }
-          if (json.data.inventories && json.data.inventories.length > 0) {
-            setInventories(json.data.inventories);
-            localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(json.data.inventories));
-          }
-          if (json.data.monthlyReports && json.data.monthlyReports.length > 0) {
-            setMonthlyReports(json.data.monthlyReports);
-            localStorage.setItem(STORAGE_KEYS.MONTHLY, JSON.stringify(json.data.monthlyReports));
-          }
-          if (json.data.annualReports && json.data.annualReports.length > 0) {
-            setAnnualReports(json.data.annualReports);
-            localStorage.setItem(STORAGE_KEYS.ANNUAL, JSON.stringify(json.data.annualReports));
-          }
-          if (json.data.archives && json.data.archives.length > 0) {
-            setArchives(json.data.archives);
-            localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(json.data.archives));
-          }
-          if (json.data.schoolConfig) {
-            const mergedConfig = mergeSchoolConfigWithDefaults(json.data.schoolConfig);
-            setSchoolConfig(mergedConfig);
-            localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(mergedConfig));
-          }
-          if (json.data.tupoksiDefinitions) {
-            const mergedTupoksi: TupoksiDefinitionsMap = {
-              ...OFFICIAL_TUPOKSI_DEFINITIONS,
-              ...json.data.tupoksiDefinitions
-            };
-            setTupoksiDefinitions(mergedTupoksi);
-            localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(mergedTupoksi));
-          }
-          if (json.data.customCategories && Array.isArray(json.data.customCategories)) {
-            setCustomCategories(json.data.customCategories);
-            localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(json.data.customCategories));
-          }
-          if (json.data.libraryBooks && Array.isArray(json.data.libraryBooks)) {
-            setLibraryBooks(json.data.libraryBooks);
-            localStorage.setItem(STORAGE_KEYS.LIBRARY_BOOKS, JSON.stringify(json.data.libraryBooks));
-          }
-          if (json.data.libraryMembers && Array.isArray(json.data.libraryMembers)) {
-            setLibraryMembers(json.data.libraryMembers);
-            localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBERS, JSON.stringify(json.data.libraryMembers));
-          }
-          if (json.data.libraryMemberStats && typeof json.data.libraryMemberStats === 'object') {
-            setLibraryMemberStats(json.data.libraryMemberStats);
-            localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBER_STATS, JSON.stringify(json.data.libraryMemberStats));
-          }
-          setSyncStatus('synced');
+          applyHydratedStateFromServer(json.data);
         }
       } catch (err) {
         console.warn('Server offline / fallback to local storage', err);
@@ -702,8 +839,148 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
     loadServerState();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  const syncAccessChangeNow = (
+    nextUsers: RegisteredAccessUser[],
+    overrides?: {
+      accessRules?: AccessSecurityRules;
+      adminPassword?: string;
+      extraDeletedId?: string;
+    }
+  ) => {
+    const deletedIds = overrides?.extraDeletedId
+      ? Array.from(new Set([...pendingDeletedAccessUserIdsRef.current, overrides.extraDeletedId]))
+      : pendingDeletedAccessUserIdsRef.current;
+
+    localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, JSON.stringify(nextUsers));
+    if (overrides?.accessRules) {
+      localStorage.setItem(STORAGE_KEYS.ACCESS_RULES, JSON.stringify(overrides.accessRules));
+    }
+    if (overrides?.adminPassword) {
+      localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, overrides.adminPassword);
+    }
+
+    storageService
+      .syncServerState({
+        accessUsers: nextUsers,
+        deletedAccessUserIds: deletedIds,
+        accessRules: overrides?.accessRules || accessRules,
+        adminPassword: overrides?.adminPassword || adminPassword,
+        clientHydratedFromServer: hasHydratedFromServerRef.current
+      })
+      .then(ok => {
+        if (ok) {
+          setSyncStatus('synced');
+          if (!overrides?.extraDeletedId && pendingDeletedAccessUserIdsRef.current.length > 0) {
+            pendingDeletedAccessUserIdsRef.current = [];
+          }
+        }
+      })
+      .catch(() => {});
+  };
+
+  const refreshAccessState = async (): Promise<RegisteredAccessUser[]> => {
+    if (isPendingLocalSaveRef.current || isInitialLoad.current) return accessUsers;
+    try {
+      const json = await storageService.fetchServerState();
+      if (json && json.initialized && json.data) {
+        if (!hasHydratedFromServerRef.current) {
+          applyHydratedStateFromServer(json.data);
+          return Array.isArray(json.data.accessUsers) ? json.data.accessUsers : accessUsers;
+        }
+
+        const serverDeletedIds: string[] = Array.isArray(json.data.deletedAccessUserIds)
+          ? json.data.deletedAccessUserIds
+          : [];
+        const combinedDeletedIds = Array.from(
+          new Set([...serverDeletedIds, ...pendingDeletedAccessUserIdsRef.current])
+        );
+
+        let localUsersRaw: RegisteredAccessUser[] = accessUsers;
+        try {
+          const localStr = localStorage.getItem(STORAGE_KEYS.ACCESS_USERS);
+          if (localStr) {
+            const parsed = JSON.parse(localStr);
+            if (Array.isArray(parsed)) localUsersRaw = parsed;
+          }
+        } catch {
+          localUsersRaw = accessUsers;
+        }
+
+        const serverUsersRaw = Array.isArray(json.data.accessUsers) ? json.data.accessUsers : [];
+        const mergedUsers = mergeRegisteredUsers(
+          serverUsersRaw,
+          localUsersRaw,
+          combinedDeletedIds
+        );
+
+        let changed = false;
+        const mergedStr = JSON.stringify(mergedUsers);
+        const currentLocalStr = localStorage.getItem(STORAGE_KEYS.ACCESS_USERS);
+        if (mergedStr !== currentLocalStr) {
+          skipNextServerSyncRef.current = true;
+          setAccessUsers(mergedUsers);
+          localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, mergedStr);
+          changed = true;
+        }
+
+        if (json.data.accessRules && typeof json.data.accessRules === 'object') {
+          const mergedRules = { ...DEFAULT_ACCESS_RULES, ...json.data.accessRules };
+          const remoteRulesStr = JSON.stringify(mergedRules);
+          const localRulesStr = localStorage.getItem(STORAGE_KEYS.ACCESS_RULES);
+          if (remoteRulesStr !== localRulesStr) {
+            skipNextServerSyncRef.current = true;
+            setAccessRules(mergedRules);
+            localStorage.setItem(STORAGE_KEYS.ACCESS_RULES, remoteRulesStr);
+            changed = true;
+          }
+        }
+        if (typeof json.data.adminPassword === 'string' && json.data.adminPassword.trim()) {
+          const remotePass = json.data.adminPassword.trim();
+          const localPass = localStorage.getItem(STORAGE_KEYS.ADMIN_PASSWORD);
+          if (remotePass !== localPass) {
+            skipNextServerSyncRef.current = true;
+            setAdminPassword(remotePass);
+            localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, remotePass);
+            changed = true;
+          }
+        }
+
+        // Push back if local had unsynced accounts so they are permanently stored on server
+        if (mergedUsers.length > serverUsersRaw.length) {
+          syncAccessChangeNow(mergedUsers);
+        }
+
+        if (changed) {
+          setSyncStatus('synced');
+        }
+        return mergedUsers;
+      }
+    } catch {
+      // Ignore transient network errors during background poll
+    }
+    return accessUsers;
+  };
+
+  // Real-time background polling so users & devices stay automatically synchronized without losing existing users
+  useEffect(() => {
+    const pollMs = currentRole ? 10000 : 4000;
+    const interval = setInterval(() => {
+      refreshAccessState();
+    }, pollMs);
+    const handleFocus = () => {
+      refreshAccessState();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [currentRole]);
 
   // Save changes to localStorage AND server backend so all users and devices share the exact state
   useEffect(() => {
@@ -719,8 +996,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(tupoksiDefinitions));
     localStorage.setItem(STORAGE_KEYS.SUBTABS, JSON.stringify(roleSubTabs));
     localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(customCategories));
+    localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, JSON.stringify(accessUsers));
+    localStorage.setItem(STORAGE_KEYS.ACCESS_RULES, JSON.stringify(accessRules));
+    localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, adminPassword);
+
+    if (skipNextServerSyncRef.current) {
+      skipNextServerSyncRef.current = false;
+      return;
+    }
 
     if (!isInitialLoad.current) {
+      isPendingLocalSaveRef.current = true;
       setSyncStatus('saving');
       const timer = setTimeout(async () => {
         try {
@@ -735,16 +1021,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             customCategories,
             libraryBooks,
             libraryMembers,
-            libraryMemberStats
+            libraryMemberStats,
+            accessUsers,
+            deletedAccessUserIds: pendingDeletedAccessUserIdsRef.current,
+            accessRules,
+            adminPassword,
+            clientHydratedFromServer: hasHydratedFromServerRef.current
           });
-          setSyncStatus(ok ? 'synced' : 'offline');
+          if (ok) {
+            setSyncStatus('synced');
+            pendingDeletedAccessUserIdsRef.current = [];
+          } else {
+            setSyncStatus('offline');
+          }
         } catch (e) {
           setSyncStatus('offline');
+        } finally {
+          isPendingLocalSaveRef.current = false;
         }
-      }, 500);
-      return () => clearTimeout(timer);
+      }, 300);
+      return () => {
+        clearTimeout(timer);
+        isPendingLocalSaveRef.current = false;
+      };
     }
-  }, [tasks, inventories, libraryBooks, libraryMembers, libraryMemberStats, monthlyReports, annualReports, archives, schoolConfig, tupoksiDefinitions, customCategories]);
+  }, [tasks, inventories, libraryBooks, libraryMembers, libraryMemberStats, monthlyReports, annualReports, archives, schoolConfig, tupoksiDefinitions, customCategories, accessUsers, accessRules, adminPassword]);
 
   useEffect(() => {
     if (currentRole) {
@@ -1576,7 +1877,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetToDefaultData = () => {
-    localStorage.clear();
+    // Non-destructive towards registered users: NEVER wipe accessUsers, accessRules, adminPassword, or active login session
     setTasks(initialTasks);
     setInventories(initialInventories);
     setLibraryBooks(initialLibraryBooks);
@@ -1586,7 +1887,689 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAnnualReports(initialAnnualReports);
     setArchives(initialArchives);
     setSchoolConfig(initialSchoolConfig);
-    setCurrentRoleState(null);
+  };
+
+  // =========================================================================
+  // ACCESS CONTROL & LOGIN SYSTEM (ADMIN APPROVAL, UNIQUE PASSWORD, 1-SERVICE)
+  // =========================================================================
+
+  const registerAccessUser = ({
+    namaLengkap,
+    username,
+    role,
+    password
+  }: {
+    namaLengkap: string;
+    username: string;
+    role: RoleType;
+    password: string;
+  }): AuthActionResult => {
+    const cleanName = namaLengkap.trim();
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+    const usernameKey = cleanUsername.toLowerCase();
+
+    if (!cleanName || !cleanUsername || !cleanPassword) {
+      return {
+        ok: false,
+        message: 'Nama lengkap, nama pengguna (username), dan sandi wajib diisi lengkap.'
+      };
+    }
+
+    if (cleanUsername.length < 3) {
+      return {
+        ok: false,
+        message: 'Nama pengguna (username) minimal 3 karakter.'
+      };
+    }
+
+    if (cleanPassword.length < 4) {
+      return {
+        ok: false,
+        message: 'Sandi minimal 4 karakter.'
+      };
+    }
+
+    if (accessRules.enforceSingleServicePerUser) {
+      const existingUser = accessUsers.find(u => u.username.toLowerCase() === usernameKey);
+      if (existingUser) {
+        return {
+          ok: false,
+          message: `Pendaftaran ditolak! Nama pengguna "@${existingUser.username}" sudah terdaftar untuk layanan ${ROLE_LABELS_MAP[existingUser.role]}. Aturan pembatasan aktif: satu pengguna hanya boleh mengakses satu layanan saja.`
+        };
+      }
+    } else {
+      const exactDuplicate = accessUsers.find(
+        u => u.username.toLowerCase() === usernameKey && u.role === role
+      );
+      if (exactDuplicate) {
+        return {
+          ok: false,
+          message: `Nama pengguna "@${exactDuplicate.username}" sudah terdaftar pada layanan ${ROLE_LABELS_MAP[role]}.`
+        };
+      }
+    }
+
+    if (accessRules.enforceUniquePassword) {
+      const passwordConflict = accessUsers.find(
+        u => u.password === cleanPassword && u.username.toLowerCase() !== usernameKey
+      );
+      if (passwordConflict) {
+        return {
+          ok: false,
+          message: `Sandi ditolak! Sandi tersebut sudah digunakan oleh pengguna "@${passwordConflict.username}". Setiap sandi bersifat unik dan hanya bisa dikaitkan dengan satu nama pengguna saja.`
+        };
+      }
+    }
+
+    const newUser: RegisteredAccessUser = {
+      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      namaLengkap: cleanName,
+      username: cleanUsername,
+      role,
+      password: cleanPassword,
+      status: 'PENDING',
+      createdAt: new Date().toISOString()
+    };
+
+    const nextUsers = [newUser, ...accessUsers];
+    setAccessUsers(nextUsers);
+    setTrackedUsername(cleanUsername);
+    syncAccessChangeNow(nextUsers);
+
+    return {
+      ok: true,
+      user: newUser,
+      message: accessRules.requireAdminApproval
+        ? `Pendaftaran akun "@${cleanUsername}" untuk layanan ${ROLE_LABELS_MAP[role]} berhasil dikirim dengan status MENUNGGU PERSETUJUAN Admin.`
+        : `Pendaftaran akun "@${cleanUsername}" berhasil disimpan. Karena aturan persetujuan Admin sedang nonaktif, Anda dapat langsung masuk.`
+    };
+  };
+
+  const loginAccessUser = ({
+    username,
+    password,
+    expectedRole
+  }: {
+    username: string;
+    password: string;
+    expectedRole?: RoleType;
+  }): AuthActionResult => {
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+    const usernameKey = cleanUsername.toLowerCase();
+
+    if (!cleanUsername || !cleanPassword) {
+      return {
+        ok: false,
+        message: 'Nama pengguna dan sandi wajib diisi.'
+      };
+    }
+
+    // Rule 2: Unique Password Binding Check (checked upfront so User B trying User A's password gets exact rejection)
+    if (accessRules.enforceUniquePassword) {
+      const passwordOwner = accessUsers.find(
+        u => u.password === cleanPassword && u.username.toLowerCase() !== usernameKey
+      );
+      if (passwordOwner) {
+        return {
+          ok: false,
+          message: `Akses ditolak! Sandi tersebut sudah digunakan dan terikat eksklusif pada pengguna "@${passwordOwner.username}" (${passwordOwner.namaLengkap}). Pengguna lain tidak dapat memakai sandi tersebut.`
+        };
+      }
+    }
+
+    const matchingUsers = accessUsers.filter(u => u.username.toLowerCase() === usernameKey);
+    if (matchingUsers.length === 0) {
+      // Seamless automatic migration for legacy users who already have data and enter using their old service password
+      const allRoles: RoleType[] = ['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'];
+      let matchedLegacyRole: RoleType | undefined;
+
+      if (expectedRole) {
+        if (verifyRolePin(expectedRole, cleanPassword)) {
+          matchedLegacyRole = expectedRole;
+        }
+      } else {
+        matchedLegacyRole = allRoles.find(r => verifyRolePin(r, cleanPassword));
+      }
+
+      if (matchedLegacyRole) {
+        // Ensure unique password rule is respected if another user already claimed that exact password
+        const passwordClaimed = accessRules.enforceUniquePassword
+          ? accessUsers.some(u => u.password === cleanPassword && u.username.toLowerCase() !== usernameKey)
+          : false;
+
+        if (!passwordClaimed) {
+          const now = new Date().toISOString();
+          const legacyProfile = schoolConfig.operatorProfiles?.[matchedLegacyRole];
+          const resolvedName =
+            legacyProfile?.nama && legacyProfile.nama.trim()
+              ? legacyProfile.nama.trim()
+              : cleanUsername;
+
+          const migratedUser: RegisteredAccessUser = {
+            id: `usr-legacy-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            namaLengkap: resolvedName,
+            username: cleanUsername,
+            role: matchedLegacyRole,
+            password: cleanPassword,
+            status: 'APPROVED',
+            createdAt: now,
+            approvedAt: now,
+            lastLoginAt: now,
+            passwordUpdatedAt: now,
+            passwordChangeHistory: [
+              {
+                changedAt: now,
+                source: 'LEGACY_MIGRATION',
+                newPassword: cleanPassword
+              }
+            ]
+          };
+
+          const nextUsers = [migratedUser, ...accessUsers];
+          setAccessUsers(nextUsers);
+          setTrackedUsername(migratedUser.username);
+          setCurrentUser(migratedUser);
+          setCurrentRole(migratedUser.role);
+          setRoleSubTab(migratedUser.role, 'tasks');
+          setActiveNavTab('dashboard');
+          syncAccessChangeNow(nextUsers);
+
+          return {
+            ok: true,
+            user: migratedUser,
+            message: `Selamat datang, ${migratedUser.namaLengkap}! Akun lama Anda pada layanan ${ROLE_LABELS_MAP[migratedUser.role]} otomatis disinkronkan dan tercatat di sistem Admin.`
+          };
+        }
+      }
+
+      return {
+        ok: false,
+        message: `Nama pengguna "@${cleanUsername}" belum terdaftar. Jika Anda pengguna lama, masukkan sandi layanan lama Anda; jika baru, silakan ajukan pendaftaran akun terlebih dahulu.`
+      };
+    }
+
+    let targetUser: RegisteredAccessUser | undefined;
+
+    if (expectedRole) {
+      if (accessRules.enforceSingleServicePerUser) {
+        const primary = matchingUsers[0];
+        if (primary.role !== expectedRole) {
+          return {
+            ok: false,
+            message: `Akses layanan ditolak! Pengguna "@${primary.username}" hanya dapat mengakses layanan ${ROLE_LABELS_MAP[primary.role]} dan tidak diperbolehkan masuk ke ${ROLE_LABELS_MAP[expectedRole]}.`
+          };
+        }
+      }
+      targetUser = matchingUsers.find(u => u.role === expectedRole);
+      if (!targetUser) {
+        return {
+          ok: false,
+          message: `Pengguna "@${cleanUsername}" tidak memiliki akun untuk layanan ${ROLE_LABELS_MAP[expectedRole]}.`
+        };
+      }
+    } else {
+      targetUser = matchingUsers.find(u => u.password === cleanPassword) || matchingUsers[0];
+    }
+
+    if (targetUser.status === 'REJECTED') {
+      return {
+        ok: false,
+        message: `Akun "@${targetUser.username}" telah ditolak oleh Admin dan tidak dapat masuk ke sistem.`
+      };
+    }
+
+    if (accessRules.requireAdminApproval && targetUser.status !== 'APPROVED') {
+      return {
+        ok: false,
+        message: `Akun "@${targetUser.username}" masih berstatus MENUNGGU PERSETUJUAN Admin. Setiap pengguna harus disetujui oleh Admin terlebih dahulu sebelum bisa masuk.`
+      };
+    }
+
+    if (targetUser.password !== cleanPassword) {
+      return {
+        ok: false,
+        message: `Sandi salah untuk nama pengguna "@${targetUser.username}".`
+      };
+    }
+
+    const now = new Date().toISOString();
+    const loggedInUser: RegisteredAccessUser = {
+      ...targetUser,
+      lastLoginAt: now
+    };
+
+    setAccessUsers(prev => prev.map(u => (u.id === targetUser!.id ? loggedInUser : u)));
+    setTrackedUsername(loggedInUser.username);
+    setCurrentUser(loggedInUser);
+    setCurrentRole(loggedInUser.role);
+    setRoleSubTab(loggedInUser.role, 'tasks');
+    setActiveNavTab('dashboard');
+
+    if (targetUser.mustChangePassword) {
+      return {
+        ok: true,
+        requiresPasswordChange: true,
+        message: `Selamat datang, ${loggedInUser.namaLengkap}! Anda masuk menggunakan sandi sementara. Silakan buat sandi baru Anda.`,
+        user: loggedInUser
+      };
+    }
+
+    return {
+      ok: true,
+      message: `Selamat datang, ${loggedInUser.namaLengkap}! Berhasil masuk ke layanan ${ROLE_LABELS_MAP[loggedInUser.role]}.`,
+      user: loggedInUser
+    };
+  };
+
+  const logoutAccessUser = () => {
+    setCurrentUser(null);
+    setCurrentRole(null);
+    setActiveNavTab('dashboard');
+  };
+
+  const approveAccessUser = (userId: string, assignedPassword?: string): AuthActionResult => {
+    const target = accessUsers.find(u => u.id === userId);
+    if (!target) {
+      return { ok: false, message: 'Data pengguna tidak ditemukan.' };
+    }
+
+    const finalPassword = (assignedPassword !== undefined ? assignedPassword : target.password).trim();
+    if (finalPassword.length < 4) {
+      return { ok: false, message: 'Sandi pengguna minimal 4 karakter.' };
+    }
+
+    const usernameKey = target.username.toLowerCase();
+
+    if (accessRules.enforceUniquePassword) {
+      const conflict = accessUsers.find(
+        u => u.id !== target.id && u.username.toLowerCase() !== usernameKey && u.password === finalPassword
+      );
+      if (conflict) {
+        return {
+          ok: false,
+          message: `Gagal menyetujui! Sandi "${finalPassword}" sudah digunakan oleh pengguna "@${conflict.username}". Setiap sandi hanya bisa dikaitkan dengan satu nama pengguna.`
+        };
+      }
+    }
+
+    if (accessRules.enforceSingleServicePerUser) {
+      const serviceConflict = accessUsers.find(
+        u => u.id !== target.id && u.username.toLowerCase() === usernameKey && u.status === 'APPROVED'
+      );
+      if (serviceConflict) {
+        return {
+          ok: false,
+          message: `Gagal menyetujui! Pengguna "@${target.username}" sudah disetujui pada layanan ${ROLE_LABELS_MAP[serviceConflict.role]}. Aturan 1 pengguna = 1 layanan sedang aktif.`
+        };
+      }
+    }
+
+    const updatedUser: RegisteredAccessUser = {
+      ...target,
+      password: finalPassword,
+      status: 'APPROVED',
+      approvedAt: new Date().toISOString()
+    };
+
+    const nextUsers = accessUsers.map(u => (u.id === userId ? updatedUser : u));
+    setAccessUsers(nextUsers);
+    if (currentUser?.id === userId) {
+      setCurrentUser(updatedUser);
+    }
+    syncAccessChangeNow(nextUsers);
+
+    return {
+      ok: true,
+      message: `Akun "@${target.username}" resmi disetujui untuk layanan ${ROLE_LABELS_MAP[target.role]}.`,
+      user: updatedUser
+    };
+  };
+
+  const rejectAccessUser = (userId: string) => {
+    const nextUsers = accessUsers.map(u =>
+      u.id === userId ? { ...u, status: 'REJECTED' as UserAccountStatus } : u
+    );
+    setAccessUsers(nextUsers);
+    syncAccessChangeNow(nextUsers);
+    if (currentUser?.id === userId) {
+      logoutAccessUser();
+    }
+  };
+
+  const deleteAccessUser = (userId: string) => {
+    pendingDeletedAccessUserIdsRef.current = Array.from(
+      new Set([...pendingDeletedAccessUserIdsRef.current, userId])
+    );
+    const nextUsers = accessUsers.filter(u => u.id !== userId);
+    setAccessUsers(nextUsers);
+    storageService.deleteAccessUser(userId);
+    syncAccessChangeNow(nextUsers, { extraDeletedId: userId });
+    if (currentUser?.id === userId) {
+      logoutAccessUser();
+    }
+  };
+
+  const updateAccessUserPassword = (userId: string, newPassword: string): AuthActionResult => {
+    const target = accessUsers.find(u => u.id === userId);
+    if (!target) {
+      return { ok: false, message: 'Data pengguna tidak ditemukan.' };
+    }
+    const cleanPass = newPassword.trim();
+    if (cleanPass.length < 4) {
+      return { ok: false, message: 'Sandi baru minimal 4 karakter.' };
+    }
+
+    if (accessRules.enforceUniquePassword) {
+      const conflict = accessUsers.find(
+        u => u.id !== target.id && u.username.toLowerCase() !== target.username.toLowerCase() && u.password === cleanPass
+      );
+      if (conflict) {
+        return {
+          ok: false,
+          message: `Gagal memperbarui sandi! Sandi "${cleanPass}" sudah dipakai oleh pengguna "@${conflict.username}". Setiap sandi hanya bisa dikaitkan dengan satu nama pengguna.`
+        };
+      }
+    }
+
+    const now = new Date().toISOString();
+    const history = Array.isArray(target.passwordChangeHistory) ? target.passwordChangeHistory : [];
+    const updatedUser: RegisteredAccessUser = {
+      ...target,
+      password: cleanPass,
+      mustChangePassword: false,
+      resetRequestStatus: target.resetRequestStatus === 'RESET_ISSUED' ? 'COMPLETED' : target.resetRequestStatus,
+      passwordUpdatedAt: now,
+      passwordChangeHistory: [
+        {
+          changedAt: now,
+          source: target.resetRequestStatus === 'RESET_ISSUED' ? 'USER_AFTER_RESET' : 'USER_CHANGE',
+          newPassword: cleanPass
+        },
+        ...history
+      ]
+    };
+
+    const nextUsers = accessUsers.map(u => (u.id === userId ? updatedUser : u));
+    setAccessUsers(nextUsers);
+    if (currentUser?.id === userId) {
+      setCurrentUser(updatedUser);
+    }
+    syncAccessChangeNow(nextUsers);
+
+    return {
+      ok: true,
+      message: `Sandi baru untuk "@${target.username}" berhasil disimpan dan tercatat di sistem Admin.`,
+      user: updatedUser
+    };
+  };
+
+  const createAccessUserByAdmin = ({
+    namaLengkap,
+    username,
+    role,
+    password,
+    status = 'APPROVED'
+  }: {
+    namaLengkap: string;
+    username: string;
+    role: RoleType;
+    password: string;
+    status?: UserAccountStatus;
+  }): AuthActionResult => {
+    const cleanName = namaLengkap.trim();
+    const cleanUsername = username.trim();
+    const cleanPass = password.trim();
+    const usernameKey = cleanUsername.toLowerCase();
+
+    if (!cleanName || !cleanUsername || !cleanPass) {
+      return { ok: false, message: 'Nama lengkap, username, dan sandi wajib diisi.' };
+    }
+    if (cleanPass.length < 4) {
+      return { ok: false, message: 'Sandi minimal 4 karakter.' };
+    }
+
+    if (accessRules.enforceSingleServicePerUser) {
+      const existing = accessUsers.find(u => u.username.toLowerCase() === usernameKey);
+      if (existing) {
+        return {
+          ok: false,
+          message: `Username "@${existing.username}" sudah terdaftar untuk layanan ${ROLE_LABELS_MAP[existing.role]}. Aturan 1 pengguna = 1 layanan aktif.`
+        };
+      }
+    } else {
+      const duplicateRole = accessUsers.find(u => u.username.toLowerCase() === usernameKey && u.role === role);
+      if (duplicateRole) {
+        return {
+          ok: false,
+          message: `Username "@${duplicateRole.username}" sudah ada pada layanan ${ROLE_LABELS_MAP[role]}.`
+        };
+      }
+    }
+
+    if (accessRules.enforceUniquePassword) {
+      const passConflict = accessUsers.find(
+        u => u.password === cleanPass && u.username.toLowerCase() !== usernameKey
+      );
+      if (passConflict) {
+        return {
+          ok: false,
+          message: `Sandi "${cleanPass}" sudah digunakan oleh pengguna "@${passConflict.username}". Nonaktifkan aturan sandi unik jika ingin mengizinkan sandi ganda.`
+        };
+      }
+    }
+
+    const created: RegisteredAccessUser = {
+      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      namaLengkap: cleanName,
+      username: cleanUsername,
+      role,
+      password: cleanPass,
+      status,
+      createdAt: new Date().toISOString(),
+      approvedAt: status === 'APPROVED' ? new Date().toISOString() : undefined
+    };
+
+    const nextUsers = [created, ...accessUsers];
+    setAccessUsers(nextUsers);
+    syncAccessChangeNow(nextUsers);
+
+    return {
+      ok: true,
+      message: `Pengguna "@${cleanUsername}" berhasil ditambahkan.`,
+      user: created
+    };
+  };
+
+  const updateAccessRules = (updates: Partial<AccessSecurityRules>) => {
+    const nextRules = { ...accessRules, ...updates };
+    setAccessRules(nextRules);
+    syncAccessChangeNow(accessUsers, { accessRules: nextRules });
+  };
+
+  const verifyAdminPassword = (password: string): boolean => {
+    return password.trim() === adminPassword.trim();
+  };
+
+  const updateAdminPassword = (newPassword: string): AuthActionResult => {
+    const clean = newPassword.trim();
+    if (clean.length < 4) {
+      return { ok: false, message: 'Sandi Admin minimal 4 karakter.' };
+    }
+    setAdminPassword(clean);
+    syncAccessChangeNow(accessUsers, { adminPassword: clean });
+    return { ok: true, message: 'Sandi Admin berhasil diperbarui.' };
+  };
+
+  const requestPasswordReset = ({
+    username,
+    note
+  }: {
+    username: string;
+    note?: string;
+  }): AuthActionResult => {
+    const cleanUsername = username.trim();
+    const usernameKey = cleanUsername.toLowerCase();
+    if (!cleanUsername) {
+      return { ok: false, message: 'Masukkan nama pengguna (username) Anda.' };
+    }
+
+    const matches = accessUsers.filter(u => u.username.toLowerCase() === usernameKey);
+    if (matches.length === 0) {
+      return {
+        ok: false,
+        message: `Nama pengguna "@${cleanUsername}" tidak ditemukan di sistem.`
+      };
+    }
+
+    const activeMatch = matches.find(u => u.status !== 'REJECTED');
+    if (!activeMatch) {
+      return {
+        ok: false,
+        message: `Akun "@${cleanUsername}" berstatus DITOLAK oleh Admin.`
+      };
+    }
+
+    const now = new Date().toISOString();
+    const nextUsers = accessUsers.map(u =>
+      u.username.toLowerCase() === usernameKey && u.status !== 'REJECTED'
+        ? {
+            ...u,
+            resetRequestStatus: 'REQUESTED' as const,
+            resetRequestedAt: now,
+            resetRequestNote: note?.trim() || 'Lupa sandi, mohon reset sandi.'
+          }
+        : u
+    );
+    setAccessUsers(nextUsers);
+    setTrackedUsername(activeMatch.username);
+    syncAccessChangeNow(nextUsers);
+
+    return {
+      ok: true,
+      message: `Permintaan reset sandi untuk akun "@${activeMatch.username}" telah dikirim ke Admin. Notifikasi sandi reset akan muncul otomatis di halaman ini setelah diproses Admin.`
+    };
+  };
+
+  const issueResetPasswordByAdmin = (userId: string, tempResetPassword: string): AuthActionResult => {
+    const target = accessUsers.find(u => u.id === userId);
+    if (!target) {
+      return { ok: false, message: 'Data pengguna tidak ditemukan.' };
+    }
+
+    const cleanTemp = tempResetPassword.trim();
+    if (cleanTemp.length < 4) {
+      return { ok: false, message: 'Sandi reset sementara minimal 4 karakter.' };
+    }
+
+    if (accessRules.enforceUniquePassword) {
+      const conflict = accessUsers.find(
+        u => u.id !== target.id && u.username.toLowerCase() !== target.username.toLowerCase() && u.password === cleanTemp
+      );
+      if (conflict) {
+        return {
+          ok: false,
+          message: `Sandi reset "${cleanTemp}" sudah digunakan oleh pengguna "@${conflict.username}". Gunakan kombinasi sandi reset unik lainnya.`
+        };
+      }
+    }
+
+    const now = new Date().toISOString();
+    const history = Array.isArray(target.passwordChangeHistory) ? target.passwordChangeHistory : [];
+    const updatedUser: RegisteredAccessUser = {
+      ...target,
+      password: cleanTemp,
+      mustChangePassword: true,
+      resetRequestStatus: 'RESET_ISSUED',
+      resetIssuedAt: now,
+      passwordChangeHistory: [
+        {
+          changedAt: now,
+          source: 'RESET_BY_ADMIN',
+          newPassword: cleanTemp
+        },
+        ...history
+      ]
+    };
+
+    const nextUsers = accessUsers.map(u => (u.id === userId ? updatedUser : u));
+    setAccessUsers(nextUsers);
+    syncAccessChangeNow(nextUsers);
+    if (currentUser?.id === userId) {
+      logoutAccessUser();
+    }
+
+    return {
+      ok: true,
+      message: `Sandi reset sementara "${cleanTemp}" telah dikirim ke notifikasi akun "@${target.username}". Pengguna dapat melihatnya di pesan notifikasi akun dan mengganti sandi baru setelah masuk ke layanan.`,
+      user: updatedUser
+    };
+  };
+
+  const completePasswordResetWithNewPassword = (userId: string, newPassword: string): AuthActionResult => {
+    const target = accessUsers.find(u => u.id === userId);
+    if (!target) {
+      return { ok: false, message: 'Akun pengguna tidak ditemukan.' };
+    }
+
+    const cleanNew = newPassword.trim();
+    if (cleanNew.length < 4) {
+      return { ok: false, message: 'Sandi baru minimal 4 karakter.' };
+    }
+
+    if (cleanNew === target.password) {
+      return {
+        ok: false,
+        message: 'Sandi baru tidak boleh sama dengan sandi reset sementara. Buat sandi baru Anda sendiri.'
+      };
+    }
+
+    if (accessRules.enforceUniquePassword) {
+      const conflict = accessUsers.find(
+        u => u.id !== target.id && u.username.toLowerCase() !== target.username.toLowerCase() && u.password === cleanNew
+      );
+      if (conflict) {
+        return {
+          ok: false,
+          message: `Sandi baru ditolak! Sandi "${cleanNew}" sudah digunakan oleh pengguna "@${conflict.username}". Pilih sandi unik yang belum digunakan siapa pun.`
+        };
+      }
+    }
+
+    const now = new Date().toISOString();
+    const history = Array.isArray(target.passwordChangeHistory) ? target.passwordChangeHistory : [];
+    const updatedUser: RegisteredAccessUser = {
+      ...target,
+      password: cleanNew,
+      mustChangePassword: false,
+      resetRequestStatus: 'COMPLETED',
+      passwordUpdatedAt: now,
+      lastLoginAt: now,
+      passwordChangeHistory: [
+        {
+          changedAt: now,
+          source: 'USER_AFTER_RESET',
+          newPassword: cleanNew
+        },
+        ...history
+      ]
+    };
+
+    const nextUsers = accessUsers.map(u => (u.id === userId ? updatedUser : u));
+    setAccessUsers(nextUsers);
+    setTrackedUsername(updatedUser.username);
+    setCurrentUser(updatedUser);
+    setCurrentRole(updatedUser.role);
+    setRoleSubTab(updatedUser.role, 'tasks');
+    setActiveNavTab('dashboard');
+    syncAccessChangeNow(nextUsers);
+
+    return {
+      ok: true,
+      message: `Sandi baru Anda berhasil disimpan dan tercatat di Admin. Selamat datang, ${updatedUser.namaLengkap}!`,
+      user: updatedUser
+    };
   };
 
   return (
@@ -1656,6 +2639,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         rolePins,
         verifyRolePin,
         updateRolePin,
+        accessUsers,
+        accessRules,
+        currentUser,
+        setCurrentUser,
+        registerAccessUser,
+        loginAccessUser,
+        logoutAccessUser,
+        approveAccessUser,
+        rejectAccessUser,
+        deleteAccessUser,
+        updateAccessUserPassword,
+        createAccessUserByAdmin,
+        updateAccessRules,
+        verifyAdminPassword,
+        updateAdminPassword,
+        adminPassword,
+        requestPasswordReset,
+        issueResetPasswordByAdmin,
+        completePasswordResetWithNewPassword,
+        trackedUsername,
+        setTrackedUsername,
+        refreshAccessState,
         syncStatus
       }}
     >
