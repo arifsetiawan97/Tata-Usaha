@@ -9,6 +9,11 @@ import {
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from '../../utils/taskClassification';
 import { ROLE_OPERATIONAL_SPECS } from '../../data/roleOperationalSpecs';
+import {
+  computeLibraryMemberRecap,
+  computeMonthlyBookAdditions,
+  computeMonthlyMemberAdditions
+} from '../../utils/libraryStatsHelper';
 import { 
   FileText, 
   Printer, 
@@ -248,8 +253,10 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
     setActiveNavTab,
     libraryBooks,
     libraryMembers,
-    libraryMemberStats
+    libraryMemberStats,
+    effectiveSchoolConfig
   } = useApp();
+  const activeSchoolConfig = effectiveSchoolConfig || schoolConfig;
 
   const [selectedRole, setSelectedRole] = useState<RoleType>(initialRole || currentRole || 'TU');
 
@@ -357,47 +364,56 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
   const tambahanRate = tambahanTasks.length > 0 ? Math.round((tambahanCompleted / tambahanTasks.length) * 100) : 100;
   const totalRate = monthTasks.length > 0 ? Math.round((completedCount / monthTasks.length) * 100) : 100;
 
-  // Khusus Perpustakaan: Rekapitulasi Pemustaka & Buku Masuk Berkala Bulan Berjalan
+  // Khusus Perpustakaan: Rekapitulasi Pemustaka (L/P Akurat), Penambahan Anggota & Buku Masuk Bulan Berjalan
   const isPerpus = effectiveRole === 'PERPUS';
-  const targetMonthPrefix = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
-  const monthlyNewBooks = useMemo(() => {
-    if (!isPerpus) return [];
-    return libraryBooks.filter(book => {
-      const rawBulan = String(book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : ''));
-      if (rawBulan.startsWith(targetMonthPrefix)) return true;
-      if (book.tanggalMasuk && book.tanggalMasuk.startsWith(targetMonthPrefix)) return true;
-      return false;
-    });
-  }, [libraryBooks, isPerpus, targetMonthPrefix]);
 
-  const totalNewCopies = useMemo(() => {
-    return monthlyNewBooks.reduce((sum, b) => sum + (Number(b.jumlah) || 1), 0);
-  }, [monthlyNewBooks]);
+  const monthlyBookStats = useMemo(() => {
+    if (!isPerpus) {
+      return { books: [], judulCount: 0, eksemplarCount: 0, totalNilai: 0 };
+    }
+    return computeMonthlyBookAdditions(libraryBooks, selectedYear, selectedMonth);
+  }, [libraryBooks, isPerpus, selectedYear, selectedMonth]);
 
-  // SINKRONISASI AKURAT JUMLAH LAKI-LAKI & PEREMPUAN PENDIDIK & TENDIK DENGAN BUKU REKAP ANGGOTA
-  const registeredGuruLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'L').length;
-  const registeredGuruPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
-  const registeredStaffLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'L').length;
-  const registeredStaffPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
-  const registeredSiswaLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L' && m.status !== 'tamat' && m.status !== 'alumni').length;
-  const registeredSiswaPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P' && m.status !== 'tamat' && m.status !== 'alumni').length;
+  const monthlyNewBooks = monthlyBookStats.books;
+  const totalNewCopies = monthlyBookStats.eksemplarCount;
 
-  const guruLaki = (registeredGuruLaki + registeredGuruPerempuan > 0) ? registeredGuruLaki : (libraryMemberStats?.guruLaki ?? 10);
-  const guruPerempuan = (registeredGuruLaki + registeredGuruPerempuan > 0) ? registeredGuruPerempuan : (libraryMemberStats?.guruPerempuan ?? 14);
-  const totalGuru = (libraryMemberStats?.guruPendidik && libraryMemberStats.guruPendidik > 0 && registeredGuruLaki + registeredGuruPerempuan === 0)
-    ? libraryMemberStats.guruPendidik
-    : (guruLaki + guruPerempuan);
+  const monthlyMemberAdditions = useMemo(() => {
+    if (!isPerpus) {
+      return {
+        members: [],
+        total: 0,
+        guruLaki: 0,
+        guruPerempuan: 0,
+        guruTotal: 0,
+        staffLaki: 0,
+        staffPerempuan: 0,
+        staffTotal: 0,
+        siswaLaki: 0,
+        siswaPerempuan: 0,
+        siswaTotal: 0
+      };
+    }
+    return computeMonthlyMemberAdditions(libraryMembers, selectedYear, selectedMonth);
+  }, [libraryMembers, isPerpus, selectedYear, selectedMonth]);
 
-  const staffLaki = (registeredStaffLaki + registeredStaffPerempuan > 0) ? registeredStaffLaki : (libraryMemberStats?.staffLaki ?? 5);
-  const staffPerempuan = (registeredStaffLaki + registeredStaffPerempuan > 0) ? registeredStaffPerempuan : (libraryMemberStats?.staffPerempuan ?? 3);
-  const totalStaff = (libraryMemberStats?.staffTendik && libraryMemberStats.staffTendik > 0 && registeredStaffLaki + registeredStaffPerempuan === 0)
-    ? libraryMemberStats.staffTendik
-    : (staffLaki + staffPerempuan);
+  // SINKRONISASI AKURAT JUMLAH LAKI-LAKI & PEREMPUAN PENDIDIK, TENDIK, & SISWA DENGAN REKAP ANGGOTA
+  const memberRecap = useMemo(
+    () => computeLibraryMemberRecap(libraryMembers, libraryMemberStats),
+    [libraryMembers, libraryMemberStats]
+  );
 
-  const siswaLaki = (libraryMemberStats?.siswaLaki && libraryMemberStats.siswaLaki > 0) ? libraryMemberStats.siswaLaki : (registeredSiswaLaki > 0 ? registeredSiswaLaki : 142);
-  const siswaPerempuan = (libraryMemberStats?.siswaPerempuan && libraryMemberStats.siswaPerempuan > 0) ? libraryMemberStats.siswaPerempuan : (registeredSiswaPerempuan > 0 ? registeredSiswaPerempuan : 158);
-  const totalSiswa = siswaLaki + siswaPerempuan;
-  const totalAnggotaPerpus = totalGuru + totalStaff + totalSiswa;
+  const guruLaki = memberRecap.guruLaki;
+  const guruPerempuan = memberRecap.guruPerempuan;
+  const totalGuru = memberRecap.totalGuru;
+
+  const staffLaki = memberRecap.staffLaki;
+  const staffPerempuan = memberRecap.staffPerempuan;
+  const totalStaff = memberRecap.totalStaff;
+
+  const siswaLaki = memberRecap.siswaLaki;
+  const siswaPerempuan = memberRecap.siswaPerempuan;
+  const totalSiswa = memberRecap.totalSiswa;
+  const totalAnggotaPerpus = memberRecap.grandTotal;
 
   // KPI Management States
   const [isEditKpiModalOpen, setIsEditKpiModalOpen] = useState(false);
@@ -479,10 +495,13 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
           ? ` Disamping tugas pokok, unit perpustakaan juga berhasil menuntaskan tugas tambahan di lapangan berupa ${completedTambahan.slice(0, 2).map(t => t.title).join(', ')}.`
           : '';
         const bukuStr = monthlyNewBooks.length > 0
-          ? ` Pada bulan ini juga tercatat penambahan koleksi buku baru sebanyak ${totalNewCopies} eksemplar yang telah selesai diregistrasi ke buku induk.`
+          ? ` Pada bulan ini juga tercatat penambahan koleksi buku baru sebanyak ${monthlyNewBooks.length} judul (${totalNewCopies} eksemplar) yang telah selesai diregistrasi ke buku induk.`
+          : '';
+        const memberAddStr = monthlyMemberAdditions.total > 0
+          ? ` Penambahan pemustaka baru bulan ini tercatat ${monthlyMemberAdditions.total} orang (Pendidik L:${monthlyMemberAdditions.guruLaki}/P:${monthlyMemberAdditions.guruPerempuan}, Tendik L:${monthlyMemberAdditions.staffLaki}/P:${monthlyMemberAdditions.staffPerempuan}, Siswa L:${monthlyMemberAdditions.siswaLaki}/P:${monthlyMemberAdditions.siswaPerempuan}).`
           : '';
 
-        summaryText = `Sepanjang bulan ${monthName} ${selectedYear}, Layanan Operasional Perpustakaan Sekolah telah menyelesaikan ${completedCount} dari ${monthTasks.length} agenda kegiatan (${totalRate}% capaian target kinerja). Pelaksanaan tugas pokok (tupoksi) yang telah dituntaskan mencakup ${pokokStr}.${tambahanStr}${bukuStr} Seluruh pelayanan pemustaka bagi ${totalAnggotaPerpus} anggota (${totalGuru} guru, ${totalStaff} tendik, dan ${totalSiswa} siswa) berlangsung tertib, aman, dan akuntabel sesuai standar perpustakaan sekolah.`;
+        summaryText = `Sepanjang bulan ${monthName} ${selectedYear}, Layanan Operasional Perpustakaan Sekolah telah menyelesaikan ${completedCount} dari ${monthTasks.length} agenda kegiatan (${totalRate}% capaian target kinerja). Pelaksanaan tugas pokok (tupoksi) yang telah dituntaskan mencakup ${pokokStr}.${tambahanStr}${bukuStr}${memberAddStr} Seluruh pelayanan pemustaka bagi ${totalAnggotaPerpus} anggota (Pendidik ${totalGuru} [L:${guruLaki}/P:${guruPerempuan}], Tendik ${totalStaff} [L:${staffLaki}/P:${staffPerempuan}], dan Siswa ${totalSiswa} [L:${siswaLaki}/P:${siswaPerempuan}]) berlangsung tertib, aman, dan akuntabel sesuai standar perpustakaan sekolah.`;
       }
     } else {
       const pokokStr = completedTupoksi.length > 0 ? completedTupoksi.slice(0, 3).map(t => t.title).join(', ') : 'tugas pokok operasional rutin';
@@ -499,10 +518,13 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
       dynamicAchievements.push(`Penyelesaian ${completedTambahan.length} Tugas Tambahan: ${completedTambahan.slice(0, 3).map(t => t.title).join('; ')}`);
     }
     if (isPerpus && monthlyNewBooks.length > 0) {
-      dynamicAchievements.push(`Inventarisasi & registrasi penambahan ${totalNewCopies} eksemplar buku baru periode ${monthName} ${selectedYear}`);
+      dynamicAchievements.push(`Inventarisasi & registrasi penambahan ${monthlyNewBooks.length} judul (${totalNewCopies} eksemplar) buku baru periode ${monthName} ${selectedYear}`);
+    }
+    if (isPerpus && monthlyMemberAdditions.total > 0) {
+      dynamicAchievements.push(`Penambahan ${monthlyMemberAdditions.total} anggota perpustakaan baru bulan ${monthName} ${selectedYear} (Pendidik L:${monthlyMemberAdditions.guruLaki}/P:${monthlyMemberAdditions.guruPerempuan}, Tendik L:${monthlyMemberAdditions.staffLaki}/P:${monthlyMemberAdditions.staffPerempuan}, Siswa L:${monthlyMemberAdditions.siswaLaki}/P:${monthlyMemberAdditions.siswaPerempuan})`);
     }
     if (isPerpus) {
-      dynamicAchievements.push(`Pelayanan pemustaka sekolah (${totalAnggotaPerpus} anggota terdaftar: ${totalGuru} guru, ${totalStaff} tendik, ${totalSiswa} siswa)`);
+      dynamicAchievements.push(`Pelayanan pemustaka sekolah (${totalAnggotaPerpus} anggota terdaftar: Guru ${totalGuru} [L:${guruLaki}/P:${guruPerempuan}], Tendik ${totalStaff} [L:${staffLaki}/P:${staffPerempuan}], Siswa ${totalSiswa} [L:${siswaLaki}/P:${siswaPerempuan}])`);
     }
 
     const updated: MonthlyReport = {
@@ -537,7 +559,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
           month: selectedMonth,
           year: selectedYear,
           tasks: monthTasks,
-          schoolConfig,
+          schoolConfig: activeSchoolConfig,
           inventories: inventories.filter(i => i.role === effectiveRole)
         })
       });
@@ -637,7 +659,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
           }));
           showNotification('Template laporan berhasil diimpor!');
         } catch (err) {
-          alert('Gagal membaca file JSON template!');
+          showNotification('Gagal membaca file JSON template!');
         }
       };
       reader.readAsText(file);
@@ -680,7 +702,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
       const docHtml = generateOfficialDocumentWord({
         reportType: 'monthly',
         reportData: reportState,
-        schoolConfig,
+        schoolConfig: activeSchoolConfig,
         tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         tupoksiDefinitions,
@@ -703,7 +725,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
       const doc = await createOfficialDocumentDocx({
         reportType: 'monthly',
         reportData: reportState,
-        schoolConfig,
+        schoolConfig: activeSchoolConfig,
         tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         tupoksiDefinitions,
@@ -726,7 +748,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
       const fullHtml = generateOfficialDocumentHtml({
         reportType: 'monthly',
         reportData: reportState,
-        schoolConfig,
+        schoolConfig: activeSchoolConfig,
         tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         tupoksiDefinitions,
@@ -1148,6 +1170,41 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
               <p className="text-[10px] text-slate-300 mt-0.5">
                 Pemustaka Siswa (P)
               </p>
+            </div>
+          </div>
+
+          {/* Pencatatan Otomatis Penambahan Buku & Anggota Baru Bulan Berjalan */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/10">
+            <div className="p-3 bg-white/10 rounded-xl border border-white/15 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Buku Baru Masuk ({MONTH_NAMES[selectedMonth - 1]} {selectedYear})</span>
+                </div>
+                <p className="text-[10.5px] text-blue-100 mt-0.5">
+                  Tercatat otomatis dari katalog buku induk perpustakaan bulan berjalan.
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-base font-black text-white font-mono">+{monthlyNewBooks.length} Judul</div>
+                <div className="text-[10.5px] text-emerald-300 font-mono font-bold">+{totalNewCopies} Eksemplar</div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-white/10 rounded-xl border border-white/15 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Anggota Baru Masuk ({MONTH_NAMES[selectedMonth - 1]} {selectedYear})</span>
+                </div>
+                <p className="text-[10.5px] text-blue-100 mt-0.5 font-mono">
+                  Pendidik (L:{monthlyMemberAdditions.guruLaki}/P:{monthlyMemberAdditions.guruPerempuan}) · Tendik (L:{monthlyMemberAdditions.staffLaki}/P:{monthlyMemberAdditions.staffPerempuan}) · Siswa (L:{monthlyMemberAdditions.siswaLaki}/P:{monthlyMemberAdditions.siswaPerempuan})
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-base font-black text-white font-mono">+{monthlyMemberAdditions.total}</div>
+                <div className="text-[10.5px] text-amber-300 font-semibold">Pemustaka</div>
+              </div>
             </div>
           </div>
         </div>

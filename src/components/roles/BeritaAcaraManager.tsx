@@ -49,7 +49,7 @@ const CATEGORY_FILTERS: CategoryFilter[] = [
 ];
 
 export const BeritaAcaraManager: React.FC = () => {
-  const { schoolConfig, inventories } = useApp();
+  const { effectiveSchoolConfig: schoolConfig, inventories } = useApp();
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('Semua');
   const [activeTemplateId, setActiveTemplateId] = useState<BeritaAcaraTemplateId>('kelulusan');

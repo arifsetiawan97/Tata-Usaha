@@ -46,7 +46,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   readOnly = false,
   title
 }) => {
-  const { inventories, addInventory, updateInventory, deleteInventory, deleteMultipleInventories, importInventories, currentRole, schoolConfig } = useApp();
+  const { inventories, addInventory, updateInventory, deleteInventory, deleteMultipleInventories, importInventories, currentRole, effectiveSchoolConfig: schoolConfig } = useApp();
   const effectiveRole = role || currentRole || 'TU';
   const roleTitle = 
     effectiveRole === 'TU' ? 'Tata Usaha' : 

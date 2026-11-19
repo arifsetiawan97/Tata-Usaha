@@ -1644,7 +1644,7 @@
       "createdAt": "2026-09-01"
     }
   ],
-  "lastUpdated": "2026-11-18T01:47:14.928Z",
+  "lastUpdated": "2026-11-19T01:58:00.574Z",
   "libraryBooks": [
     {
       "id": "bk-2026-07-01",
@@ -1913,17 +1913,6 @@
     "lastUpdated": "2026-10-25"
   },
   "accessUsers": [
-    {
-      "id": "usr-test-verify",
-      "namaLengkap": "Petugas Uji Verifikasi",
-      "username": "uji_verify_temp",
-      "role": "TU",
-      "password": "9999",
-      "status": "PENDING",
-      "createdAt": "2026-11-18T01:46:55.255Z",
-      "mustChangePassword": false,
-      "passwordChangeHistory": []
-    },
     {
       "id": "usr-legacy-1794964826881-nlsu3",
       "namaLengkap": "ARIF SETIAWAN, SE",

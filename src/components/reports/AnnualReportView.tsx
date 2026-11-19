@@ -4,6 +4,7 @@ import { RoleType, AnnualReport } from '../../types';
 import { InventoryTable } from '../common/InventoryTable';
 import { ROLE_OPERATIONAL_SPECS } from '../../data/roleOperationalSpecs';
 import { calculateAnnualPerformanceSummary } from '../../utils/annualPerformanceHelper';
+import { computeLibraryMemberRecap } from '../../utils/libraryStatsHelper';
 import { 
   Award, 
   Printer, 
@@ -114,11 +115,13 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
     archiveReport,
     inventories,
     schoolConfig,
+    effectiveSchoolConfig,
     tupoksiDefinitions,
     libraryBooks,
     libraryMembers,
     libraryMemberStats
   } = useApp();
+  const activeSchoolConfig = effectiveSchoolConfig || schoolConfig;
 
   const [selectedRole, setSelectedRole] = useState<RoleType>(initialRole || currentRole || 'TU');
 
@@ -145,6 +148,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
   ) || generateAnnualReportFromMonthly(effectiveRole, selectedYear);
 
   const [reportState, setReportState] = useState<AnnualReport>(activeReport);
+  const [hasManualSummaryEdit, setHasManualSummaryEdit] = useState(false);
   const [newMilestone, setNewMilestone] = useState('');
   const [newRec, setNewRec] = useState('');
   const [newObstacle, setNewObstacle] = useState('');
@@ -152,23 +156,58 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Synchronize report state if role or year changes
+  // Reset manual edit flag when role or year switches
   useEffect(() => {
-    const rep = annualReports.find(
+    setHasManualSummaryEdit(false);
+  }, [effectiveRole, selectedYear]);
+
+  // Automatically sync Annual Report & Executive Narrative with Monthly Reports + real data
+  useEffect(() => {
+    const savedRep = annualReports.find(
       r => r.role === effectiveRole && r.year === selectedYear
-    ) || generateAnnualReportFromMonthly(effectiveRole, selectedYear);
-    setReportState(rep);
-  }, [effectiveRole, selectedYear, annualReports]);
+    );
+    const autoRep = generateAnnualReportFromMonthly(effectiveRole, selectedYear, true);
 
-  // 12-Month Annual Performance Recapitulation (Tugas Pokok & Tugas Tambahan with Volume & %)
+    if (!savedRep) {
+      setReportState(autoRep);
+      return;
+    }
+
+    setReportState(prev => ({
+      ...savedRep,
+      summary: hasManualSummaryEdit && prev.role === effectiveRole && prev.year === selectedYear
+        ? prev.summary
+        : autoRep.summary,
+      annualMilestones: autoRep.annualMilestones.length > 0 ? autoRep.annualMilestones : savedRep.annualMilestones
+    }));
+  }, [
+    effectiveRole,
+    selectedYear,
+    annualReports,
+    monthlyReports,
+    tasks,
+    libraryBooks,
+    libraryMembers,
+    libraryMemberStats,
+    hasManualSummaryEdit
+  ]);
+
+  // 12-Month Annual Performance Recapitulation synced with Monthly Reports
   const annualPerformance = useMemo(() => {
-    return calculateAnnualPerformanceSummary(tasks, effectiveRole, selectedYear);
-  }, [tasks, effectiveRole, selectedYear]);
+    return calculateAnnualPerformanceSummary(tasks, effectiveRole, selectedYear, {
+      monthlyReports,
+      libraryBooks,
+      libraryMembers
+    });
+  }, [tasks, effectiveRole, selectedYear, monthlyReports, libraryBooks, libraryMembers]);
 
-  // Khusus Perpustakaan: Rekapitulasi Pemustaka & Data Seluruh Koleksi Buku Terdata
+  // Khusus Perpustakaan: Rekapitulasi Pemustaka (L/P Akurat) & Data Seluruh Koleksi Buku Terdata
   const isPerpus = effectiveRole === 'PERPUS';
-  const totalSiswaMember = (libraryMemberStats.siswaLaki || 0) + (libraryMemberStats.siswaPerempuan || 0);
-  const totalAnggotaPerpus = (libraryMemberStats.guruPendidik || 0) + (libraryMemberStats.staffTendik || 0) + totalSiswaMember;
+  const memberRecap = useMemo(
+    () => computeLibraryMemberRecap(libraryMembers, libraryMemberStats),
+    [libraryMembers, libraryMemberStats]
+  );
+  const totalAnggotaPerpus = memberRecap.grandTotal;
   const totalAllBookCopies = useMemo(() => {
     return libraryBooks.reduce((sum, b) => sum + (Number(b.jumlah) || 1), 0);
   }, [libraryBooks]);
@@ -407,7 +446,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
           year: selectedYear,
           monthsSummary: monthsData,
           tasks: tasks.filter(t => t.role === effectiveRole),
-          schoolConfig,
+          schoolConfig: activeSchoolConfig,
           inventories: inventories.filter(i => i.role === effectiveRole)
         })
       });
@@ -443,54 +482,32 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
     }
   };
 
-  // Compute 12-month summary from tasks & monthly reports
-  const monthsData = Array.from({ length: 12 }, (_, i) => {
-    const month = i + 1;
-    const mTasks = tasks.filter(t => {
-      if (t.role !== effectiveRole) return false;
-      const d = new Date(t.date);
-      return d.getMonth() + 1 === month && d.getFullYear() === selectedYear;
-    });
+  // Compute 12-month summary strictly from annualPerformance (tasks + monthly reports)
+  const monthsData = annualPerformance.items.map(item => ({
+    month: item.monthIndex + 1,
+    monthName: item.monthName,
+    taskCount: item.totalTasks,
+    rate: item.percentage,
+    status: item.approvalStatus
+  }));
 
-    const mReport = monthlyReports.find(
-      r => r.role === effectiveRole && r.month === month && r.year === selectedYear
-    );
-
-    const completedCount = mTasks.filter(t => t.status === 'selesai').length;
-    const rate = mTasks.length > 0 
-      ? Math.round((completedCount / mTasks.length) * 100) 
-      : (month <= 9 ? 98 : 0);
-
-    const count = mTasks.length > 0 ? mTasks.length : (month <= 9 ? 22 : 0);
-
-    return {
-      month,
-      monthName: MONTH_NAMES[i],
-      taskCount: count,
-      rate,
-      status: mReport ? mReport.approvalStatus : (month <= 9 ? 'disahkan_kepsek' : 'belum_berjalan')
-    };
-  });
-
-  const totalYearTasks = monthsData.reduce((acc, m) => acc + m.taskCount, 0);
+  const totalYearTasks = annualPerformance.totalTasks;
   const activeMonths = monthsData.filter(m => m.taskCount > 0);
-  const avgCompletionRate = activeMonths.length > 0
-    ? Math.round(activeMonths.reduce((acc, m) => acc + m.rate, 0) / activeMonths.length)
-    : 100;
+  const avgCompletionRate = Math.round(annualPerformance.averagePercentage);
 
   const handleYearChange = (y: number) => {
     setSelectedYear(y);
-    const rep = annualReports.find(
-      r => r.role === effectiveRole && r.year === y
-    ) || generateAnnualReportFromMonthly(effectiveRole, y);
+    setHasManualSummaryEdit(false);
+    const rep = generateAnnualReportFromMonthly(effectiveRole, y, true);
     setReportState(rep);
   };
 
   const handleSyncFromMonthly = () => {
-    const fresh = generateAnnualReportFromMonthly(effectiveRole, selectedYear);
+    setHasManualSummaryEdit(false);
+    const fresh = generateAnnualReportFromMonthly(effectiveRole, selectedYear, true);
     setReportState(fresh);
     saveAnnualReport(fresh);
-    showNotification('Data disinkronkan kembali dari kompilasi laporan bulanan!');
+    showNotification('Data & Narasi Ringkasan Eksekutif Tahunan disinkronkan otomatis dari kompilasi laporan bulanan!');
   };
 
   const handleLoadOfficialTemplate = () => {
@@ -595,10 +612,11 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
       const docHtml = generateOfficialDocumentWord({
         reportType: 'annual',
         reportData: reportState,
-        schoolConfig,
+        schoolConfig: activeSchoolConfig,
         tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         tupoksiDefinitions,
+        monthlyReports,
         libraryBooks: effectiveRole === 'PERPUS' ? libraryBooks : [],
         libraryMembers: effectiveRole === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: effectiveRole === 'PERPUS' ? libraryMemberStats : undefined
@@ -618,10 +636,11 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
       const doc = await createOfficialDocumentDocx({
         reportType: 'annual',
         reportData: reportState,
-        schoolConfig,
+        schoolConfig: activeSchoolConfig,
         tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         tupoksiDefinitions,
+        monthlyReports,
         libraryBooks: effectiveRole === 'PERPUS' ? libraryBooks : [],
         libraryMembers: effectiveRole === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: effectiveRole === 'PERPUS' ? libraryMemberStats : undefined
@@ -641,10 +660,11 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
       const fullHtml = generateOfficialDocumentHtml({
         reportType: 'annual',
         reportData: reportState,
-        schoolConfig,
+        schoolConfig: activeSchoolConfig,
         tasks: tasks.filter(t => t.role && t.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         inventories: inventories.filter(i => i.role && i.role.trim().toUpperCase() === effectiveRole.trim().toUpperCase()),
         tupoksiDefinitions,
+        monthlyReports,
         libraryBooks: effectiveRole === 'PERPUS' ? libraryBooks : [],
         libraryMembers: effectiveRole === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: effectiveRole === 'PERPUS' ? libraryMemberStats : undefined
@@ -920,12 +940,15 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
                   <span>Guru (Pendidik)</span>
                 </span>
                 <span className="text-[10px] text-emerald-300 font-mono font-semibold">
-                  L: {libraryMemberStats.guruLaki ?? 10} · P: {libraryMemberStats.guruPerempuan ?? 14}
+                  L: {memberRecap.guruLaki} · P: {memberRecap.guruPerempuan}
                 </span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
-                {libraryMemberStats.guruPendidik || 0} <span className="text-xs font-normal text-blue-200">orang</span>
+                {memberRecap.totalGuru} <span className="text-xs font-normal text-blue-200">orang</span>
               </div>
+              <p className="text-[10px] text-slate-300 mt-0.5">
+                Laki-laki: {memberRecap.guruLaki} · Perempuan: {memberRecap.guruPerempuan}
+              </p>
             </div>
 
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
@@ -935,12 +958,15 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
                   <span>Staff (Tendik / TU)</span>
                 </span>
                 <span className="text-[10px] text-amber-300 font-mono font-semibold">
-                  L: {libraryMemberStats.staffLaki ?? 5} · P: {libraryMemberStats.staffPerempuan ?? 3}
+                  L: {memberRecap.staffLaki} · P: {memberRecap.staffPerempuan}
                 </span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
-                {libraryMemberStats.staffTendik || 0} <span className="text-xs font-normal text-blue-200">orang</span>
+                {memberRecap.totalStaff} <span className="text-xs font-normal text-blue-200">orang</span>
               </div>
+              <p className="text-[10px] text-slate-300 mt-0.5">
+                Laki-laki: {memberRecap.staffLaki} · Perempuan: {memberRecap.staffPerempuan}
+              </p>
             </div>
 
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
@@ -949,8 +975,11 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
                 <span>Siswa Laki-laki</span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
-                {libraryMemberStats.siswaLaki || 0} <span className="text-xs font-normal text-blue-200">orang</span>
+                {memberRecap.siswaLaki} <span className="text-xs font-normal text-blue-200">orang</span>
               </div>
+              <p className="text-[10px] text-slate-300 mt-0.5">
+                Pemustaka Siswa (L)
+              </p>
             </div>
 
             <div className="p-3 bg-white/5 rounded-xl border border-white/10">
@@ -959,8 +988,11 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
                 <span>Siswa Perempuan</span>
               </div>
               <div className="text-xl font-bold mt-1 text-white">
-                {libraryMemberStats.siswaPerempuan || 0} <span className="text-xs font-normal text-blue-200">orang</span>
+                {memberRecap.siswaPerempuan} <span className="text-xs font-normal text-blue-200">orang</span>
               </div>
+              <p className="text-[10px] text-slate-300 mt-0.5">
+                Pemustaka Siswa (P)
+              </p>
             </div>
           </div>
         </div>
@@ -1118,13 +1150,22 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-1.5">
-            Uraian Narasi Ringkasan Eksekutif Tahunan:
-          </label>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+            <label className="block text-xs font-bold text-slate-800">
+              Uraian Narasi Ringkasan Eksekutif Tahunan:
+            </label>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10.5px] font-semibold">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>Tersinkron Otomatis dari Lapor Bulanan</span>
+            </span>
+          </div>
           <textarea
             rows={4}
             value={reportState.summary}
-            onChange={(e) => setReportState(prev => ({ ...prev, summary: e.target.value }))}
+            onChange={(e) => {
+              setHasManualSummaryEdit(true);
+              setReportState(prev => ({ ...prev, summary: e.target.value }));
+            }}
             className="w-full p-3 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 leading-relaxed font-sans"
             placeholder="Ketik uraian ringkasan eksekutif kinerja tahunan..."
           />
@@ -1694,6 +1735,84 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
                   </td>
                   <td className="py-2.5 px-3 text-center font-mono font-bold text-blue-950">
                     {totalYearAddedCopies} Eks
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* KHUSUS PERPUSTAKAAN: REKAPITULASI PENAMBAHAN ANGGOTA PERPUSTAKAAN PER BULAN (L/P) */}
+      {isPerpus && (
+        <div className="p-5 bg-white border border-slate-200 rounded-xl space-y-4 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                  Rekapitulasi Penambahan Anggota Perpustakaan per Bulan (L/P)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Tercatat otomatis setiap bulan dari direktori pemustaka baru (Pendidik, Tendik, dan Siswa L/P) Tahun Anggaran {selectedYear}
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1 bg-indigo-50 text-indigo-800 border border-indigo-200 text-xs font-bold rounded-lg">
+              Total Anggota Baru {selectedYear}: {annualPerformance.totalMembersAdded} Orang
+            </span>
+          </div>
+
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2 px-2.5 text-center w-9">No</th>
+                  <th className="py-2 px-3">Bulan</th>
+                  <th className="py-2 px-2.5 text-center">Pendidik (L / P)</th>
+                  <th className="py-2 px-2.5 text-center">Tendik (L / P)</th>
+                  <th className="py-2 px-2.5 text-center">Siswa (L / P)</th>
+                  <th className="py-2 px-2.5 text-center">Total Baru</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {annualPerformance.items.map((item, idx) => (
+                  <tr key={item.monthIndex} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-2 px-2.5 text-center font-mono text-slate-500 text-[11px]">{idx + 1}</td>
+                    <td className="py-2 px-3 font-semibold text-slate-900">{item.monthName} {selectedYear}</td>
+                    <td className="py-2 px-2.5 text-center font-mono text-[11px]">
+                      L:{item.membersAddedGuruL} / P:{item.membersAddedGuruP}
+                    </td>
+                    <td className="py-2 px-2.5 text-center font-mono text-[11px]">
+                      L:{item.membersAddedStaffL} / P:{item.membersAddedStaffP}
+                    </td>
+                    <td className="py-2 px-2.5 text-center font-mono text-[11px]">
+                      L:{item.membersAddedSiswaL} / P:{item.membersAddedSiswaP}
+                    </td>
+                    <td className="py-2 px-2.5 text-center font-mono font-bold text-indigo-800">
+                      {item.membersAddedTotal > 0 ? `+${item.membersAddedTotal} org` : '0 org'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
+                <tr>
+                  <td colSpan={2} className="py-2.5 px-3 text-center uppercase text-xs">
+                    Total Penambahan Anggota ({selectedYear}):
+                  </td>
+                  <td className="py-2.5 px-2.5 text-center font-mono text-[11px]">
+                    L:{annualPerformance.items.reduce((s, it) => s + it.membersAddedGuruL, 0)} / P:{annualPerformance.items.reduce((s, it) => s + it.membersAddedGuruP, 0)}
+                  </td>
+                  <td className="py-2.5 px-2.5 text-center font-mono text-[11px]">
+                    L:{annualPerformance.items.reduce((s, it) => s + it.membersAddedStaffL, 0)} / P:{annualPerformance.items.reduce((s, it) => s + it.membersAddedStaffP, 0)}
+                  </td>
+                  <td className="py-2.5 px-2.5 text-center font-mono text-[11px]">
+                    L:{annualPerformance.items.reduce((s, it) => s + it.membersAddedSiswaL, 0)} / P:{annualPerformance.items.reduce((s, it) => s + it.membersAddedSiswaP, 0)}
+                  </td>
+                  <td className="py-2.5 px-2.5 text-center font-mono font-black text-indigo-900">
+                    +{annualPerformance.totalMembersAdded} Orang
                   </td>
                 </tr>
               </tfoot>

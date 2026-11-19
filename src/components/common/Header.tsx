@@ -38,7 +38,7 @@ export const Header: React.FC = () => {
     setActiveNavTab, 
     roleSubTabs,
     setRoleSubTab,
-    schoolConfig,
+    effectiveSchoolConfig: schoolConfig,
     resetToDefaultData,
     tasks,
     inventories,

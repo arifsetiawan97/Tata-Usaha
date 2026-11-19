@@ -31,7 +31,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   onClose,
   initialRole
 }) => {
-  const { currentRole, schoolConfig, tasks, inventories } = useApp();
+  const { currentRole, effectiveSchoolConfig: schoolConfig, tasks, inventories } = useApp();
   const effectiveRole = initialRole || currentRole || 'TU';
 
   const [mode, setMode] = useState<'chat' | 'draft-letter' | 'bast-document' | 'incident-report' | 'sop-advice'>('chat');
@@ -126,12 +126,10 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
 
   const handlePrint = () => {
     if (!responseOutput) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      // fallback to standard print
-      window.print();
-      return;
-    }
+    const escapedText = responseOutput
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -144,17 +142,36 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
           </style>
         </head>
         <body>
-          <pre>${responseOutput}</pre>
-          <script>
-            window.onload = function() {
-              window.print();
-            };
-          </script>
+          <pre>${escapedText}</pre>
         </body>
       </html>
     `;
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      window.print();
+      return;
+    }
+    doc.open();
+    doc.write(htmlContent);
+    doc.close();
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 1000);
+    }, 150);
   };
 
   if (!isOpen) return null;

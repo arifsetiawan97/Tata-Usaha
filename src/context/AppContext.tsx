@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { 
   RoleType, 
   TaskLog, 
@@ -6,6 +6,9 @@ import {
   MonthlyReport, 
   AnnualReport, 
   SchoolConfig,
+  SchoolOfficer,
+  UserLetterheadConfig,
+  UserSignatureConfig,
   ArchiveDocument,
   TupoksiDefinitionsMap,
   CustomCategory,
@@ -44,6 +47,14 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   mergeRegisteredUsers
 } from '../utils/accessSync';
+import {
+  getEffectiveSchoolConfigForUser,
+  getUserIsolationKey,
+  hasActiveCustomLetterhead,
+  hasActiveCustomSignature,
+  mergeUserIsolatedRecords
+} from '../utils/letterheadHelper';
+import { generateAnnualNarrativeBundle } from '../utils/annualPerformanceHelper';
 
 export type { RoleSubTab };
 
@@ -88,7 +99,22 @@ interface AppContextType {
   deleteArchive: (id: string) => void;
   archiveReport: (type: 'monthly' | 'annual', data: any, customTitle?: string) => ArchiveDocument;
   schoolConfig: SchoolConfig;
+  effectiveSchoolConfig: SchoolConfig;
+  hasCustomLetterhead: boolean;
+  hasCustomSignature: boolean;
   updateSchoolConfig: (config: Partial<SchoolConfig>) => void;
+  saveUserLetterhead: (kop: Partial<UserLetterheadConfig> & { logoAplikasiUrl?: string }) => void;
+  resetUserLetterhead: () => void;
+  saveUserSignature: (payload: {
+    kepalaSekolah?: SchoolOfficer;
+    operatorProfile?: SchoolOfficer;
+    role?: RoleType;
+    stempelEnabled?: boolean;
+    stempelTextLine1?: string;
+    stempelTextLine2?: string;
+    customStempelUrl?: string;
+  }) => void;
+  resetUserSignature: () => void;
   tupoksiDefinitions: TupoksiDefinitionsMap;
   addTupoksiItem: (role: RoleType, type: 'pokok' | 'tambahan', text: string) => void;
   updateTupoksiItem: (role: RoleType, type: 'pokok' | 'tambahan', index: number, newText: string) => void;
@@ -105,7 +131,7 @@ interface AppContextType {
   lastAddedTaskMonthYear: { month: number; year: number } | null;
   setLastAddedTaskMonthYear: (val: { month: number; year: number } | null) => void;
   generateMonthlyReportFromTasks: (role: RoleType, month: number, year: number, forceFresh?: boolean) => MonthlyReport;
-  generateAnnualReportFromMonthly: (role: RoleType, year: number) => AnnualReport;
+  generateAnnualReportFromMonthly: (role: RoleType, year: number, forceFresh?: boolean) => AnnualReport;
   activeNavTab: string;
   setActiveNavTab: (tab: string) => void;
   resetToDefaultData: () => void;
@@ -187,8 +213,21 @@ const STORAGE_KEYS = {
   PINS: 'siops_role_pins',
   CUSTOM_CATEGORIES: 'siops_custom_categories'
 };
-export const mergeSchoolConfigWithDefaults = (sourceConfig: any): SchoolConfig => {
-  if (!sourceConfig || typeof sourceConfig !== 'object') return initialSchoolConfig;
+export const mergeSchoolConfigWithDefaults = (
+  sourceConfig: any,
+  existingConfig?: SchoolConfig
+): SchoolConfig => {
+  if (!sourceConfig || typeof sourceConfig !== 'object') {
+    return existingConfig || initialSchoolConfig;
+  }
+  const mergedLetterheads = mergeUserIsolatedRecords(
+    existingConfig?.userLetterheads,
+    sourceConfig.userLetterheads
+  );
+  const mergedSignatures = mergeUserIsolatedRecords(
+    existingConfig?.userSignatures,
+    sourceConfig.userSignatures
+  );
   return {
     ...initialSchoolConfig,
     ...sourceConfig,
@@ -202,7 +241,9 @@ export const mergeSchoolConfigWithDefaults = (sourceConfig: any): SchoolConfig =
       SERVICE: { ...initialSchoolConfig.operatorProfiles.SERVICE, ...(sourceConfig.operatorProfiles?.SERVICE || {}) },
       PERPUS: { ...initialSchoolConfig.operatorProfiles.PERPUS, ...(sourceConfig.operatorProfiles?.PERPUS || {}) },
       LAB_IPA: { ...initialSchoolConfig.operatorProfiles.LAB_IPA, ...(sourceConfig.operatorProfiles?.LAB_IPA || {}) }
-    }
+    },
+    ...(mergedLetterheads ? { userLetterheads: mergedLetterheads } : {}),
+    ...(mergedSignatures ? { userSignatures: mergedSignatures } : {})
   };
 };
 
@@ -408,6 +449,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return initialSchoolConfig;
   });
+
+  const schoolConfigRef = useRef<SchoolConfig>(schoolConfig);
+  schoolConfigRef.current = schoolConfig;
+
+  const effectiveSchoolConfig = useMemo<SchoolConfig>(
+    () => getEffectiveSchoolConfigForUser(schoolConfig, currentUser, currentRole),
+    [schoolConfig, currentUser, currentRole]
+  );
+
+  const hasCustomLetterhead = useMemo<boolean>(
+    () => hasActiveCustomLetterhead(schoolConfig, currentUser),
+    [schoolConfig, currentUser]
+  );
+
+  const hasCustomSignature = useMemo<boolean>(
+    () => hasActiveCustomSignature(schoolConfig, currentUser),
+    [schoolConfig, currentUser]
+  );
 
   const [tupoksiDefinitions, setTupoksiDefinitions] = useState<TupoksiDefinitionsMap>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.TUPOKSI);
@@ -750,7 +809,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(serverData.archives));
     }
     if (serverData.schoolConfig) {
-      const mergedConfig = mergeSchoolConfigWithDefaults(serverData.schoolConfig);
+      const mergedConfig = mergeSchoolConfigWithDefaults(
+        serverData.schoolConfig,
+        schoolConfigRef.current
+      );
       setSchoolConfig(mergedConfig);
       localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(mergedConfig));
     }
@@ -1019,6 +1081,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setAdminPassword(remotePass);
             localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, remotePass);
             changed = true;
+          }
+        }
+
+        // Reconcile server-isolated userLetterheads & userSignatures non-destructively (multi-tenant isolation)
+        if (json.data.schoolConfig && typeof json.data.schoolConfig === 'object') {
+          const currentCfg = schoolConfigRef.current;
+          const mergedLetterheads = mergeUserIsolatedRecords(
+            currentCfg.userLetterheads,
+            json.data.schoolConfig.userLetterheads
+          );
+          const mergedSignatures = mergeUserIsolatedRecords(
+            currentCfg.userSignatures,
+            json.data.schoolConfig.userSignatures
+          );
+          const prevLHStr = JSON.stringify(currentCfg.userLetterheads || {});
+          const nextLHStr = JSON.stringify(mergedLetterheads || {});
+          const prevSigStr = JSON.stringify(currentCfg.userSignatures || {});
+          const nextSigStr = JSON.stringify(mergedSignatures || {});
+          if (prevLHStr !== nextLHStr || prevSigStr !== nextSigStr) {
+            const nextConfig: SchoolConfig = {
+              ...currentCfg,
+              ...(mergedLetterheads ? { userLetterheads: mergedLetterheads } : {}),
+              ...(mergedSignatures ? { userSignatures: mergedSignatures } : {})
+            };
+            skipNextServerSyncRef.current = true;
+            setSchoolConfig(nextConfig);
+            localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(nextConfig));
           }
         }
 
@@ -1771,37 +1860,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
     setLibraryMembers(prev => [...withIds, ...prev]);
 
-    // Sinkronisasi akumulasi statistik anggota secara otomatis
-    let addGuru = 0;
-    let addStaff = 0;
+    // Sinkronisasi akumulasi statistik anggota secara otomatis (memisahkan L/P untuk Guru, Staff & Siswa)
+    let addGuruL = 0;
+    let addGuruP = 0;
+    let addStaffL = 0;
+    let addStaffP = 0;
     let addSiswaL = 0;
     let addSiswaP = 0;
     withIds.forEach(m => {
-      const t = String(m.tipeAnggota).toUpperCase();
-      if (t === 'GURU') addGuru++;
-      else if (t === 'STAFF') addStaff++;
-      else {
-        if (m.jenisKelamin === 'P') addSiswaP++;
+      const t = String(m.tipeAnggota || 'SISWA').toUpperCase();
+      const isP = m.jenisKelamin === 'P';
+      if (t === 'GURU') {
+        if (isP) addGuruP++;
+        else addGuruL++;
+      } else if (t === 'STAFF') {
+        if (isP) addStaffP++;
+        else addStaffL++;
+      } else {
+        if (isP) addSiswaP++;
         else addSiswaL++;
       }
     });
 
-    setLibraryMemberStats(prev => ({
-      ...prev,
-      guruPendidik: (prev.guruPendidik || 0) + addGuru,
-      staffTendik: (prev.staffTendik || 0) + addStaff,
-      siswaLaki: (prev.siswaLaki || 0) + addSiswaL,
-      siswaPerempuan: (prev.siswaPerempuan || 0) + addSiswaP,
-      lastUpdated: new Date().toISOString().split('T')[0]
-    }));
+    setLibraryMemberStats(prev => {
+      const nextGuruL = (prev.guruLaki || 0) + addGuruL;
+      const nextGuruP = (prev.guruPerempuan || 0) + addGuruP;
+      const nextStaffL = (prev.staffLaki || 0) + addStaffL;
+      const nextStaffP = (prev.staffPerempuan || 0) + addStaffP;
+      return {
+        ...prev,
+        guruLaki: nextGuruL,
+        guruPerempuan: nextGuruP,
+        guruPendidik: nextGuruL + nextGuruP,
+        staffLaki: nextStaffL,
+        staffPerempuan: nextStaffP,
+        staffTendik: nextStaffL + nextStaffP,
+        siswaLaki: (prev.siswaLaki || 0) + addSiswaL,
+        siswaPerempuan: (prev.siswaPerempuan || 0) + addSiswaP,
+        lastUpdated: new Date().toISOString().split('T')[0]
+      };
+    });
   };
 
   const updateLibraryMemberStats = (stats: Partial<LibraryMemberStats>) => {
-    setLibraryMemberStats(prev => ({
-      ...prev,
-      ...stats,
-      lastUpdated: new Date().toISOString().split('T')[0]
-    }));
+    setLibraryMemberStats(prev => {
+      const nextGuruL = stats.guruLaki !== undefined ? Math.max(0, Number(stats.guruLaki) || 0) : (Number(prev.guruLaki) || 0);
+      const nextGuruP = stats.guruPerempuan !== undefined ? Math.max(0, Number(stats.guruPerempuan) || 0) : (Number(prev.guruPerempuan) || 0);
+      const nextStaffL = stats.staffLaki !== undefined ? Math.max(0, Number(stats.staffLaki) || 0) : (Number(prev.staffLaki) || 0);
+      const nextStaffP = stats.staffPerempuan !== undefined ? Math.max(0, Number(stats.staffPerempuan) || 0) : (Number(prev.staffPerempuan) || 0);
+
+      const hasGuruLP = stats.guruLaki !== undefined || stats.guruPerempuan !== undefined;
+      const hasStaffLP = stats.staffLaki !== undefined || stats.staffPerempuan !== undefined;
+
+      return {
+        ...prev,
+        ...stats,
+        guruLaki: nextGuruL,
+        guruPerempuan: nextGuruP,
+        guruPendidik: hasGuruLP ? nextGuruL + nextGuruP : (stats.guruPendidik !== undefined ? Math.max(0, Number(stats.guruPendidik) || 0) : (prev.guruPendidik || 0)),
+        staffLaki: nextStaffL,
+        staffPerempuan: nextStaffP,
+        staffTendik: hasStaffLP ? nextStaffL + nextStaffP : (stats.staffTendik !== undefined ? Math.max(0, Number(stats.staffTendik) || 0) : (prev.staffTendik || 0)),
+        siswaLaki: stats.siswaLaki !== undefined ? Math.max(0, Number(stats.siswaLaki) || 0) : (Number(prev.siswaLaki) || 0),
+        siswaPerempuan: stats.siswaPerempuan !== undefined ? Math.max(0, Number(stats.siswaPerempuan) || 0) : (Number(prev.siswaPerempuan) || 0),
+        isManualOverride: stats.isManualOverride !== undefined ? stats.isManualOverride : true,
+        lastUpdated: new Date().toISOString().split('T')[0]
+      };
+    });
   };
 
   const saveMonthlyReport = (report: MonthlyReport) => {
@@ -1832,39 +1957,166 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSchoolConfig(prev => ({ ...prev, ...config }));
   };
 
-  const generateMonthlyReportFromTasks = (role: RoleType, month: number, year: number, forceFresh: boolean = false): MonthlyReport => {
-    return buildMonthlyReportObject(tasks, role, month, year, schoolConfig, monthlyReports, forceFresh);
+  const saveUserLetterhead = (kop: Partial<UserLetterheadConfig> & { logoAplikasiUrl?: string }) => {
+    const userKey = getUserIsolationKey(currentUser);
+    if (!userKey) {
+      // Admin / mode tanpa akun login individual mengubah template dasar sistem
+      setSchoolConfig(prev => ({ ...prev, ...kop }));
+      return;
+    }
+
+    const now = new Date().toISOString();
+    setSchoolConfig(prev => {
+      const prevMap = prev.userLetterheads || {};
+      const existingEntry = prevMap[userKey];
+      const nextEntry: UserLetterheadConfig = {
+        ...(existingEntry && !existingEntry.deleted ? existingEntry : {}),
+        ...kop,
+        userId: currentUser?.id || existingEntry?.userId,
+        username: currentUser?.username || existingEntry?.username,
+        deleted: false,
+        updatedAt: now
+      };
+      return {
+        ...prev,
+        userLetterheads: {
+          ...prevMap,
+          [userKey]: nextEntry
+        }
+      };
+    });
   };
 
-  const generateAnnualReportFromMonthly = (role: RoleType, year: number): AnnualReport => {
+  const resetUserLetterhead = () => {
+    const userKey = getUserIsolationKey(currentUser);
+    if (!userKey) return;
+    const now = new Date().toISOString();
+    setSchoolConfig(prev => {
+      const prevMap = prev.userLetterheads || {};
+      return {
+        ...prev,
+        userLetterheads: {
+          ...prevMap,
+          [userKey]: {
+            userId: currentUser?.id,
+            username: currentUser?.username,
+            deleted: true,
+            updatedAt: now
+          }
+        }
+      };
+    });
+  };
+
+  const saveUserSignature = (payload: {
+    kepalaSekolah?: SchoolOfficer;
+    operatorProfile?: SchoolOfficer;
+    role?: RoleType;
+    stempelEnabled?: boolean;
+    stempelTextLine1?: string;
+    stempelTextLine2?: string;
+    customStempelUrl?: string;
+  }) => {
+    const userKey = getUserIsolationKey(currentUser);
+    const activeRole = payload.role || currentUser?.role || currentRole || 'TU';
+    if (!userKey) {
+      // Admin / mode tanpa akun login mengubah template dasar sistem
+      setSchoolConfig(prev => ({
+        ...prev,
+        ...(payload.kepalaSekolah ? { kepalaSekolah: payload.kepalaSekolah } : {}),
+        ...(payload.operatorProfile
+          ? {
+              operatorProfiles: {
+                ...prev.operatorProfiles,
+                [activeRole]: payload.operatorProfile
+              }
+            }
+          : {}),
+        ...(payload.stempelEnabled !== undefined ? { stempelEnabled: payload.stempelEnabled } : {}),
+        ...(payload.stempelTextLine1 !== undefined ? { stempelTextLine1: payload.stempelTextLine1 } : {}),
+        ...(payload.stempelTextLine2 !== undefined ? { stempelTextLine2: payload.stempelTextLine2 } : {}),
+        ...(payload.customStempelUrl !== undefined ? { customStempelUrl: payload.customStempelUrl } : {})
+      }));
+      return;
+    }
+
+    const now = new Date().toISOString();
+    setSchoolConfig(prev => {
+      const prevMap = prev.userSignatures || {};
+      const existingEntry = prevMap[userKey];
+      const nextEntry: UserSignatureConfig = {
+        ...(existingEntry && !existingEntry.deleted ? existingEntry : {}),
+        ...payload,
+        role: activeRole,
+        userId: currentUser?.id || existingEntry?.userId,
+        username: currentUser?.username || existingEntry?.username,
+        deleted: false,
+        updatedAt: now
+      };
+      return {
+        ...prev,
+        userSignatures: {
+          ...prevMap,
+          [userKey]: nextEntry
+        }
+      };
+    });
+  };
+
+  const resetUserSignature = () => {
+    const userKey = getUserIsolationKey(currentUser);
+    if (!userKey) return;
+    const now = new Date().toISOString();
+    setSchoolConfig(prev => {
+      const prevMap = prev.userSignatures || {};
+      return {
+        ...prev,
+        userSignatures: {
+          ...prevMap,
+          [userKey]: {
+            role: currentUser?.role || currentRole || 'TU',
+            userId: currentUser?.id,
+            username: currentUser?.username,
+            deleted: true,
+            updatedAt: now
+          }
+        }
+      };
+    });
+  };
+
+  const generateMonthlyReportFromTasks = (role: RoleType, month: number, year: number, forceFresh: boolean = false): MonthlyReport => {
+    return buildMonthlyReportObject(tasks, role, month, year, effectiveSchoolConfig, monthlyReports, forceFresh);
+  };
+
+  const generateAnnualReportFromMonthly = (role: RoleType, year: number, forceFresh: boolean = false): AnnualReport => {
     const existing = annualReports.find(r => r.role === role && r.year === year);
-    const spec = ROLE_OPERATIONAL_SPECS[role];
-    const formattedManualDate = `${schoolConfig.kabupatenKota}, 31 Desember ${year}`;
+    if (existing && !forceFresh) return existing;
 
-    if (existing) return existing;
-
-    const roleTasksYear = tasks.filter(t => t.role === role && isTaskInYear(t.date, year));
-    const completedTasksYear = roleTasksYear.filter(t => t.status === 'selesai');
-    const rate = roleTasksYear.length > 0 ? Math.round((completedTasksYear.length / roleTasksYear.length) * 100) : 98;
-
-    return {
-      id: `ann-rep-${role.toLowerCase()}-${year}`,
+    const formattedManualDate = `${effectiveSchoolConfig.kabupatenKota || 'Teluk'}, 31 Desember ${year}`;
+    const bundle = generateAnnualNarrativeBundle({
       role,
       year,
-      manualDocDate: formattedManualDate,
-      summary: spec 
-        ? spec.getExecutiveSummaryAnnual(year, { total: roleTasksYear.length, completed: completedTasksYear.length, rate })
-        : `Laporan Tahunan Kinerja Layanan Operasional ${role} Tahun Anggaran ${year}.`,
-      annualMilestones: spec ? [...spec.annualMilestones] : [
-        `Realisasi pemenuhan target layanan operasional tahunan melampaui 97.5%`,
-        `Terjaganya kelengkapan dan kondisi fisik inventaris sarana prasarana penunjang`
-      ],
-      obstacles: spec ? spec.fieldObstacles.map(o => o.obstacle) : [],
-      solutions: spec ? spec.fieldObstacles.map(o => o.solution) : [],
-      strategicRecommendations: spec ? [...spec.strategicRecommendations] : [
-        `Penyusunan alokasi anggaran pemeliharaan preventif sarana operasional di RKAS tahun berikutnya`
-      ],
-      approvalStatus: 'diajukan'
+      tasks,
+      monthlyReports,
+      libraryBooks,
+      libraryMembers,
+      libraryMemberStats,
+      schoolConfig: effectiveSchoolConfig
+    });
+
+    return {
+      id: existing?.id || `ann-rep-${role.toLowerCase()}-${year}`,
+      role,
+      year,
+      manualDocDate: existing?.manualDocDate || formattedManualDate,
+      summary: bundle.summary,
+      annualMilestones: bundle.annualMilestones,
+      obstacles: bundle.obstacles,
+      solutions: bundle.solutions,
+      strategicRecommendations: bundle.strategicRecommendations,
+      approvalStatus: existing?.approvalStatus || 'diajukan',
+      ...(existing?.approvedByKepsekDate ? { approvedByKepsekDate: existing.approvedByKepsekDate } : {})
     };
   };
 
@@ -1893,7 +2145,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       role === 'PERPUS' ? 'PRS' : 'IPA';
     const year = data.year || new Date().getFullYear();
     const month = data.month || (type === 'monthly' ? new Date().getMonth() + 1 : undefined);
-    const operator = schoolConfig.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role];
+    const operator = effectiveSchoolConfig.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role];
     const monthNames = [
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
@@ -1917,7 +2169,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `arch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       regNumber,
       title: docTitle,
-      nomorSurat: `800/${type === 'monthly' ? `LAP-BLN/${month || 9}` : 'LAP-THN'}/${schoolConfig.npsn || '20202819'}/${year}`,
+      nomorSurat: `800/${type === 'monthly' ? `LAP-BLN/${month || 9}` : 'LAP-THN'}/${effectiveSchoolConfig.npsn || '20202819'}/${year}`,
       documentType: type,
       role,
       period: type === 'monthly'
@@ -2729,7 +2981,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteArchive,
         archiveReport,
         schoolConfig,
+        effectiveSchoolConfig,
+        hasCustomLetterhead,
+        hasCustomSignature,
         updateSchoolConfig,
+        saveUserLetterhead,
+        resetUserLetterhead,
+        saveUserSignature,
+        resetUserSignature,
         tupoksiDefinitions,
         addTupoksiItem,
         updateTupoksiItem,

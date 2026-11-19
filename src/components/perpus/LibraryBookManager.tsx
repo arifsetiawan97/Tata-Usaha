@@ -219,8 +219,8 @@ export const LibraryBookManager: React.FC = () => {
     deleteLibraryBook, 
     deleteMultipleLibraryBooks,
     importLibraryBooks,
-    schoolConfig,
-    updateSchoolConfig
+    effectiveSchoolConfig: schoolConfig,
+    saveUserLetterhead
   } = useApp();
 
   // Filter States
@@ -688,7 +688,7 @@ export const LibraryBookManager: React.FC = () => {
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64 = event.target?.result as string;
-        updateSchoolConfig({
+        saveUserLetterhead({
           logoKopKiri: base64,
           logoKabupatenUrl: base64
         });
@@ -704,7 +704,7 @@ export const LibraryBookManager: React.FC = () => {
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64 = event.target?.result as string;
-        updateSchoolConfig({
+        saveUserLetterhead({
           logoKopKanan: base64,
           logoSekolahUrl: base64
         });

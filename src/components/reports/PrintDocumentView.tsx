@@ -15,6 +15,7 @@ import {
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from '../../utils/taskClassification';
 import { calculateAnnualPerformanceSummary } from '../../utils/annualPerformanceHelper';
+import { computeLibraryMemberRecap, computeMonthlyMemberAdditions } from '../../utils/libraryStatsHelper';
 import { formatOfficialNameWithDegree, formatOfficialNipOrPppk, isMemberJoinedInMonth } from '../../utils/formatters';
 import { 
   Printer, 
@@ -61,7 +62,8 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   autoPrint = false
 }) => {
   const { 
-    schoolConfig, 
+    effectiveSchoolConfig: schoolConfig,
+    monthlyReports,
     currentRole, 
     tasks, 
     inventories, 
@@ -162,33 +164,34 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
   const roleTupoksiList = tupoksiDefinitions[role]?.tupoksiList || OFFICIAL_TUPOKSI_DEFINITIONS[role].tupoksiList;
   const roleTambahanList = tupoksiDefinitions[role]?.tugasTambahanList || OFFICIAL_TUPOKSI_DEFINITIONS[role].tugasTambahanList;
 
-  // Annual 12-Month Performance Recap (Tugas Pokok & Tugas Tambahan)
+  // Annual 12-Month Performance Recap synced with Monthly Reports
   const annualPerformance = useMemo(() => {
     const yr = annualData?.year || 2026;
-    return calculateAnnualPerformanceSummary(tasks, role, yr);
-  }, [tasks, role, annualData?.year]);
+    return calculateAnnualPerformanceSummary(tasks, role, yr, {
+      monthlyReports,
+      libraryBooks,
+      libraryMembers
+    });
+  }, [tasks, role, annualData?.year, monthlyReports, libraryBooks, libraryMembers]);
 
-  // Khusus Perpustakaan
+  // Khusus Perpustakaan: Rekapitulasi Pemustaka (L/P Akurat)
   const isPerpus = role === 'PERPUS';
-  const registeredGuruLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'L').length;
-  const registeredGuruPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
-  const registeredStaffLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'L').length;
-  const registeredStaffPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
-  const registeredSiswaLaki = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L' && m.status !== 'tamat' && m.status !== 'alumni').length;
-  const registeredSiswaPerempuan = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P' && m.status !== 'tamat' && m.status !== 'alumni').length;
+  const memberRecap = useMemo(
+    () => computeLibraryMemberRecap(libraryMembers, libraryMemberStats),
+    [libraryMembers, libraryMemberStats]
+  );
+  const guruLaki = memberRecap.guruLaki;
+  const guruPerempuan = memberRecap.guruPerempuan;
+  const totalGuru = memberRecap.totalGuru;
 
-  const guruLaki = Math.max(registeredGuruLaki, libraryMemberStats?.guruLaki || 0);
-  const guruPerempuan = Math.max(registeredGuruPerempuan, libraryMemberStats?.guruPerempuan || 0);
-  const totalGuru = Math.max(libraryMemberStats?.guruPendidik || 0, guruLaki + guruPerempuan);
+  const staffLaki = memberRecap.staffLaki;
+  const staffPerempuan = memberRecap.staffPerempuan;
+  const totalStaff = memberRecap.totalStaff;
 
-  const staffLaki = Math.max(registeredStaffLaki, libraryMemberStats?.staffLaki || 0);
-  const staffPerempuan = Math.max(registeredStaffPerempuan, libraryMemberStats?.staffPerempuan || 0);
-  const totalStaff = Math.max(libraryMemberStats?.staffTendik || 0, staffLaki + staffPerempuan);
-
-  const siswaLaki = Math.max(registeredSiswaLaki, libraryMemberStats?.siswaLaki || 0);
-  const siswaPerempuan = Math.max(registeredSiswaPerempuan, libraryMemberStats?.siswaPerempuan || 0);
-  const totalSiswa = siswaLaki + siswaPerempuan;
-  const totalAnggotaPerpus = totalGuru + totalStaff + totalSiswa;
+  const siswaLaki = memberRecap.siswaLaki;
+  const siswaPerempuan = memberRecap.siswaPerempuan;
+  const totalSiswa = memberRecap.totalSiswa;
+  const totalAnggotaPerpus = memberRecap.grandTotal;
 
   const monthlyNewMembers = useMemo(() => {
     if (!isPerpus) return [];
@@ -198,6 +201,32 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
     const yrStr = String(annualData?.year || new Date().getFullYear());
     return libraryMembers.filter(m => (m.tanggalBergabung || m.tanggalTerdaftar || '').trim().startsWith(yrStr));
   }, [isPerpus, isMonthly, monthlyData, annualData?.year, libraryMembers]);
+
+  const monthlyMemberAdditionsSummary = useMemo(() => {
+    if (!isPerpus) return null;
+    if (isMonthly && monthlyData) {
+      return computeMonthlyMemberAdditions(libraryMembers, monthlyData.year, monthlyData.month);
+    }
+    const guruL = monthlyNewMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin !== 'P').length;
+    const guruP = monthlyNewMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
+    const staffL = monthlyNewMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin !== 'P').length;
+    const staffP = monthlyNewMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
+    const siswaL = monthlyNewMembers.filter(m => String(m.tipeAnggota).toUpperCase() !== 'GURU' && String(m.tipeAnggota).toUpperCase() !== 'STAFF' && m.jenisKelamin !== 'P').length;
+    const siswaP = monthlyNewMembers.filter(m => String(m.tipeAnggota).toUpperCase() !== 'GURU' && String(m.tipeAnggota).toUpperCase() !== 'STAFF' && m.jenisKelamin === 'P').length;
+    return {
+      members: monthlyNewMembers,
+      total: monthlyNewMembers.length,
+      guruLaki: guruL,
+      guruPerempuan: guruP,
+      guruTotal: guruL + guruP,
+      staffLaki: staffL,
+      staffPerempuan: staffP,
+      staffTotal: staffL + staffP,
+      siswaLaki: siswaL,
+      siswaPerempuan: siswaP,
+      siswaTotal: siswaL + siswaP
+    };
+  }, [isPerpus, isMonthly, monthlyData, libraryMembers, monthlyNewMembers]);
 
   const printKpis = (isMonthly && monthlyData?.customKPIs && monthlyData.customKPIs.length > 0)
     ? monthlyData.customKPIs
@@ -460,6 +489,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         tupoksiDefinitions,
         manualDate,
         nomorSurat,
+        monthlyReports,
         libraryBooks: role === 'PERPUS' ? libraryBooks : [],
         libraryMembers: role === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: role === 'PERPUS' ? libraryMemberStats : undefined
@@ -494,6 +524,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         tupoksiDefinitions,
         manualDate,
         nomorSurat,
+        monthlyReports,
         libraryBooks: role === 'PERPUS' ? libraryBooks : [],
         libraryMembers: role === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: role === 'PERPUS' ? libraryMemberStats : undefined
@@ -522,6 +553,7 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
         tupoksiDefinitions,
         manualDate,
         nomorSurat,
+        monthlyReports,
         libraryBooks: role === 'PERPUS' ? libraryBooks : [],
         libraryMembers: role === 'PERPUS' ? libraryMembers : [],
         libraryMemberStats: role === 'PERPUS' ? libraryMemberStats : undefined
@@ -1096,13 +1128,18 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
 
                         {(monthlyNewMembers.length > 0 || isMonthly) && (
                           <div className="mt-2">
-                            <div className="flex justify-between items-center mb-1">
+                            <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
                               <span className="font-bold text-[10px] text-slate-800">
                                 {isMonthly && monthlyData
                                   ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[monthlyData.month - 1]} ${monthlyData.year} (${monthlyNewMembers.length} Orang):`
                                   : `Rekapitulasi Penambahan Anggota Baru Tahun ${annualYear} (${monthlyNewMembers.length} Orang):`
                                 }
                               </span>
+                              {monthlyMemberAdditionsSummary && (
+                                <span className="text-[9.5px] font-mono text-slate-700">
+                                  Pendidik L:{monthlyMemberAdditionsSummary.guruLaki}/P:{monthlyMemberAdditionsSummary.guruPerempuan} · Tendik L:{monthlyMemberAdditionsSummary.staffLaki}/P:{monthlyMemberAdditionsSummary.staffPerempuan} · Siswa L:{monthlyMemberAdditionsSummary.siswaLaki}/P:{monthlyMemberAdditionsSummary.siswaPerempuan}
+                                </span>
+                              )}
                             </div>
                             <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[9.5px]">
                               <thead>
@@ -1288,6 +1325,56 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                                   </td>
                                 </tr>
                               )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* KHUSUS PERPUSTAKAAN (COMPACT MODE): REKAPITULASI PENAMBAHAN BUKU & ANGGOTA PER BULAN (L/P) */}
+                    {isAnnual && isPerpus && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-300 text-xs break-inside-avoid print:border-black space-y-2.5">
+                        <div>
+                          <h4 className="font-bold text-xs text-slate-900 uppercase mb-1">
+                            IV.A. REKAPITULASI PENAMBAHAN BUKU & ANGGOTA PERPUSTAKAAN PER BULAN ({annualYear})
+                          </h4>
+                          <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[9.5px]">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-900 border-b border-slate-400 font-bold print:bg-slate-200">
+                                <th className="py-1 px-1 text-center w-6 border border-slate-400">No</th>
+                                <th className="py-1 px-1.5 border border-slate-400">Bulan</th>
+                                <th className="py-1 px-1.5 text-center border border-slate-400">Buku Baru (Jdl / Eks)</th>
+                                <th className="py-1 px-1.5 text-center border border-slate-400">Pendidik Baru (L/P)</th>
+                                <th className="py-1 px-1.5 text-center border border-slate-400">Tendik Baru (L/P)</th>
+                                <th className="py-1 px-1.5 text-center border border-slate-400">Siswa Baru (L/P)</th>
+                                <th className="py-1 px-1.5 text-center border border-slate-400">Total Anggota Baru</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {annualPerformance.items.map((item, idx) => {
+                                const bookSt = annualMonthlyBookStats[idx];
+                                return (
+                                  <tr key={item.monthIndex} className="border-b border-slate-300">
+                                    <td className="py-0.5 px-1 text-center font-mono border border-slate-300">{idx + 1}</td>
+                                    <td className="py-0.5 px-1.5 font-semibold border border-slate-300">{item.monthName}</td>
+                                    <td className="py-0.5 px-1.5 text-center font-mono border border-slate-300">
+                                      {bookSt && bookSt.eksemplarCount > 0 ? `${bookSt.judulCount} jdl (${bookSt.eksemplarCount} eks)` : '-'}
+                                    </td>
+                                    <td className="py-0.5 px-1.5 text-center font-mono border border-slate-300">
+                                      L:{item.membersAddedGuruL} / P:{item.membersAddedGuruP}
+                                    </td>
+                                    <td className="py-0.5 px-1.5 text-center font-mono border border-slate-300">
+                                      L:{item.membersAddedStaffL} / P:{item.membersAddedStaffP}
+                                    </td>
+                                    <td className="py-0.5 px-1.5 text-center font-mono border border-slate-300">
+                                      L:{item.membersAddedSiswaL} / P:{item.membersAddedSiswaP}
+                                    </td>
+                                    <td className="py-0.5 px-1.5 text-center font-bold font-mono border border-slate-300">
+                                      {item.membersAddedTotal > 0 ? `+${item.membersAddedTotal} org` : '0 org'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -1653,13 +1740,18 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
 
                           {(monthlyNewMembers.length > 0 || isMonthly) && (
                             <div className="mt-2">
-                              <div className="flex justify-between items-center mb-1">
+                              <div className="flex flex-wrap justify-between items-center gap-1 mb-1">
                                 <span className="font-bold text-[10px] text-slate-800">
                                   {isMonthly && monthlyData
                                     ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[monthlyData.month - 1]} ${monthlyData.year} (${monthlyNewMembers.length} Orang):`
                                     : `Rekapitulasi Penambahan Anggota Baru Tahun ${annualYear} (${monthlyNewMembers.length} Orang):`
                                   }
                                 </span>
+                                {monthlyMemberAdditionsSummary && (
+                                  <span className="text-[9.5px] font-mono text-slate-700">
+                                    Pendidik L:{monthlyMemberAdditionsSummary.guruLaki}/P:{monthlyMemberAdditionsSummary.guruPerempuan} · Tendik L:{monthlyMemberAdditionsSummary.staffLaki}/P:{monthlyMemberAdditionsSummary.staffPerempuan} · Siswa L:{monthlyMemberAdditionsSummary.siswaLaki}/P:{monthlyMemberAdditionsSummary.siswaPerempuan}
+                                  </span>
+                                )}
                               </div>
                               <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[9.5px]">
                                 <thead>
@@ -2066,6 +2158,36 @@ export const PrintDocumentView: React.FC<PrintDocumentViewProps> = ({
                                       <td className="py-1 px-2 text-center text-[9px] font-semibold text-emerald-800">Pertumbuhan Tercatat</td>
                                       <td className="py-1 px-2 text-center font-mono">{annualMonthlyBookStats.reduce((s, m) => s + m.eksemplarCount, 0)} eks</td>
                                     </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase border-b border-slate-300 pb-1 mb-1.5 mt-3 print:border-black">
+                                III.A2. REKAPITULASI PENAMBAHAN ANGGOTA PERPUSTAKAAN PER BULAN (L/P) ({annualYear})
+                              </h4>
+                              <div className="overflow-x-auto mb-3">
+                                <table className="w-full text-left border-collapse border border-slate-400 print:border-black text-[10px]">
+                                  <thead>
+                                    <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400 print:bg-slate-200">
+                                      <th className="py-1 px-1.5 text-center w-7 border border-slate-400">No</th>
+                                      <th className="py-1 px-2 border border-slate-400">Bulan</th>
+                                      <th className="py-1 px-2 text-center border border-slate-400">Pendidik (L / P)</th>
+                                      <th className="py-1 px-2 text-center border border-slate-400">Tendik (L / P)</th>
+                                      <th className="py-1 px-2 text-center border border-slate-400">Siswa (L / P)</th>
+                                      <th className="py-1 px-2 text-center border border-slate-400">Total Anggota Baru</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {annualPerformance.items.map((item, idx) => (
+                                      <tr key={item.monthIndex} className="border-b border-slate-300">
+                                        <td className="py-1 px-1.5 text-center font-mono border border-slate-300">{idx + 1}</td>
+                                        <td className="py-1 px-2 font-medium border border-slate-300">{item.monthName} {annualYear}</td>
+                                        <td className="py-1 px-2 text-center font-mono border border-slate-300">L:{item.membersAddedGuruL} / P:{item.membersAddedGuruP}</td>
+                                        <td className="py-1 px-2 text-center font-mono border border-slate-300">L:{item.membersAddedStaffL} / P:{item.membersAddedStaffP}</td>
+                                        <td className="py-1 px-2 text-center font-mono border border-slate-300">L:{item.membersAddedSiswaL} / P:{item.membersAddedSiswaP}</td>
+                                        <td className="py-1 px-2 text-center font-bold font-mono border border-slate-300">+{item.membersAddedTotal} org</td>
+                                      </tr>
+                                    ))}
                                   </tbody>
                                 </table>
                               </div>

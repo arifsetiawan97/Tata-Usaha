@@ -435,7 +435,7 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
 }) => {
   const { 
     currentRole, 
-    schoolConfig, 
+    effectiveSchoolConfig: schoolConfig, 
     tasks, 
     importTasks, 
     deleteMultipleTasks, 
@@ -476,6 +476,11 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
 
   // Execution & Result state
   const [isGenerating, setIsGenerating] = useState(false);
+  const [modalNotice, setModalNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const showModalNotice = (text: string, ok = true) => {
+    setModalNotice({ ok, text });
+    setTimeout(() => setModalNotice(null), 5000);
+  };
   const [generationSummary, setGenerationSummary] = useState<{
     totalDays: number;
     totalTasks: number;
@@ -668,14 +673,14 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
         sampleLock.forEach(s => next.add(s));
         return next;
       });
-      alert(`Berhasil mengunci tanggal libur khusus awal Ramadhan/puasa pada awal bulan.`);
+      showModalNotice('Berhasil mengunci tanggal libur khusus awal Ramadhan/puasa pada awal bulan.', true);
     } else {
       setLockedDates(prev => {
         const next = new Set(prev);
         toLock.forEach(d => next.add(d));
         return next;
       });
-      alert(`Berhasil mengunci ${toLock.length} tanggal libur puasa/Idul Fitri di bulan ${MONTH_NAMES[selectedMonth - 1]}.`);
+      showModalNotice(`Berhasil mengunci ${toLock.length} tanggal libur puasa/Idul Fitri di bulan ${MONTH_NAMES[selectedMonth - 1]}.`, true);
     }
   };
 
@@ -715,12 +720,12 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
   const handleExecuteGeneration = async () => {
     const enabledTemplates = taskTemplates.filter(t => t.enabled);
     if (enabledTemplates.length === 0) {
-      alert('Pilih minimal satu tugas operasional untuk digenerate.');
+      showModalNotice('Pilih minimal satu tugas operasional untuk digenerate.', false);
       return;
     }
 
     if (activeWorkdays.length === 0) {
-      alert('Tidak ada hari kerja aktif yang tersedia di bulan ini karena seluruh tanggal merupakan hari libur/terkunci.');
+      showModalNotice('Tidak ada hari kerja aktif yang tersedia di bulan ini karena seluruh tanggal merupakan hari libur/terkunci.', false);
       return;
     }
 
@@ -831,7 +836,7 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
       });
 
     } catch (err: any) {
-      alert('Gagal membuat laporan: ' + err.message);
+      showModalNotice('Gagal membuat laporan: ' + err.message, false);
     } finally {
       setIsGenerating(false);
     }
@@ -1013,6 +1018,22 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
 
             {/* Modal Body: Scrollable */}
             <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-6 text-slate-800">
+              {modalNotice && (
+                <div className={`px-4 py-3 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 ${
+                  modalNotice.ok
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}>
+                  <span>{modalNotice.text}</span>
+                  <button
+                    type="button"
+                    onClick={() => setModalNotice(null)}
+                    className="text-current opacity-70 hover:opacity-100 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               
               {/* 1. Pilih Akun / Layanan Operasional */}
               <div>

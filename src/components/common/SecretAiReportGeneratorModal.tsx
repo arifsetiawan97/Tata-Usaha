@@ -396,7 +396,7 @@ export const SecretAiReportGeneratorModal: React.FC<SecretAiReportGeneratorModal
     importTasks, 
     generateMonthlyReportFromTasks, 
     saveMonthlyReport, 
-    schoolConfig, 
+    effectiveSchoolConfig: schoolConfig, 
     monthlyReports 
   } = useApp();
 
@@ -427,6 +427,7 @@ export const SecretAiReportGeneratorModal: React.FC<SecretAiReportGeneratorModal
 
   // Generation Results / Status
   const [isGenerating, setIsGenerating] = useState(false);
+  const [modalNotice, setModalNotice] = useState<string | null>(null);
   const [generationSuccessInfo, setGenerationSuccessInfo] = useState<{
     totalTasksCreated: number;
     month: number;
@@ -557,10 +558,11 @@ export const SecretAiReportGeneratorModal: React.FC<SecretAiReportGeneratorModal
       // 2. Filter tugas aktif
       const activeTemplates = taskTemplates.filter(t => t.isActive);
       if (activeTemplates.length === 0) {
-        alert('Harap aktifkan minimal 1 template tugas operasional.');
+        setModalNotice('Harap aktifkan minimal 1 template tugas operasional.');
         setIsGenerating(false);
         return;
       }
+      setModalNotice(null);
 
       // 3. Bangun seluruh entri tugas harian dengan pengacak jam otomatis
       const newGeneratedTasks: Omit<TaskLog, 'id'>[] = [];
@@ -631,7 +633,7 @@ export const SecretAiReportGeneratorModal: React.FC<SecretAiReportGeneratorModal
 
     } catch (err: any) {
       console.error(err);
-      alert('Terjadi kendala saat generate laporan: ' + err.message);
+      setModalNotice('Terjadi kendala saat generate laporan: ' + err.message);
     } finally {
       setIsGenerating(false);
     }
@@ -771,6 +773,18 @@ export const SecretAiReportGeneratorModal: React.FC<SecretAiReportGeneratorModal
               SCREEN 2: SETELAH TEROTENTIKASI (DASHBOARD GENERATOR INSTAN)
               =================================================================== */
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+            {modalNotice && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center justify-between gap-2">
+                <span>{modalNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setModalNotice(null)}
+                  className="text-rose-600 hover:text-rose-900 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             
             {/* Success Notification Banner after generating */}
             {generationSuccessInfo && (

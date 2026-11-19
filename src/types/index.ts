@@ -233,6 +233,7 @@ export interface AnnualReport {
   obstacles?: string[];
   solutions?: string[];
   approvalStatus: 'draft' | 'diajukan' | 'disetujui_kasubag' | 'disahkan_kepsek';
+  approvedByKepsekDate?: string;
 }
 
 export interface OperationalKPI {
@@ -259,19 +260,19 @@ export type KopBorderStyle = 'double_thick' | 'double' | 'solid_thick' | 'solid_
 export interface UserLetterheadConfig {
   userId?: string;
   username?: string;
-  pemerintahDaerah: string;
-  dinasPendidikan: string;
-  namaSekolah: string;
-  npsn: string;
-  nss: string;
-  alamat: string;
-  desaKecamatan: string;
-  kabupatenKota: string;
-  provinsi: string;
-  kodePos: string;
-  telepon: string;
-  email: string;
-  website: string;
+  pemerintahDaerah?: string;
+  dinasPendidikan?: string;
+  namaSekolah?: string;
+  npsn?: string;
+  nss?: string;
+  alamat?: string;
+  desaKecamatan?: string;
+  kabupatenKota?: string;
+  provinsi?: string;
+  kodePos?: string;
+  telepon?: string;
+  email?: string;
+  website?: string;
   logoKabupatenUrl?: string;
   logoSekolahUrl?: string;
   logoKopKiri?: string;

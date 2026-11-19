@@ -403,11 +403,15 @@ export function generateAnnualNarrativeBundle(params: {
   });
 
   if (collectedObstacles.length === 0) {
-    collectedObstacles.push(
-      yearReports.length > 0
-        ? 'Seluruh operasional bulanan berjalan lancar tanpa kendala mayor yang menghambat pelayanan.'
-        : ...(ROLE_OPERATIONAL_SPECS[role]?.fieldObstacles.map((o) => o.obstacle) || [])
-    );
+    if (yearReports.length > 0) {
+      collectedObstacles.push(
+        'Seluruh operasional bulanan berjalan lancar tanpa kendala mayor yang menghambat pelayanan.'
+      );
+    } else {
+      collectedObstacles.push(
+        ...(ROLE_OPERATIONAL_SPECS[role]?.fieldObstacles.map((o) => o.obstacle) || [])
+      );
+    }
   }
   if (collectedSolutions.length === 0) {
     collectedSolutions.push(

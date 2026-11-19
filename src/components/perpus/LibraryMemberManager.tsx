@@ -25,6 +25,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { LibraryMemberItem, LibraryMemberStats } from '../../types';
 import { formatOfficialNameWithDegree, formatOfficialNipOrPppk, isMemberJoinedInMonth } from '../../utils/formatters';
+import { computeLibraryMemberRecap, computeMonthlyMemberAdditions } from '../../utils/libraryStatsHelper';
 import { KopSurat } from '../common/KopSurat';
 import { 
   downloadMemberExcelTemplate, 
@@ -50,7 +51,7 @@ export const LibraryMemberManager: React.FC = () => {
     importLibraryMembers,
     libraryMemberStats, 
     updateLibraryMemberStats,
-    schoolConfig 
+    effectiveSchoolConfig: schoolConfig
   } = useApp();
 
   // Filter States
@@ -117,12 +118,12 @@ export const LibraryMemberManager: React.FC = () => {
   const [statsForm, setStatsForm] = useState<LibraryMemberStats>({
     siswaLaki: libraryMemberStats.siswaLaki || 0,
     siswaPerempuan: libraryMemberStats.siswaPerempuan || 0,
-    guruLaki: libraryMemberStats.guruLaki ?? 10,
-    guruPerempuan: libraryMemberStats.guruPerempuan ?? 14,
-    guruPendidik: libraryMemberStats.guruPendidik || 24,
-    staffLaki: libraryMemberStats.staffLaki ?? 5,
-    staffPerempuan: libraryMemberStats.staffPerempuan ?? 3,
-    staffTendik: libraryMemberStats.staffTendik || 8,
+    guruLaki: libraryMemberStats.guruLaki ?? 0,
+    guruPerempuan: libraryMemberStats.guruPerempuan ?? 0,
+    guruPendidik: libraryMemberStats.guruPendidik || 0,
+    staffLaki: libraryMemberStats.staffLaki ?? 0,
+    staffPerempuan: libraryMemberStats.staffPerempuan ?? 0,
+    staffTendik: libraryMemberStats.staffTendik || 0,
     lastUpdated: libraryMemberStats.lastUpdated || new Date().toISOString().split('T')[0]
   });
 
@@ -168,31 +169,29 @@ export const LibraryMemberManager: React.FC = () => {
     });
   }, [libraryMembers, activeTab, statusFilter, searchQuery]);
 
-  // Aggregate stats calculations with gender breakdown for Guru and Staff
-  const guruLakiCount = libraryMemberStats.guruLaki ?? (libraryMembers.filter(m => getMemberTypeUpper(m) === 'GURU' && m.jenisKelamin === 'L').length || 10);
-  const guruPerempuanCount = libraryMemberStats.guruPerempuan ?? (libraryMembers.filter(m => getMemberTypeUpper(m) === 'GURU' && m.jenisKelamin === 'P').length || 14);
-  const totalGuru = (libraryMemberStats.guruPendidik && libraryMemberStats.guruPendidik > 0)
-    ? libraryMemberStats.guruPendidik
-    : (guruLakiCount + guruPerempuanCount);
+  // Aggregate stats calculations with accurate L/P breakdown via computeLibraryMemberRecap
+  const memberRecap = useMemo(
+    () => computeLibraryMemberRecap(libraryMembers, libraryMemberStats),
+    [libraryMembers, libraryMemberStats]
+  );
 
-  const staffLakiCount = libraryMemberStats.staffLaki ?? (libraryMembers.filter(m => getMemberTypeUpper(m) === 'STAFF' && m.jenisKelamin === 'L').length || 5);
-  const staffPerempuanCount = libraryMemberStats.staffPerempuan ?? (libraryMembers.filter(m => getMemberTypeUpper(m) === 'STAFF' && m.jenisKelamin === 'P').length || 3);
-  const totalStaff = (libraryMemberStats.staffTendik && libraryMemberStats.staffTendik > 0)
-    ? libraryMemberStats.staffTendik
-    : (staffLakiCount + staffPerempuanCount);
+  const guruLakiCount = memberRecap.guruLaki;
+  const guruPerempuanCount = memberRecap.guruPerempuan;
+  const totalGuru = memberRecap.totalGuru;
 
-  // Registered members count in directory
-  const registeredGuruCount = libraryMembers.filter(m => getMemberTypeUpper(m) === 'GURU').length;
-  const registeredStaffCount = libraryMembers.filter(m => getMemberTypeUpper(m) === 'STAFF').length;
-  const registeredSiswaCount = libraryMembers.filter(m => getMemberTypeUpper(m) === 'SISWA').length;
+  const staffLakiCount = memberRecap.staffLaki;
+  const staffPerempuanCount = memberRecap.staffPerempuan;
+  const totalStaff = memberRecap.totalStaff;
+
+  const registeredGuruCount = memberRecap.registeredGuruCount;
+  const registeredStaffCount = memberRecap.registeredStaffCount;
+  const registeredSiswaCount = memberRecap.registeredSiswaCount;
   const registeredTamatCount = libraryMembers.filter(m => m.status === 'tamat' || m.status === 'alumni').length;
-  const registeredSiswaLaki = libraryMembers.filter(m => getMemberTypeUpper(m) === 'SISWA' && m.jenisKelamin === 'L').length;
-  const registeredSiswaPerempuan = libraryMembers.filter(m => getMemberTypeUpper(m) === 'SISWA' && m.jenisKelamin === 'P').length;
 
-  const siswaLakiCount = Math.max(libraryMemberStats.siswaLaki || 0, registeredSiswaLaki);
-  const siswaPerempuanCount = Math.max(libraryMemberStats.siswaPerempuan || 0, registeredSiswaPerempuan);
-  const totalSiswa = siswaLakiCount + siswaPerempuanCount;
-  const grandTotal = totalSiswa + totalGuru + totalStaff;
+  const siswaLakiCount = memberRecap.siswaLaki;
+  const siswaPerempuanCount = memberRecap.siswaPerempuan;
+  const totalSiswa = memberRecap.totalSiswa;
+  const grandTotal = memberRecap.grandTotal;
 
   const PRINT_MONTH_NAMES = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -202,6 +201,11 @@ export const LibraryMemberManager: React.FC = () => {
   const monthlyAddedMembers = useMemo(() => {
     if (printAdditionMonth === 'all') return [];
     return libraryMembers.filter(m => isMemberJoinedInMonth(m, printAdditionYear, printAdditionMonth));
+  }, [libraryMembers, printAdditionMonth, printAdditionYear]);
+
+  const monthlyMemberAdditionsSummary = useMemo(() => {
+    if (printAdditionMonth === 'all') return null;
+    return computeMonthlyMemberAdditions(libraryMembers, printAdditionYear, printAdditionMonth);
   }, [libraryMembers, printAdditionMonth, printAdditionYear]);
 
   const printAdditionMonthLabel = printAdditionMonth === 'all'
@@ -312,8 +316,48 @@ export const LibraryMemberManager: React.FC = () => {
   // Save Stats Modal
   const handleSaveStats = (e: React.FormEvent) => {
     e.preventDefault();
-    updateLibraryMemberStats(statsForm);
+    updateLibraryMemberStats({
+      ...statsForm,
+      guruPendidik: (statsForm.guruLaki || 0) + (statsForm.guruPerempuan || 0),
+      staffTendik: (statsForm.staffLaki || 0) + (statsForm.staffPerempuan || 0),
+      isManualOverride: true
+    });
     setIsStatsModalOpen(false);
+    setSuccessNotification('Rekapitulasi jumlah anggota perpustakaan berhasil diperbarui dan otomatis tersinkron ke Cetak Rekap, Lapor Bulanan, dan Lapor Tahunan.');
+    setTimeout(() => {
+      setSuccessNotification(null);
+    }, 5000);
+  };
+
+  // 1-Click Sync Stats strictly from Registered Active Member Directory
+  const handleSyncStatsFromDirectory = () => {
+    const activeOnly = libraryMembers.filter(m => {
+      const s = (m.status || 'aktif').toLowerCase();
+      return s !== 'tamat' && s !== 'alumni' && s !== 'nonaktif';
+    });
+    const guruL = activeOnly.filter(m => getMemberTypeUpper(m) === 'GURU' && m.jenisKelamin !== 'P').length;
+    const guruP = activeOnly.filter(m => getMemberTypeUpper(m) === 'GURU' && m.jenisKelamin === 'P').length;
+    const staffL = activeOnly.filter(m => getMemberTypeUpper(m) === 'STAFF' && m.jenisKelamin !== 'P').length;
+    const staffP = activeOnly.filter(m => getMemberTypeUpper(m) === 'STAFF' && m.jenisKelamin === 'P').length;
+    const siswaL = activeOnly.filter(m => getMemberTypeUpper(m) === 'SISWA' && m.jenisKelamin !== 'P').length;
+    const siswaP = activeOnly.filter(m => getMemberTypeUpper(m) === 'SISWA' && m.jenisKelamin === 'P').length;
+
+    updateLibraryMemberStats({
+      guruLaki: guruL,
+      guruPerempuan: guruP,
+      guruPendidik: guruL + guruP,
+      staffLaki: staffL,
+      staffPerempuan: staffP,
+      staffTendik: staffL + staffP,
+      siswaLaki: siswaL,
+      siswaPerempuan: siswaP,
+      isManualOverride: false
+    });
+    setIsStatsModalOpen(false);
+    setSuccessNotification(`Rekapitulasi berhasil disinkronkan ulang sesuai direktori aktif (${guruL + guruP + staffL + staffP + siswaL + siswaP} pemustaka).`);
+    setTimeout(() => {
+      setSuccessNotification(null);
+    }, 5000);
   };
 
   // Bulk Selection Handlers
@@ -870,9 +914,9 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
     </div>
     <div style="font-size: 9pt; margin-bottom: 6px; color: #1e3a8a; font-weight: bold;">
       Penambahan Terdaftar: ${monthlyAddedMembers.length} Anggota Baru
-      (Guru: ${monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'GURU').length} org ·
-      Tendik: ${monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'STAFF').length} org ·
-      Siswa: ${monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'SISWA').length} org)
+      (Pendidik: ${monthlyMemberAdditionsSummary?.guruTotal ?? 0} org [L:${monthlyMemberAdditionsSummary?.guruLaki ?? 0}/P:${monthlyMemberAdditionsSummary?.guruPerempuan ?? 0}] ·
+      Tendik: ${monthlyMemberAdditionsSummary?.staffTotal ?? 0} org [L:${monthlyMemberAdditionsSummary?.staffLaki ?? 0}/P:${monthlyMemberAdditionsSummary?.staffPerempuan ?? 0}] ·
+      Siswa: ${monthlyMemberAdditionsSummary?.siswaTotal ?? 0} org [L:${monthlyMemberAdditionsSummary?.siswaLaki ?? 0}/P:${monthlyMemberAdditionsSummary?.siswaPerempuan ?? 0}])
     </div>
     <table class="table-full">
       <thead>
@@ -1076,14 +1120,14 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
             <button
               onClick={() => {
                 setStatsForm({
-                  siswaLaki: libraryMemberStats.siswaLaki || 0,
-                  siswaPerempuan: libraryMemberStats.siswaPerempuan || 0,
-                  guruLaki: libraryMemberStats.guruLaki ?? 10,
-                  guruPerempuan: libraryMemberStats.guruPerempuan ?? 14,
-                  guruPendidik: libraryMemberStats.guruPendidik || 24,
-                  staffLaki: libraryMemberStats.staffLaki ?? 5,
-                  staffPerempuan: libraryMemberStats.staffPerempuan ?? 3,
-                  staffTendik: libraryMemberStats.staffTendik || 8,
+                  siswaLaki: siswaLakiCount,
+                  siswaPerempuan: siswaPerempuanCount,
+                  guruLaki: guruLakiCount,
+                  guruPerempuan: guruPerempuanCount,
+                  guruPendidik: totalGuru,
+                  staffLaki: staffLakiCount,
+                  staffPerempuan: staffPerempuanCount,
+                  staffTendik: totalStaff,
                   lastUpdated: new Date().toISOString().split('T')[0]
                 });
                 setIsStatsModalOpen(true);
@@ -1689,6 +1733,19 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2">
+                <div className="text-[11px] text-slate-600">
+                  Ingin samakan persis dengan daftar anggota aktif ({memberRecap.registeredTotal} org)?
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSyncStatsFromDirectory}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] shrink-0 transition cursor-pointer"
+                >
+                  Sinkronkan dari Daftar
+                </button>
               </div>
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
@@ -2499,9 +2556,9 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                     </div>
                     <p className="text-[11px] font-sans text-slate-600 mb-2">
                       Rincian penambahan anggota perpustakaan baru pada bulan <strong>{printAdditionMonthLabel}</strong>:{' '}
-                      <strong>{monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'GURU').length}</strong> Guru,{' '}
-                      <strong>{monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'STAFF').length}</strong> Tendik/Staff,{' '}
-                      <strong>{monthlyAddedMembers.filter(m => getMemberTypeUpper(m) === 'SISWA').length}</strong> Siswa.
+                      <strong>{monthlyMemberAdditionsSummary?.guruTotal ?? 0}</strong> Pendidik (L: {monthlyMemberAdditionsSummary?.guruLaki ?? 0}, P: {monthlyMemberAdditionsSummary?.guruPerempuan ?? 0}),{' '}
+                      <strong>{monthlyMemberAdditionsSummary?.staffTotal ?? 0}</strong> Tendik (L: {monthlyMemberAdditionsSummary?.staffLaki ?? 0}, P: {monthlyMemberAdditionsSummary?.staffPerempuan ?? 0}),{' '}
+                      <strong>{monthlyMemberAdditionsSummary?.siswaTotal ?? 0}</strong> Siswa (L: {monthlyMemberAdditionsSummary?.siswaLaki ?? 0}, P: {monthlyMemberAdditionsSummary?.siswaPerempuan ?? 0}).
                     </p>
                     <div className="border border-slate-400 rounded-md overflow-hidden">
                       <table className="w-full text-left font-sans text-[11px] leading-tight border-collapse">

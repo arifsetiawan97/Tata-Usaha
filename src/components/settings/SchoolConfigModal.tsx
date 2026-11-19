@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { KopBorderStyle, RoleType, SchoolConfig, SchoolOfficer } from '../../types';
 import { KopSurat } from '../common/KopSurat';
-import { KOP_BORDER_OPTIONS } from '../../utils/letterheadHelper';
+import { KOP_BORDER_OPTIONS, extractBaseLetterhead } from '../../utils/letterheadHelper';
 import { formatOfficialNameWithDegree, formatOfficialNipOrPppk } from '../../utils/formatters';
 import {
   X,
@@ -171,25 +171,26 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
 
   const handleResetKopMandiri = () => {
     resetUserLetterhead();
+    const baseKop = extractBaseLetterhead(schoolConfig);
     setKopForm({
-      pemerintahDaerah: schoolConfig.pemerintahDaerah || '',
-      dinasPendidikan: schoolConfig.dinasPendidikan || '',
-      namaSekolah: schoolConfig.namaSekolah || '',
-      npsn: schoolConfig.npsn || '',
-      nss: schoolConfig.nss || '',
-      alamat: schoolConfig.alamat || '',
-      desaKecamatan: schoolConfig.desaKecamatan || '',
-      kabupatenKota: schoolConfig.kabupatenKota || '',
-      provinsi: schoolConfig.provinsi || '',
-      kodePos: schoolConfig.kodePos || '',
-      telepon: schoolConfig.telepon || '',
-      email: schoolConfig.email || '',
-      website: schoolConfig.website || '',
-      logoKabupatenUrl: schoolConfig.logoKabupatenUrl || '',
-      logoSekolahUrl: schoolConfig.logoSekolahUrl || '',
-      logoKopKiri: schoolConfig.logoKopKiri || schoolConfig.logoKabupatenUrl || '',
-      logoKopKanan: schoolConfig.logoKopKanan || schoolConfig.logoSekolahUrl || '',
-      kopBorderStyle: (schoolConfig.kopBorderStyle || 'double_thick') as KopBorderStyle
+      pemerintahDaerah: baseKop.pemerintahDaerah || '',
+      dinasPendidikan: baseKop.dinasPendidikan || '',
+      namaSekolah: baseKop.namaSekolah || '',
+      npsn: baseKop.npsn || '',
+      nss: baseKop.nss || '',
+      alamat: baseKop.alamat || '',
+      desaKecamatan: baseKop.desaKecamatan || '',
+      kabupatenKota: baseKop.kabupatenKota || '',
+      provinsi: baseKop.provinsi || '',
+      kodePos: baseKop.kodePos || '',
+      telepon: baseKop.telepon || '',
+      email: baseKop.email || '',
+      website: baseKop.website || '',
+      logoKabupatenUrl: baseKop.logoKabupatenUrl || '',
+      logoSekolahUrl: baseKop.logoSekolahUrl || '',
+      logoKopKiri: baseKop.logoKopKiri || baseKop.logoKabupatenUrl || '',
+      logoKopKanan: baseKop.logoKopKanan || baseKop.logoSekolahUrl || '',
+      kopBorderStyle: (baseKop.kopBorderStyle || 'double_thick') as KopBorderStyle
     });
     showTempFeedback('Kop surat Anda dikembalikan ke Template Bawaan Sistem.');
   };

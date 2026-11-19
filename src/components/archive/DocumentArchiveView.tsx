@@ -44,11 +44,14 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
     updateArchive, 
     deleteArchive, 
     archiveReport, 
-    schoolConfig, 
+    effectiveSchoolConfig: schoolConfig, 
     tasks, 
     inventories,
     monthlyReports,
     annualReports,
+    libraryBooks,
+    libraryMembers,
+    libraryMemberStats,
     currentRole 
   } = useApp();
 
@@ -162,6 +165,10 @@ export const DocumentArchiveView: React.FC<DocumentArchiveViewProps> = ({ onOpen
         schoolConfig,
         tasks,
         inventories,
+        monthlyReports,
+        libraryBooks: doc.role === 'PERPUS' ? libraryBooks : [],
+        libraryMembers: doc.role === 'PERPUS' ? libraryMembers : [],
+        libraryMemberStats: doc.role === 'PERPUS' ? libraryMemberStats : undefined,
         manualDate: doc.reportData?.manualDocDate,
         nomorSurat: doc.nomorSurat
       });
