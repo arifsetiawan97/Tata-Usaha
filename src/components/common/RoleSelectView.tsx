@@ -131,6 +131,7 @@ export const RoleSelectView: React.FC = () => {
     setShowLoginPass(false);
     setAuthFeedback(null);
     setAuthModalMode('login');
+    refreshAccessState(true);
   };
 
   const openRegisterModal = (defaultRole: RoleType = 'TU') => {
@@ -142,6 +143,7 @@ export const RoleSelectView: React.FC = () => {
     setShowRegPass(false);
     setAuthFeedback(null);
     setAuthModalMode('register');
+    refreshAccessState(true);
   };
 
   const openForgotModal = (prefillUsername = '') => {
@@ -149,19 +151,19 @@ export const RoleSelectView: React.FC = () => {
     setForgotNote('');
     setAuthFeedback(null);
     setAuthModalMode('forgot');
-    refreshAccessState();
+    refreshAccessState(true);
   };
 
   const openCheckStatusModal = () => {
     setLookupUsername(trackedUsername || '');
     setAuthFeedback(null);
     setAuthModalMode('check_status');
-    refreshAccessState();
+    refreshAccessState(true);
   };
 
   const handleManualRefreshNotif = async () => {
     setIsRefreshingNotif(true);
-    await refreshAccessState();
+    await refreshAccessState(true);
     setTimeout(() => setIsRefreshingNotif(false), 350);
   };
 
@@ -228,7 +230,7 @@ export const RoleSelectView: React.FC = () => {
 
   const handleLookupAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const latestUsers = await refreshAccessState();
+    const latestUsers = await refreshAccessState(true);
     const clean = lookupUsername.trim();
     if (!clean) return;
     const found = latestUsers.find(u => u.username.toLowerCase() === clean.toLowerCase());

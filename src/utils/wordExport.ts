@@ -25,6 +25,11 @@ import {
   OFFICIAL_TUPOKSI_DEFINITIONS
 } from './taskClassification';
 import { calculateAnnualPerformanceSummary } from './annualPerformanceHelper';
+import {
+  computeLibraryMemberRecap,
+  computeMonthlyBookAdditions,
+  computeMonthlyMemberAdditions
+} from './libraryStatsHelper';
 import { ROLE_OPERATIONAL_SPECS } from '../data/roleOperationalSpecs';
 import {
   formatOfficialNameWithDegree,
@@ -46,6 +51,7 @@ export interface WordExportParams {
   tupoksiDefinitions?: TupoksiDefinitionsMap;
   manualDate?: string;
   nomorSurat?: string;
+  monthlyReports?: MonthlyReport[];
   libraryBooks?: LibraryBookItem[];
   libraryMembers?: LibraryMemberItem[];
   libraryMemberStats?: LibraryMemberStats;
@@ -129,8 +135,24 @@ function generateWordKopSurat(config: SchoolConfig): string {
     config.nss ? `NSS: ${config.nss}` : ''
   ].filter(Boolean).join(' · ');
 
+  const borderCss = (() => {
+    switch (config.kopBorderStyle) {
+      case 'double':
+        return '3.5px double #000000';
+      case 'solid_thick':
+        return '3px solid #000000';
+      case 'solid_thin':
+        return '1.5px solid #000000';
+      case 'dashed':
+        return '2px dashed #000000';
+      case 'double_thick':
+      default:
+        return '4.5px double #000000';
+    }
+  })();
+
   return `
-    <table class="kop-table" border="0" cellspacing="0" cellpadding="0" style="width: 100%; border-bottom: 3px double #000000; padding-bottom: 8px; margin-bottom: 14px;">
+    <table class="kop-table" border="0" cellspacing="0" cellpadding="0" style="width: 100%; border-bottom: ${borderCss}; padding-bottom: 8px; margin-bottom: 14px;">
       <tr>
         <td style="width: 85px; text-align: center; vertical-align: middle;">
           ${leftLogo ? `
@@ -249,6 +271,7 @@ export function generateOfficialDocumentWord(params: WordExportParams): string {
     tupoksiDefinitions,
     manualDate,
     nomorSurat,
+    monthlyReports = [],
     libraryBooks = [],
     libraryMembers = [],
     libraryMemberStats
@@ -319,44 +342,44 @@ export function generateOfficialDocumentWord(params: WordExportParams): string {
 
   // Khusus Layanan Perpustakaan Data Isolasi + Gender Breakdown + Monthly Additions
   const isPerpus = role === 'PERPUS';
-  const regGuruL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'L').length;
-  const regGuruP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
-  const regStaffL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'L').length;
-  const regStaffP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
-  const regSiswaL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L' && m.status !== 'tamat' && m.status !== 'alumni').length;
-  const regSiswaP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P' && m.status !== 'tamat' && m.status !== 'alumni').length;
+  const memberRecap = computeLibraryMemberRecap(libraryMembers, libraryMemberStats);
+  const guruL = memberRecap.guruLaki;
+  const guruP = memberRecap.guruPerempuan;
+  const guruCount = memberRecap.totalGuru;
 
-  const guruL = Math.max(regGuruL, libraryMemberStats?.guruLaki || 0);
-  const guruP = Math.max(regGuruP, libraryMemberStats?.guruPerempuan || 0);
-  const guruCount = Math.max(libraryMemberStats?.guruPendidik || 0, guruL + guruP);
+  const staffL = memberRecap.staffLaki;
+  const staffP = memberRecap.staffPerempuan;
+  const staffCount = memberRecap.totalStaff;
 
-  const staffL = Math.max(regStaffL, libraryMemberStats?.staffLaki || 0);
-  const staffP = Math.max(regStaffP, libraryMemberStats?.staffPerempuan || 0);
-  const staffCount = Math.max(libraryMemberStats?.staffTendik || 0, staffL + staffP);
+  const siswaLCount = memberRecap.siswaLaki;
+  const siswaPCount = memberRecap.siswaPerempuan;
+  const totalAnggotaPerpus = memberRecap.grandTotal;
 
-  const siswaLCount = Math.max(regSiswaL, libraryMemberStats?.siswaLaki || 0);
-  const siswaPCount = Math.max(regSiswaP, libraryMemberStats?.siswaPerempuan || 0);
-  const totalAnggotaPerpus = guruCount + staffCount + siswaLCount + siswaPCount;
+  const monthlyAddBreakdown = isPerpus && isMonthly
+    ? computeMonthlyMemberAdditions(libraryMembers, targetYear, targetMonth)
+    : null;
 
   const monthlyNewMembers = isPerpus
     ? (isMonthly
-        ? libraryMembers.filter(m => isMemberJoinedInMonth(m, targetYear, targetMonth))
+        ? (monthlyAddBreakdown?.members || [])
         : libraryMembers.filter(m => (m.tanggalBergabung || m.tanggalTerdaftar || '').trim().startsWith(String(targetYear))))
     : [];
 
   const perpusBooks = isMonthly && monthlyData
-    ? libraryBooks.filter(b => {
-        const targetKey = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
-        const rawBulan = String(b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : ''));
-        return rawBulan.startsWith(targetKey) || (Boolean(b.tanggalMasuk) && b.tanggalMasuk.startsWith(targetKey));
-      })
+    ? computeMonthlyBookAdditions(libraryBooks, targetYear, targetMonth).books
     : libraryBooks;
 
   const kpiItems = (isMonthly && monthlyData?.customKPIs && monthlyData.customKPIs.length > 0)
     ? monthlyData.customKPIs
     : (ROLE_OPERATIONAL_SPECS[role]?.operationalKPIs || []);
 
-  const annualPerf = !isMonthly ? calculateAnnualPerformanceSummary(tasks, role, targetYear) : null;
+  const annualPerf = !isMonthly
+    ? calculateAnnualPerformanceSummary(tasks, role, targetYear, {
+        monthlyReports,
+        libraryBooks,
+        libraryMembers
+      })
+    : null;
 
   return `
     <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -644,8 +667,8 @@ export function generateOfficialDocumentWord(params: WordExportParams): string {
         ${(monthlyNewMembers.length > 0 || isMonthly) ? `
           <div style="font-weight: bold; font-size: 10pt; margin: 6pt 0 3pt 0;">
             ${isMonthly
-              ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[targetMonth - 1]} ${targetYear} (${monthlyNewMembers.length} Orang Terdaftar Baru):`
-              : `Rekapitulasi Penambahan Anggota Baru Tahun ${targetYear} (${monthlyNewMembers.length} Orang Terdaftar Baru):`
+              ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[targetMonth - 1]} ${targetYear} (${monthlyNewMembers.length} Orang — Pendidik L:${monthlyAddBreakdown?.guruLaki || 0}/P:${monthlyAddBreakdown?.guruPerempuan || 0}, Tendik L:${monthlyAddBreakdown?.staffLaki || 0}/P:${monthlyAddBreakdown?.staffPerempuan || 0}, Siswa L:${monthlyAddBreakdown?.siswaLaki || 0}/P:${monthlyAddBreakdown?.siswaPerempuan || 0}):`
+              : `Rekapitulasi Penambahan Anggota Baru Tahun ${targetYear} (${monthlyNewMembers.length} Orang — L:${annualPerf?.totalMembersAddedL || 0}, P:${annualPerf?.totalMembersAddedP || 0}):`
             }
           </div>
           <table class="data-table">
@@ -1053,12 +1076,17 @@ export function generateLibraryMemberReportWord(params: LibraryMemberWordParams)
 
         ${hasMonthFilter ? `
           <div class="section-header">II. REKAPITULASI PENAMBAHAN ANGGOTA BARU BULAN ${monthLabel.toUpperCase()}</div>
-          <p style="font-size: 10pt; font-weight: bold; margin-bottom: 4pt;">
-            Penambahan Bulan ${monthLabel}: ${addedInMonth.length} Anggota Baru
-            (Pendidik/Guru: ${addedInMonth.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU').length} org &middot;
-            Tendik/Staff: ${addedInMonth.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF').length} org &middot;
-            Siswa: ${addedInMonth.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA').length} org)
-          </p>
+          ${(() => {
+            const mAdd = computeMonthlyMemberAdditions(libraryMembers, additionYear, additionMonth as number);
+            return `
+              <p style="font-size: 10pt; font-weight: bold; margin-bottom: 4pt;">
+                Penambahan Bulan ${monthLabel}: ${mAdd.total} Anggota Baru
+                (Pendidik/Guru: ${mAdd.guruTotal} [L:${mAdd.guruLaki}, P:${mAdd.guruPerempuan}] &middot;
+                Tendik/Staff: ${mAdd.staffTotal} [L:${mAdd.staffLaki}, P:${mAdd.staffPerempuan}] &middot;
+                Siswa: ${mAdd.siswaTotal} [L:${mAdd.siswaLaki}, P:${mAdd.siswaPerempuan}])
+              </p>
+            `;
+          })()}
           <table class="data-table">
             <thead>
               <tr>

@@ -32,11 +32,15 @@ import {
   OFFICIAL_TUPOKSI_DEFINITIONS
 } from './taskClassification';
 import { calculateAnnualPerformanceSummary } from './annualPerformanceHelper';
+import {
+  computeLibraryMemberRecap,
+  computeMonthlyBookAdditions,
+  computeMonthlyMemberAdditions
+} from './libraryStatsHelper';
 import { ROLE_OPERATIONAL_SPECS } from '../data/roleOperationalSpecs';
 import {
   formatOfficialNameWithDegree,
-  formatOfficialNipOrPppk,
-  isMemberJoinedInMonth
+  formatOfficialNipOrPppk
 } from './formatters';
 
 const MONTH_NAMES = [
@@ -108,6 +112,7 @@ export interface OfficialDocxParams {
   tupoksiDefinitions?: TupoksiDefinitionsMap;
   manualDate?: string;
   nomorSurat?: string;
+  monthlyReports?: MonthlyReport[];
   libraryBooks?: LibraryBookItem[];
   libraryMembers?: LibraryMemberItem[];
   libraryMemberStats?: LibraryMemberStats;
@@ -345,11 +350,21 @@ export async function createKopSuratTable(config: SchoolConfig): Promise<Table> 
 
   // 3 columns: 1050 + 5837 + 1050 = 7937 DXA
   const kopWidths = [1050, 5837, 1050];
-  const kopRowBottomBorder = {
-    style: BorderStyle.DOUBLE,
-    size: 18,
-    color: '000000'
-  };
+  const kopRowBottomBorder = (() => {
+    switch (config.kopBorderStyle) {
+      case 'double':
+        return { style: BorderStyle.DOUBLE, size: 14, color: '000000' };
+      case 'solid_thick':
+        return { style: BorderStyle.SINGLE, size: 24, color: '000000' };
+      case 'solid_thin':
+        return { style: BorderStyle.SINGLE, size: 8, color: '000000' };
+      case 'dashed':
+        return { style: BorderStyle.DASHED, size: 12, color: '000000' };
+      case 'double_thick':
+      default:
+        return { style: BorderStyle.DOUBLE, size: 20, color: '000000' };
+    }
+  })();
 
   return new Table({
     width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
@@ -788,6 +803,7 @@ export async function createOfficialDocumentDocx(params: OfficialDocxParams): Pr
     tupoksiDefinitions,
     manualDate,
     nomorSurat,
+    monthlyReports = [],
     libraryBooks = [],
     libraryMembers = [],
     libraryMemberStats
@@ -1223,24 +1239,18 @@ export async function createOfficialDocumentDocx(params: OfficialDocxParams): Pr
 
   // 7. KHUSUS PERPUSTAKAAN: DATA REKAPITULASI ANGGOTA & PENAMBAHAN ANGGOTA BARU BULAN INI
   if (isPerpus) {
-    const regGuruL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'L').length;
-    const regGuruP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
-    const regStaffL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'L').length;
-    const regStaffP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
-    const regSiswaL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L' && m.status !== 'tamat' && m.status !== 'alumni').length;
-    const regSiswaP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P' && m.status !== 'tamat' && m.status !== 'alumni').length;
+    const memberRecap = computeLibraryMemberRecap(libraryMembers, libraryMemberStats);
+    const guruL = memberRecap.guruLaki;
+    const guruP = memberRecap.guruPerempuan;
+    const totalGuru = memberRecap.totalGuru;
 
-    const guruL = Math.max(regGuruL, libraryMemberStats?.guruLaki || 0);
-    const guruP = Math.max(regGuruP, libraryMemberStats?.guruPerempuan || 0);
-    const totalGuru = Math.max(libraryMemberStats?.guruPendidik || 0, guruL + guruP);
+    const staffL = memberRecap.staffLaki;
+    const staffP = memberRecap.staffPerempuan;
+    const totalStaff = memberRecap.totalStaff;
 
-    const staffL = Math.max(regStaffL, libraryMemberStats?.staffLaki || 0);
-    const staffP = Math.max(regStaffP, libraryMemberStats?.staffPerempuan || 0);
-    const totalStaff = Math.max(libraryMemberStats?.staffTendik || 0, staffL + staffP);
-
-    const siswaL = Math.max(regSiswaL, libraryMemberStats?.siswaLaki || 0);
-    const siswaP = Math.max(regSiswaP, libraryMemberStats?.siswaPerempuan || 0);
-    const totalAnggotaPerpus = totalGuru + totalStaff + siswaL + siswaP;
+    const siswaL = memberRecap.siswaLaki;
+    const siswaP = memberRecap.siswaPerempuan;
+    const totalAnggotaPerpus = memberRecap.grandTotal;
 
     docChildren.push(createSectionHeader('III. DATA REKAPITULASI ANGGOTA PERPUSTAKAAN (PEMUSTAKA SEKOLAH)'));
 
@@ -1276,19 +1286,25 @@ export async function createOfficialDocumentDocx(params: OfficialDocxParams): Pr
     );
 
     // Tambahan Anggota Baru pada Bulan Berjalan (untuk auditor/admin cek penambahan bulanan)
+    const monthlyAddBreakdown = isMonthly
+      ? computeMonthlyMemberAdditions(libraryMembers, targetYear, targetMonth)
+      : null;
+
     const addedThisMonth = isMonthly
-      ? libraryMembers.filter(m => isMemberJoinedInMonth(m, targetYear, targetMonth))
+      ? (monthlyAddBreakdown?.members || [])
       : libraryMembers.filter(m => {
           const raw = (m.tanggalBergabung || m.tanggalTerdaftar || '').trim();
           return raw.startsWith(String(targetYear));
         });
 
     if (addedThisMonth.length > 0 || isMonthly) {
+      const annualAddL = addedThisMonth.filter(m => (m.jenisKelamin || 'L') !== 'P').length;
+      const annualAddP = addedThisMonth.filter(m => m.jenisKelamin === 'P').length;
       docChildren.push(
         createBodyParagraph(
           isMonthly
-            ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[targetMonth - 1]} ${targetYear} (${addedThisMonth.length} Orang Terdaftar Baru):`
-            : `Rekapitulasi Penambahan Anggota Baru Tahun ${targetYear} (${addedThisMonth.length} Orang Terdaftar Baru):`,
+            ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[targetMonth - 1]} ${targetYear} (${addedThisMonth.length} Orang — Pendidik L:${monthlyAddBreakdown?.guruLaki || 0}/P:${monthlyAddBreakdown?.guruPerempuan || 0}, Tendik L:${monthlyAddBreakdown?.staffLaki || 0}/P:${monthlyAddBreakdown?.staffPerempuan || 0}, Siswa L:${monthlyAddBreakdown?.siswaLaki || 0}/P:${monthlyAddBreakdown?.siswaPerempuan || 0}):`
+            : `Rekapitulasi Penambahan Anggota Baru Tahun ${targetYear} (${addedThisMonth.length} Orang — L:${annualAddL}, P:${annualAddP}):`,
           { bold: true, size: 22 }
         )
       );
@@ -1358,7 +1374,11 @@ export async function createOfficialDocumentDocx(params: OfficialDocxParams): Pr
   const taskSectionPrefix = isPerpus ? 'IV.' : 'III.';
   if (!isMonthly) {
     // ANNUAL REPORT -> 12-MONTH RECAP TABLE (EXACT 1:1 WITH UI!)
-    const annualPerf = calculateAnnualPerformanceSummary(tasks, role, targetYear);
+    const annualPerf = calculateAnnualPerformanceSummary(tasks, role, targetYear, {
+      monthlyReports,
+      libraryBooks,
+      libraryMembers
+    });
     docChildren.push(
       createSectionHeader(
         `${taskSectionPrefix} REKAPITULASI & PERSENTASE KINERJA OPERASIONAL PER BULAN (TUGAS POKOK & TUGAS TAMBAHAN)`
@@ -1580,11 +1600,7 @@ export async function createOfficialDocumentDocx(params: OfficialDocxParams): Pr
   // 9. KHUSUS PERPUSTAKAAN: KOLEKSI BUKU BARU (BULANAN) ATAU KATALOG KOLEKSI (TAHUNAN)
   if (isPerpus) {
     const perpusBooks = isMonthly && monthlyData
-      ? libraryBooks.filter(b => {
-          const targetKey = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
-          const rawBulan = String(b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : ''));
-          return rawBulan.startsWith(targetKey) || (Boolean(b.tanggalMasuk) && b.tanggalMasuk.startsWith(targetKey));
-        })
+      ? computeMonthlyBookAdditions(libraryBooks, targetYear, targetMonth).books
       : libraryBooks;
 
     docChildren.push(
@@ -1773,25 +1789,19 @@ export async function createLibraryMemberReportDocx(params: LibraryMemberDocxPar
     ? manualDate.trim()
     : `${schoolConfig.kabupatenKota || 'Batang Hari'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
 
-  const regGuruL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'L').length;
-  const regGuruP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
-  const regStaffL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'L').length;
-  const regStaffP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
-  const regSiswaL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L').length;
-  const regSiswaP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P').length;
+  const memberRecap = computeLibraryMemberRecap(libraryMembers, memberStats);
+  const guruL = memberRecap.guruLaki;
+  const guruP = memberRecap.guruPerempuan;
+  const totalGuru = memberRecap.totalGuru;
 
-  const guruL = memberStats?.guruLaki ?? regGuruL;
-  const guruP = memberStats?.guruPerempuan ?? regGuruP;
-  const totalGuru = (memberStats?.guruPendidik && memberStats.guruPendidik > 0) ? memberStats.guruPendidik : (guruL + guruP);
+  const staffL = memberRecap.staffLaki;
+  const staffP = memberRecap.staffPerempuan;
+  const totalStaff = memberRecap.totalStaff;
 
-  const staffL = memberStats?.staffLaki ?? regStaffL;
-  const staffP = memberStats?.staffPerempuan ?? regStaffP;
-  const totalStaff = (memberStats?.staffTendik && memberStats.staffTendik > 0) ? memberStats.staffTendik : (staffL + staffP);
-
-  const siswaL = Math.max(memberStats?.siswaLaki || 0, regSiswaL);
-  const siswaP = Math.max(memberStats?.siswaPerempuan || 0, regSiswaP);
-  const totalSiswa = siswaL + siswaP;
-  const grandTotal = totalGuru + totalStaff + totalSiswa;
+  const siswaL = memberRecap.siswaLaki;
+  const siswaP = memberRecap.siswaPerempuan;
+  const totalSiswa = memberRecap.totalSiswa;
+  const grandTotal = memberRecap.grandTotal;
 
   const docChildren: (Paragraph | Table)[] = [];
 
@@ -1924,10 +1934,8 @@ export async function createLibraryMemberReportDocx(params: LibraryMemberDocxPar
   // 4. BAGIAN II: REKAPITULASI PENAMBAHAN ANGGOTA BARU BULAN TERPILIH (Jika Filter Bulan Dipilih)
   const hasMonthFilter = additionMonth !== 'all' && typeof additionMonth === 'number';
   if (hasMonthFilter) {
-    const addedInMonth = libraryMembers.filter(m => isMemberJoinedInMonth(m, additionYear, additionMonth));
-    const addedGuru = addedInMonth.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU').length;
-    const addedStaff = addedInMonth.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF').length;
-    const addedSiswa = addedInMonth.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA').length;
+    const mAdd = computeMonthlyMemberAdditions(libraryMembers, additionYear, additionMonth as number);
+    const addedInMonth = mAdd.members;
     const monthLabel = `${MONTH_NAMES[additionMonth - 1]} ${additionYear}`;
 
     docChildren.push(
@@ -1935,7 +1943,7 @@ export async function createLibraryMemberReportDocx(params: LibraryMemberDocxPar
     );
     docChildren.push(
       createBodyParagraph(
-        `Ringkasan Penambahan Bulan ${monthLabel}: ${addedInMonth.length} Anggota Baru (Pendidik/Guru: ${addedGuru} org · Tendik/Staff: ${addedStaff} org · Siswa: ${addedSiswa} org).`,
+        `Ringkasan Penambahan Bulan ${monthLabel}: ${mAdd.total} Anggota Baru (Pendidik/Guru: ${mAdd.guruTotal} org [L:${mAdd.guruLaki}, P:${mAdd.guruPerempuan}] · Tendik/Staff: ${mAdd.staffTotal} org [L:${mAdd.staffLaki}, P:${mAdd.staffPerempuan}] · Siswa: ${mAdd.siswaTotal} org [L:${mAdd.siswaLaki}, P:${mAdd.siswaPerempuan}]).`,
         { bold: true, size: 22 }
       )
     );

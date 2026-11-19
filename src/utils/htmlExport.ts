@@ -6,8 +6,13 @@ import {
   OFFICIAL_TUPOKSI_DEFINITIONS 
 } from './taskClassification';
 import { calculateAnnualPerformanceSummary } from './annualPerformanceHelper';
+import {
+  computeLibraryMemberRecap,
+  computeMonthlyBookAdditions,
+  computeMonthlyMemberAdditions
+} from './libraryStatsHelper';
 import { ROLE_OPERATIONAL_SPECS } from '../data/roleOperationalSpecs';
-import { formatOfficialNameWithDegree, formatOfficialNipOrPppk, isMemberJoinedInMonth } from './formatters';
+import { formatOfficialNameWithDegree, formatOfficialNipOrPppk } from './formatters';
 
 interface DocumentExportParams {
   reportType: 'monthly' | 'annual';
@@ -18,6 +23,7 @@ interface DocumentExportParams {
   tupoksiDefinitions?: TupoksiDefinitionsMap;
   manualDate?: string;
   nomorSurat?: string;
+  monthlyReports?: MonthlyReport[];
   libraryBooks?: LibraryBookItem[];
   libraryMembers?: LibraryMemberItem[];
   libraryMemberStats?: LibraryMemberStats;
@@ -44,6 +50,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
     tupoksiDefinitions,
     manualDate,
     nomorSurat,
+    monthlyReports = [],
     libraryBooks = [],
     libraryMembers = [],
     libraryMemberStats
@@ -145,9 +152,14 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
   const totalPages = 1 + subsequentChunks.length + 1 + 1; // Lembar 1 + N Task Sheets + Lampiran Sarpras + Lembar Pengesahan
 
   const annualPerformance = calculateAnnualPerformanceSummary(
-    tasks, 
-    role, 
-    !isMonthly ? (reportData as AnnualReport).year : 2026
+    tasks,
+    role,
+    !isMonthly ? (reportData as AnnualReport).year : 2026,
+    {
+      monthlyReports,
+      libraryBooks,
+      libraryMembers
+    }
   );
 
   const printKpis = (isMonthly && monthlyData?.customKPIs && monthlyData.customKPIs.length > 0)
@@ -156,37 +168,52 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
 
   const targetMonth = monthlyData?.month || 9;
   const targetYear = isMonthly ? (monthlyData?.year || 2026) : (annualData?.year || 2026);
-  const regGuruL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'L').length;
-  const regGuruP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'GURU' && m.jenisKelamin === 'P').length;
-  const regStaffL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'L').length;
-  const regStaffP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'STAFF' && m.jenisKelamin === 'P').length;
-  const regSiswaL = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'L' && m.status !== 'tamat' && m.status !== 'alumni').length;
-  const regSiswaP = libraryMembers.filter(m => String(m.tipeAnggota).toUpperCase() === 'SISWA' && m.jenisKelamin === 'P' && m.status !== 'tamat' && m.status !== 'alumni').length;
+  const memberRecap = computeLibraryMemberRecap(libraryMembers, libraryMemberStats);
+  const perpusGuruL = memberRecap.guruLaki;
+  const perpusGuruP = memberRecap.guruPerempuan;
+  const perpusTotalGuru = memberRecap.totalGuru;
 
-  const perpusGuruL = Math.max(regGuruL, libraryMemberStats?.guruLaki || 0);
-  const perpusGuruP = Math.max(regGuruP, libraryMemberStats?.guruPerempuan || 0);
-  const perpusTotalGuru = Math.max(libraryMemberStats?.guruPendidik || 0, perpusGuruL + perpusGuruP);
+  const perpusStaffL = memberRecap.staffLaki;
+  const perpusStaffP = memberRecap.staffPerempuan;
+  const perpusTotalStaff = memberRecap.totalStaff;
 
-  const perpusStaffL = Math.max(regStaffL, libraryMemberStats?.staffLaki || 0);
-  const perpusStaffP = Math.max(regStaffP, libraryMemberStats?.staffPerempuan || 0);
-  const perpusTotalStaff = Math.max(libraryMemberStats?.staffTendik || 0, perpusStaffL + perpusStaffP);
+  const perpusSiswaL = memberRecap.siswaLaki;
+  const perpusSiswaP = memberRecap.siswaPerempuan;
+  const perpusTotalAll = memberRecap.grandTotal;
 
-  const perpusSiswaL = Math.max(regSiswaL, libraryMemberStats?.siswaLaki || 0);
-  const perpusSiswaP = Math.max(regSiswaP, libraryMemberStats?.siswaPerempuan || 0);
-  const perpusTotalAll = perpusTotalGuru + perpusTotalStaff + perpusSiswaL + perpusSiswaP;
+  const monthlyAddBreakdown = role === 'PERPUS' && isMonthly
+    ? computeMonthlyMemberAdditions(libraryMembers, targetYear, targetMonth)
+    : null;
 
   const monthlyNewMembers = role === 'PERPUS'
     ? (isMonthly
-        ? libraryMembers.filter(m => isMemberJoinedInMonth(m, targetYear, targetMonth))
+        ? (monthlyAddBreakdown?.members || [])
         : libraryMembers.filter(m => (m.tanggalBergabung || m.tanggalTerdaftar || '').trim().startsWith(String(targetYear))))
     : [];
 
-  // Reusable Kop Surat Generator with user-uploaded logos and official double dividing line
+  // Reusable Kop Surat Generator with user-uploaded logos and dynamic divider border
+  const getKopBorderCss = (style?: SchoolConfig['kopBorderStyle']) => {
+    switch (style) {
+      case 'double':
+        return '3.5px double #000000';
+      case 'solid_thick':
+        return '3px solid #000000';
+      case 'solid_thin':
+        return '1.5px solid #000000';
+      case 'dashed':
+        return '2px dashed #000000';
+      case 'double_thick':
+      default:
+        return '4.5px double #000000';
+    }
+  };
+
   const generateKopSuratHtml = (config: typeof schoolConfig) => {
     const leftLogo = config.logoKopKiri || config.logoKabupatenUrl;
     const rightLogo = config.logoKopKanan || config.logoSekolahUrl;
+    const borderCss = getKopBorderCss(config.kopBorderStyle);
     return `
-      <div class="kop-surat">
+      <div class="kop-surat" style="border-bottom: ${borderCss};">
         <div class="kop-logo">
           ${leftLogo ? `
             <img src="${leftLogo}" alt="Logo Pemda" style="max-height: 80px; max-width: 80px; object-fit: contain;">
@@ -928,8 +955,8 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
       ${(monthlyNewMembers.length > 0 || isMonthly) ? `
       <div style="font-weight: bold; font-size: 8.5pt; margin: 6px 0 3px 0; color: #1e293b;">
         ${isMonthly
-          ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[targetMonth - 1]} ${targetYear} (${monthlyNewMembers.length} Orang Terdaftar Baru):`
-          : `Rekapitulasi Penambahan Anggota Baru Tahun ${targetYear} (${monthlyNewMembers.length} Orang Terdaftar Baru):`
+          ? `Rekapitulasi Penambahan Anggota Baru Bulan ${MONTH_NAMES[targetMonth - 1]} ${targetYear} (${monthlyNewMembers.length} Orang — Pendidik L:${monthlyAddBreakdown?.guruLaki || 0}/P:${monthlyAddBreakdown?.guruPerempuan || 0}, Tendik L:${monthlyAddBreakdown?.staffLaki || 0}/P:${monthlyAddBreakdown?.staffPerempuan || 0}, Siswa L:${monthlyAddBreakdown?.siswaLaki || 0}/P:${monthlyAddBreakdown?.siswaPerempuan || 0}):`
+          : `Rekapitulasi Penambahan Anggota Baru Tahun ${targetYear} (${monthlyNewMembers.length} Orang — L:${annualPerformance.totalMembersAddedL}, P:${annualPerformance.totalMembersAddedP}):`
         }
       </div>
       <table class="data-table" style="margin-top: 2px; margin-bottom: 8px; font-size: 8pt;">
@@ -1197,11 +1224,7 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
         <tbody>
           ${(() => {
             const perpusBooks = isMonthly && monthlyData
-              ? libraryBooks.filter(b => {
-                  const targetKey = `${monthlyData.year}-${String(monthlyData.month).padStart(2, '0')}`;
-                  const rawBulan = String(b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : ''));
-                  return rawBulan.startsWith(targetKey) || (Boolean(b.tanggalMasuk) && b.tanggalMasuk.startsWith(targetKey));
-                })
+              ? computeMonthlyBookAdditions(libraryBooks, monthlyData.year, monthlyData.month).books
               : libraryBooks;
             if (perpusBooks.length === 0) {
               return `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 10px;">${isMonthly ? 'Pada bulan berjalan tidak terdapat penambahan buku baru yang masuk / dibeli.' : 'Belum ada data buku yang terdaftar.'}</td></tr>`;

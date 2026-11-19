@@ -59,6 +59,7 @@ export interface LibraryMemberStats {
   staffLaki?: number;
   staffPerempuan?: number;
   lastUpdated: string;
+  isManualOverride?: boolean;
 }
 
 export interface LibraryMemberItem {
@@ -253,6 +254,47 @@ export interface SchoolOfficer {
   signatureImage?: string; // uploaded signature image data URL
 }
 
+export type KopBorderStyle = 'double_thick' | 'double' | 'solid_thick' | 'solid_thin' | 'dashed';
+
+export interface UserLetterheadConfig {
+  userId?: string;
+  username?: string;
+  pemerintahDaerah: string;
+  dinasPendidikan: string;
+  namaSekolah: string;
+  npsn: string;
+  nss: string;
+  alamat: string;
+  desaKecamatan: string;
+  kabupatenKota: string;
+  provinsi: string;
+  kodePos: string;
+  telepon: string;
+  email: string;
+  website: string;
+  logoKabupatenUrl?: string;
+  logoSekolahUrl?: string;
+  logoKopKiri?: string;
+  logoKopKanan?: string;
+  kopBorderStyle?: KopBorderStyle;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export interface UserSignatureConfig {
+  userId?: string;
+  username?: string;
+  role?: RoleType;
+  kepalaSekolah?: Partial<SchoolOfficer>;
+  operatorProfile?: Partial<SchoolOfficer>;
+  stempelEnabled?: boolean;
+  stempelTextLine1?: string;
+  stempelTextLine2?: string;
+  customStempelUrl?: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 export interface SchoolConfig {
   pemerintahDaerah: string;
   dinasPendidikan: string;
@@ -272,12 +314,15 @@ export interface SchoolConfig {
   logoKopKiri?: string; // Uploaded custom left logo for Kop Surat
   logoKopKanan?: string; // Uploaded custom right logo for Kop Surat
   logoAplikasiUrl?: string;
+  kopBorderStyle?: KopBorderStyle;
   stempelEnabled: boolean;
   stempelTextLine1: string;
   stempelTextLine2: string;
   customStempelUrl?: string; // uploaded stamp image data URL
   kepalaSekolah: SchoolOfficer;
   operatorProfiles: Record<RoleType, SchoolOfficer>;
+  userLetterheads?: Record<string, UserLetterheadConfig>;
+  userSignatures?: Record<string, UserSignatureConfig>;
 }
 
 export interface ArchiveDocument {

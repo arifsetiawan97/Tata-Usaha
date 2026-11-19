@@ -215,11 +215,44 @@ export const KopSurat: React.FC<KopSuratProps> = ({ config, className = "", isPr
         </div>
       </div>
 
-      {/* Garis Ganda Pemisah Khas Surat Dinas (Garis Tebal 3px & Garis Tipis 1px) */}
-      <div className="w-full mt-2 mb-4">
-        <div className="h-[3px] bg-slate-950 w-full" />
-        <div className="h-[1px] bg-slate-900 w-full mt-[2px]" />
-      </div>
+      {/* Garis Pembatas Bawah Kop Surat (Mendukung Pilihan Gaya Garis Pengguna) */}
+      {(() => {
+        const borderStyle = config.kopBorderStyle || 'double_thick';
+        if (borderStyle === 'double') {
+          return (
+            <div className="w-full mt-2 mb-4">
+              <div className="h-[2px] bg-slate-950 w-full" />
+              <div className="h-[2px] bg-slate-900 w-full mt-[2px]" />
+            </div>
+          );
+        }
+        if (borderStyle === 'solid_thick') {
+          return (
+            <div className="w-full mt-2 mb-4">
+              <div className="h-[3px] bg-slate-950 w-full" />
+            </div>
+          );
+        }
+        if (borderStyle === 'solid_thin') {
+          return (
+            <div className="w-full mt-2 mb-4">
+              <div className="h-[1.5px] bg-slate-900 w-full" />
+            </div>
+          );
+        }
+        if (borderStyle === 'dashed') {
+          return (
+            <div className="w-full mt-2 mb-4 border-b-2 border-dashed border-slate-900" />
+          );
+        }
+        // Default: double_thick (Garis Tebal 3px + Garis Tipis 1px)
+        return (
+          <div className="w-full mt-2 mb-4">
+            <div className="h-[3px] bg-slate-950 w-full" />
+            <div className="h-[1px] bg-slate-900 w-full mt-[2px]" />
+          </div>
+        );
+      })()}
     </div>
   );
 };

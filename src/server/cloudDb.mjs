@@ -235,7 +235,17 @@ function buildFallbackSeedData() {
     customCategories: [],
     libraryBooks: [],
     libraryMembers: [],
-    libraryMemberStats: { siswa: 0, guru: 0, staff: 0 },
+    libraryMemberStats: {
+      siswaLaki: 0,
+      siswaPerempuan: 0,
+      guruPendidik: 0,
+      guruLaki: 0,
+      guruPerempuan: 0,
+      staffTendik: 0,
+      staffLaki: 0,
+      staffPerempuan: 0,
+      lastUpdated: ''
+    },
     accessUsers: [],
     deletedAccessUserIds: [],
     accessRules: { ...DEFAULT_ACCESS_RULES },
@@ -575,16 +585,62 @@ export async function applyStateUpdate(body) {
       ? adminPassword.trim()
       : current.adminPassword || DEFAULT_ADMIN_PASSWORD;
 
+  const mergePerUserIsolationMap = (existingMap, incomingMap) => {
+    const merged = { ...(existingMap && typeof existingMap === 'object' ? existingMap : {}) };
+    if (!incomingMap || typeof incomingMap !== 'object') return merged;
+    for (const [key, inc] of Object.entries(incomingMap)) {
+      if (!inc || typeof inc !== 'object') continue;
+      const prev = merged[key];
+      if (!prev) {
+        merged[key] = inc;
+        continue;
+      }
+      const prevTs = parseTimestamp(prev.updatedAt);
+      const incTs = parseTimestamp(inc.updatedAt);
+      if (incTs >= prevTs) {
+        merged[key] = inc;
+      }
+    }
+    return merged;
+  };
+
+  const mergeSchoolConfig = (existingCfg, incomingCfg) => {
+    if (incomingCfg === undefined) return existingCfg;
+    if (!existingCfg) return incomingCfg;
+
+    const mergedLetterheads = mergePerUserIsolationMap(
+      existingCfg.userLetterheads,
+      incomingCfg.userLetterheads
+    );
+    const mergedSignatures = mergePerUserIsolationMap(
+      existingCfg.userSignatures,
+      incomingCfg.userSignatures
+    );
+
+    if (canReplaceOperational) {
+      return {
+        ...existingCfg,
+        ...incomingCfg,
+        userLetterheads: mergedLetterheads,
+        userSignatures: mergedSignatures
+      };
+    }
+
+    // Even when client has not hydrated base schoolConfig, preserve per-user isolated letterheads/signatures
+    return {
+      ...existingCfg,
+      userLetterheads: mergedLetterheads,
+      userSignatures: mergedSignatures
+    };
+  };
+
   const updated = {
     ...current,
     tasks: pickCollection(tasks, current.tasks),
     inventories: pickCollection(inventories, current.inventories),
     monthlyReports: pickCollection(monthlyReports, current.monthlyReports),
     annualReports: pickCollection(annualReports, current.annualReports),
-    schoolConfig:
-      schoolConfig !== undefined && (canReplaceOperational || !current.schoolConfig)
-        ? schoolConfig
-        : current.schoolConfig,
+    schoolConfig: mergeSchoolConfig(current.schoolConfig, schoolConfig),
     archives: pickCollection(archives, current.archives),
     tupoksiDefinitions:
       tupoksiDefinitions !== undefined && (canReplaceOperational || !current.tupoksiDefinitions)

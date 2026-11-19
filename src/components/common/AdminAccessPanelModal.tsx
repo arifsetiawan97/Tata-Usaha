@@ -191,6 +191,26 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
     await refreshAccessState(true);
   };
 
+  const handleAutoRecoverConnection = async () => {
+    setIsRefreshingList(true);
+    storageService.setCentralHubOverride(null);
+    setHubUrlInput('');
+    const health = await storageService.checkHealth();
+    await refreshAccessState(true);
+    setTimeout(() => setIsRefreshingList(false), 300);
+    if (health.ok) {
+      setNotice({
+        ok: true,
+        text: `Koneksi server berhasil dipulihkan otomatis (${health.label || 'Satu Pintu Aktif'}).`
+      });
+    } else {
+      setNotice({
+        ok: false,
+        text: 'Endpoint /api/state belum merespons. Pastikan server aktif atau atur URL Hub ke domain produksi yang aktif.'
+      });
+    }
+  };
+
   const handleQuickApprove = (user: RegisteredAccessUser) => {
     const res = approveAccessUser(user.id);
     setNotice({ ok: res.ok, text: res.message });
@@ -434,6 +454,17 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {(syncStatus === 'offline' || serverStorageMode === 'offline') && (
+                    <button
+                      type="button"
+                      onClick={handleAutoRecoverConnection}
+                      className="px-2.5 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold flex items-center gap-1.5 cursor-pointer"
+                      title="Reset hub tersimpan yang bermasalah dan sambungkan ulang ke server secara otomatis"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingList ? 'animate-spin' : ''}`} />
+                      <span>Pulihkan Koneksi</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleCopyPortalLink(false)}

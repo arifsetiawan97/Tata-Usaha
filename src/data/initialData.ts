@@ -1600,127 +1600,18 @@ export const initialCustomCategories: CustomCategory[] = [
 ];
 
 export const initialLibraryMemberStats: LibraryMemberStats = {
-  siswaLaki: 142,
-  siswaPerempuan: 158,
-  guruPendidik: 24,
-  guruLaki: 10,
-  guruPerempuan: 14,
-  staffTendik: 8,
-  staffLaki: 5,
-  staffPerempuan: 3,
-  lastUpdated: '2026-10-25'
+  siswaLaki: 0,
+  siswaPerempuan: 0,
+  guruPendidik: 0,
+  guruLaki: 0,
+  guruPerempuan: 0,
+  staffTendik: 0,
+  staffLaki: 0,
+  staffPerempuan: 0,
+  lastUpdated: ''
 };
 
-export const initialLibraryMembers: LibraryMemberItem[] = [
-  {
-    id: 'mem-g-01',
-    nomorAnggota: 'ANG-G-001',
-    nama: 'Dra. Hj. Nurjanah, M.Pd.',
-    tipeAnggota: 'GURU',
-    kelasAtauJabatan: 'Guru Bahasa Indonesia',
-    nomorIdentitas: '19750812 200212 2 003',
-    jenisKelamin: 'P',
-    tanggalBergabung: '2026-07-15',
-    status: 'aktif',
-    keterangan: 'Peminjam aktif buku referensi pengajaran'
-  },
-  {
-    id: 'mem-g-02',
-    nomorAnggota: 'ANG-G-002',
-    nama: 'Ahmad Fauzi, S.Pd., M.Si.',
-    tipeAnggota: 'GURU',
-    kelasAtauJabatan: 'Guru IPA Terpadu',
-    nomorIdentitas: '19820315 200801 1 011',
-    jenisKelamin: 'L',
-    tanggalBergabung: '2026-07-15',
-    status: 'aktif',
-    keterangan: 'Koordinator literasi sains'
-  },
-  {
-    id: 'mem-s-01',
-    nomorAnggota: 'ANG-ST-001',
-    nama: 'Slamet Riyadi, S.Kom.',
-    tipeAnggota: 'STAFF',
-    kelasAtauJabatan: 'Staf Administrasi & Tata Usaha',
-    nomorIdentitas: '19890620 201402 1 002',
-    jenisKelamin: 'L',
-    tanggalBergabung: '2026-07-20',
-    status: 'aktif',
-    keterangan: 'Pustaka digital & arsip'
-  },
-  {
-    id: 'mem-s-02',
-    nomorAnggota: 'ANG-ST-002',
-    nama: 'Rina Maryani, A.Md.',
-    tipeAnggota: 'STAFF',
-    kelasAtauJabatan: 'Staf Keuangan & BOS',
-    nomorIdentitas: '19920410 201903 2 005',
-    jenisKelamin: 'P',
-    tanggalBergabung: '2026-08-01',
-    status: 'aktif',
-    keterangan: 'Peminjaman majalah & referensi'
-  },
-  {
-    id: 'mem-sw-01',
-    nomorAnggota: 'ANG-SW-001',
-    nama: 'Muhammad Arya Pratama',
-    tipeAnggota: 'SISWA',
-    kelasAtauJabatan: 'Kelas VII-A',
-    nomorIdentitas: 'NISN 0102938471',
-    jenisKelamin: 'L',
-    tanggalBergabung: '2026-07-22',
-    status: 'aktif',
-    keterangan: 'Duta Baca Kelas VII'
-  },
-  {
-    id: 'mem-sw-02',
-    nomorAnggota: 'ANG-SW-002',
-    nama: 'Aisyah Putri Maharani',
-    tipeAnggota: 'SISWA',
-    kelasAtauJabatan: 'Kelas VII-B',
-    nomorIdentitas: 'NISN 0108372619',
-    jenisKelamin: 'P',
-    tanggalBergabung: '2026-07-22',
-    status: 'aktif',
-    keterangan: 'Peminjam terajin novel fiksi'
-  },
-  {
-    id: 'mem-sw-03',
-    nomorAnggota: 'ANG-SW-003',
-    nama: 'Rizky Ramadhan',
-    tipeAnggota: 'SISWA',
-    kelasAtauJabatan: 'Kelas VIII-A',
-    nomorIdentitas: 'NISN 0098472615',
-    jenisKelamin: 'L',
-    tanggalBergabung: '2026-08-05',
-    status: 'aktif',
-    keterangan: 'Peminjaman buku sains'
-  },
-  {
-    id: 'mem-sw-04',
-    nomorAnggota: 'ANG-SW-004',
-    nama: 'Dewi Lestari Safitri',
-    tipeAnggota: 'SISWA',
-    kelasAtauJabatan: 'Kelas IX-C',
-    nomorIdentitas: 'NISN 0089283741',
-    jenisKelamin: 'P',
-    tanggalBergabung: '2026-08-10',
-    status: 'aktif',
-    keterangan: 'Persiapan literasi kelulusan'
-  },
-  {
-    id: 'mem-sw-05',
-    nomorAnggota: 'ANG-SW-005',
-    nama: 'Bagus Setiawan',
-    tipeAnggota: 'SISWA',
-    kelasAtauJabatan: 'Alumni (Lulus 2026)',
-    nomorIdentitas: 'NISN 0076543210',
-    jenisKelamin: 'L',
-    tanggalBergabung: '2023-07-15',
-    status: 'tamat',
-    keterangan: 'Tamat Belajar / Alumni Siswa'
-  }
-];
+export const initialLibraryMembers: LibraryMemberItem[] = [];
 
 export const initialLibraryBooks: LibraryBookItem[] = [
   {

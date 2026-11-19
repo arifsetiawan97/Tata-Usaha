@@ -130,7 +130,7 @@ class StorageService {
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     const primaryUrl = this.getApiUrl(cleanPath);
 
-    const attempt = async (targetUrl: string): Promise<any | null> => {
+    const attemptOnce = async (targetUrl: string): Promise<any | null> => {
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
       try {
@@ -147,12 +147,19 @@ class StorageService {
       }
     };
 
-    const primaryResult = await attempt(primaryUrl);
+    const attemptWithRetry = async (targetUrl: string): Promise<any | null> => {
+      const first = await attemptOnce(targetUrl);
+      if (first) return first;
+      await new Promise(resolve => setTimeout(resolve, 350));
+      return await attemptOnce(targetUrl);
+    };
+
+    const primaryResult = await attemptWithRetry(primaryUrl);
     if (primaryResult) return primaryResult;
 
-    // If a custom hub URL failed or returned HTML/404, fall back to same-origin /api/*
+    // If a custom hub URL failed or returned HTML/404, automatically self-heal to same-origin /api/*
     if (primaryUrl !== cleanPath) {
-      const fallbackResult = await attempt(cleanPath);
+      const fallbackResult = await attemptWithRetry(cleanPath);
       if (fallbackResult) {
         if (typeof window !== 'undefined') {
           try {
@@ -166,6 +173,25 @@ class StorageService {
     }
 
     return null;
+  }
+
+  async checkHealth(): Promise<{
+    ok: boolean;
+    storageMode?: ServerStorageMode;
+    cloudPersistent?: boolean;
+    label?: string;
+  }> {
+    const json = await this.fetchJsonWithFallback('/api/health', {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store'
+    });
+    if (!json || json.status !== 'ok') return { ok: false };
+    return {
+      ok: true,
+      storageMode: json.storageMode,
+      cloudPersistent: json.cloudPersistent,
+      label: json.label
+    };
   }
 
   // =========================================================================
@@ -234,15 +260,12 @@ class StorageService {
   // =========================================================================
   async createItem<T extends { id?: string }>(collection: CrudCollection, item: T): Promise<T | null> {
     try {
-      const response = await fetch(this.getApiUrl(`/api/crud/${collection}`), {
+      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(item)
       });
-      if (response.ok) {
-        const result = await parseJsonResponse(response);
-        return (result?.created as T) || null;
-      }
+      return (result?.created as T) || null;
     } catch (error) {
       console.warn(`[StorageService] Offline create fallback for ${collection}:`, error);
     }
@@ -251,13 +274,11 @@ class StorageService {
 
   async readCollection<T>(collection: CrudCollection): Promise<T[]> {
     try {
-      const response = await fetch(this.getApiUrl(`/api/crud/${collection}`), {
-        headers: { Accept: 'application/json' }
+      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}`, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store'
       });
-      if (response.ok) {
-        const result = await parseJsonResponse(response);
-        return (result?.data as T[]) || [];
-      }
+      return (result?.data as T[]) || [];
     } catch (error) {
       console.warn(`[StorageService] Offline read fallback for ${collection}:`, error);
     }
@@ -266,13 +287,11 @@ class StorageService {
 
   async readItem<T>(collection: CrudCollection, id: string): Promise<T | null> {
     try {
-      const response = await fetch(this.getApiUrl(`/api/crud/${collection}/${id}`), {
-        headers: { Accept: 'application/json' }
+      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}/${encodeURIComponent(id)}`, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store'
       });
-      if (response.ok) {
-        const result = await parseJsonResponse(response);
-        return (result?.data as T) || null;
-      }
+      return (result?.data as T) || null;
     } catch (error) {
       console.warn(`[StorageService] Failed to read item ${id} from ${collection}:`, error);
     }
@@ -281,15 +300,12 @@ class StorageService {
 
   async updateItem<T>(collection: CrudCollection, id: string, updates: Partial<T>): Promise<T | null> {
     try {
-      const response = await fetch(this.getApiUrl(`/api/crud/${collection}/${id}`), {
+      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(updates)
       });
-      if (response.ok) {
-        const result = await parseJsonResponse(response);
-        return (result?.updated as T) || null;
-      }
+      return (result?.updated as T) || null;
     } catch (error) {
       console.warn(`[StorageService] Offline update fallback for ${collection}/${id}:`, error);
     }
@@ -298,11 +314,11 @@ class StorageService {
 
   async deleteItem(collection: CrudCollection, id: string): Promise<boolean> {
     try {
-      const response = await fetch(this.getApiUrl(`/api/crud/${collection}/${id}`), {
+      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { Accept: 'application/json' }
       });
-      return response.ok;
+      return Boolean(result?.success);
     } catch (error) {
       console.warn(`[StorageService] Offline delete fallback for ${collection}/${id}:`, error);
       return false;

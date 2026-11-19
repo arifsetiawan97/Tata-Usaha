@@ -1041,6 +1041,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return mergedUsers;
       }
+      setSyncStatus('synced');
     } catch {
       // Ignore transient network errors during background poll
     }
