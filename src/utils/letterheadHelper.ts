@@ -159,6 +159,19 @@ export function getEffectiveSchoolConfigForUser(
       };
     }
 
+    if (customSig.wakilKepalaSekolah) {
+      resolved.wakilKepalaSekolah = {
+        ...(resolved.wakilKepalaSekolah || {
+          nama: '',
+          nip: '',
+          jabatan: 'Wakil Kepala Sekolah',
+          signatureType: 'script' as const,
+          signatureData: ''
+        }),
+        ...customSig.wakilKepalaSekolah
+      };
+    }
+
     const sigRole = customSig.role || targetRole;
     if (sigRole && customSig.operatorProfile) {
       const existingOp = nextOperatorProfiles[sigRole] || {

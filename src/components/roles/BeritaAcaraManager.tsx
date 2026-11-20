@@ -16,6 +16,14 @@ import {
   downloadBeritaAcaraWord
 } from '../../utils/beritaAcaraExport';
 import {
+  JABATAN_HIERARCHY_PRESETS,
+  chunkSignatoriesIntoRows,
+  extractOrderedSignatoriesFromContent,
+  getWakasekInfo,
+  prepareOrderedSignatoriesWithDate,
+  sortSignatoriesByHierarchy
+} from '../../utils/signatoryOrderHelper';
+import {
   Printer,
   Download,
   FileText,
@@ -28,7 +36,10 @@ import {
   Boxes,
   ChevronRight,
   Calendar,
-  Edit3
+  Edit3,
+  Plus,
+  ArrowUpDown,
+  Users
 } from 'lucide-react';
 
 const STORAGE_KEY_BA_HISTORY = 'siops_tu_berita_acara_history';
@@ -38,14 +49,16 @@ type CategoryFilter =
   | 'Kesiswaan & Akademik'
   | 'Aset & Sapras'
   | 'Kepegawaian & Rapat'
-  | 'Keuangan & Kearsipan';
+  | 'Keuangan & Kearsipan'
+  | 'Persuratan & Layanan Umum';
 
 const CATEGORY_FILTERS: CategoryFilter[] = [
   'Semua',
   'Kesiswaan & Akademik',
   'Aset & Sapras',
   'Kepegawaian & Rapat',
-  'Keuangan & Kearsipan'
+  'Keuangan & Kearsipan',
+  'Persuratan & Layanan Umum'
 ];
 
 export const BeritaAcaraManager: React.FC = () => {
@@ -112,16 +125,57 @@ export const BeritaAcaraManager: React.FC = () => {
 
   const effectiveGeneratedDoc = useMemo(() => {
     const customDate = String(currentValues._customApprovalDate || '').trim();
-    if (!customDate) return generatedDoc;
+    const resolvedDocDateLocation = customDate || generatedDoc.docDateLocation;
+    const perRow: 2 | 3 = currentValues._signatoriesPerRow === 3 ? 3 : 2;
+    const customList = Array.isArray(currentValues._customSignatories)
+      ? (currentValues._customSignatories as BeritaAcaraSignatory[])
+      : null;
+
+    if (customList && customList.length > 0) {
+      const prepared = prepareOrderedSignatoriesWithDate(customList, resolvedDocDateLocation, perRow);
+      return {
+        ...generatedDoc,
+        docDateLocation: resolvedDocDateLocation,
+        signatoryLayout: 'ordered_hierarchy' as const,
+        signatoriesPerRow: perRow,
+        orderedSignatories: prepared,
+        leftSignatory: prepared[0] || generatedDoc.leftSignatory,
+        rightSignatory: prepared[1] || generatedDoc.rightSignatory
+      };
+    }
+
+    const baseList = extractOrderedSignatoriesFromContent(generatedDoc);
+    const preparedDefault = prepareOrderedSignatoriesWithDate(baseList, resolvedDocDateLocation, perRow);
+
+    if (generatedDoc.signatoryLayout === 'ordered_hierarchy' || preparedDefault.length > 2) {
+      return {
+        ...generatedDoc,
+        docDateLocation: resolvedDocDateLocation,
+        signatoryLayout: 'ordered_hierarchy' as const,
+        signatoriesPerRow: perRow,
+        orderedSignatories: preparedDefault,
+        leftSignatory: preparedDefault[0] || generatedDoc.leftSignatory,
+        rightSignatory: preparedDefault[1] || generatedDoc.rightSignatory
+      };
+    }
+
     return {
       ...generatedDoc,
-      docDateLocation: customDate,
-      rightSignatory: {
-        ...generatedDoc.rightSignatory,
-        dateLine: customDate
-      }
+      docDateLocation: resolvedDocDateLocation,
+      signatoryLayout: 'ordered_hierarchy' as const,
+      signatoriesPerRow: perRow,
+      orderedSignatories: preparedDefault,
+      leftSignatory: preparedDefault[0] || generatedDoc.leftSignatory,
+      rightSignatory: preparedDefault[1] || generatedDoc.rightSignatory
     };
-  }, [generatedDoc, currentValues._customApprovalDate]);
+  }, [generatedDoc, currentValues._customApprovalDate, currentValues._customSignatories, currentValues._signatoriesPerRow]);
+
+  const activeSignatoriesForEditor = useMemo(() => {
+    if (Array.isArray(currentValues._customSignatories) && currentValues._customSignatories.length > 0) {
+      return sortSignatoriesByHierarchy(currentValues._customSignatories as BeritaAcaraSignatory[]);
+    }
+    return extractOrderedSignatoriesFromContent(generatedDoc);
+  }, [currentValues._customSignatories, generatedDoc]);
 
   const filteredTemplates = useMemo(() => {
     if (selectedCategory === 'Semua') return BERITA_ACARA_TEMPLATES;
@@ -136,6 +190,71 @@ export const BeritaAcaraManager: React.FC = () => {
         [key]: value
       }
     }));
+  };
+
+  const commitCustomSignatories = (nextList: BeritaAcaraSignatory[]) => {
+    handleFieldChange('_customSignatories', sortSignatoriesByHierarchy(nextList));
+  };
+
+  const handleAddPresetSignatory = (presetId: string) => {
+    const base = [...activeSignatoriesForEditor];
+    let newSig: BeritaAcaraSignatory;
+
+    if (presetId === 'kepsek') {
+      const kep = schoolConfig.kepalaSekolah;
+      newSig = {
+        roleLabel: 'Mengetahui / Mengesahkan,',
+        jabatan: kep?.jabatan || 'Kepala Sekolah',
+        nama: kep?.nama?.trim() || '( .................................................. )',
+        nip: kep?.nip?.trim() ? `NIP. ${kep.nip.replace(/^NIP\.?\s*/i, '')}` : 'NIP. .................................................',
+        rankOrder: 100
+      };
+    } else if (presetId === 'wakasek') {
+      newSig = getWakasekInfo(schoolConfig);
+    } else if (presetId === 'kasubag_tu') {
+      const tu = schoolConfig.operatorProfiles?.TU;
+      newSig = {
+        roleLabel: 'Menyetujui,',
+        jabatan: 'Kepala / Kasubag Tata Usaha',
+        nama: tu?.nama?.trim() || '( .................................................. )',
+        nip: tu?.nip?.trim() ? `NIP. ${tu.nip.replace(/^NIP\.?\s*/i, '')}` : 'NIP. .................................................',
+        rankOrder: 70
+      };
+    } else {
+      const preset = JABATAN_HIERARCHY_PRESETS.find(p => p.id === presetId) || JABATAN_HIERARCHY_PRESETS[7];
+      newSig = {
+        roleLabel: preset.defaultRoleLabel,
+        jabatan: preset.defaultJabatan,
+        nama: '( .................................................. )',
+        nip: 'NIP / NIPPK. .................................................',
+        rankOrder: preset.rankOrder
+      };
+    }
+
+    commitCustomSignatories([...base, newSig]);
+    showToast(`Penandatangan "${newSig.jabatan}" ditambahkan dan diurutkan otomatis dari tertinggi ke terendah.`);
+  };
+
+  const handleUpdateCustomSignatory = (
+    idx: number,
+    patch: Partial<BeritaAcaraSignatory>,
+    autoResort = false
+  ) => {
+    const next = activeSignatoriesForEditor.map((item, i) => (i === idx ? { ...item, ...patch } : item));
+    if (autoResort) {
+      commitCustomSignatories(next);
+    } else {
+      handleFieldChange('_customSignatories', next);
+    }
+  };
+
+  const handleRemoveCustomSignatory = (idx: number) => {
+    if (activeSignatoriesForEditor.length <= 1) {
+      showToast('Minimal harus terdapat 1 pejabat penandatangan pada dokumen.');
+      return;
+    }
+    const next = activeSignatoriesForEditor.filter((_, i) => i !== idx);
+    commitCustomSignatories(next);
   };
 
   const handleResetTemplateValues = () => {
@@ -165,7 +284,8 @@ export const BeritaAcaraManager: React.FC = () => {
   const buildSafeFilename = (ext: string) => {
     const slug = activeTemplate.id.replace(/[^a-z0-9_]+/gi, '_');
     const datePart = String(currentValues.tanggal || new Date().toISOString().split('T')[0]);
-    return `Berita_Acara_${slug}_${datePart}.${ext}`;
+    const prefix = activeTemplate.id === 'surat_pengantar_berobat' ? 'Surat_Pengantar_Berobat' : `Berita_Acara_${slug}`;
+    return `${prefix}_${datePart}.${ext}`;
   };
 
   const handleDownloadDocx = async () => {
@@ -332,11 +452,11 @@ export const BeritaAcaraManager: React.FC = () => {
           <div className="flex items-center gap-2">
             <ScrollText className="w-5 h-5 text-sky-700 shrink-0" />
             <h2 className="text-base sm:text-lg font-bold text-slate-900">
-              Pembuat Berita Acara Otomatis Tata Usaha
+              Pembuat Berita Acara &amp; Surat Resmi Tata Usaha
             </h2>
           </div>
           <p className="text-xs text-slate-600">
-            Pilih jenis berita acara dan isi data pokok saja. Kop surat 2 logo, tanggal terbilang baku, tabel, dan pengesahan NIP/PPPK dibuat otomatis sesuai Tata Naskah Dinas.
+            Pilih jenis berita acara atau surat pengantar resmi dan isi data pokok saja. Kop surat 2 logo, tanggal terbilang baku, tabel, dan pengesahan NIP/PPPK dibuat otomatis sesuai Tata Naskah Dinas.
           </p>
         </div>
 
@@ -582,7 +702,7 @@ export const BeritaAcaraManager: React.FC = () => {
                         </select>
                       ) : (
                         <input
-                          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                          type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : field.type === 'time' ? 'time' : 'text'}
                           value={val}
                           onChange={e =>
                             handleFieldChange(
@@ -631,6 +751,198 @@ export const BeritaAcaraManager: React.FC = () => {
                 <p className="text-[10.5px] text-slate-500 leading-snug">
                   Kosongkan untuk mengikuti tempat sekolah &amp; tanggal berita acara secara otomatis, atau ketik manual khusus baris tempat &amp; tanggal pengesahan.
                 </p>
+              </div>
+
+              {/* 3. Susunan Urutan Tanda Tangan Resmi (Tertinggi -> Terendah, Kiri -> Kanan) */}
+              <div className="pt-3 border-t border-slate-200 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="flex items-center gap-1.5 text-[11px] font-bold text-slate-900">
+                      <Users className="w-3.5 h-3.5 text-sky-700" />
+                      <span>3. Urutan Tanda Tangan Resmi (Tertinggi → Terendah)</span>
+                    </h4>
+                    <p className="text-[10.5px] text-slate-500">
+                      Peringkat tertinggi otomatis menempati posisi Kiri, lalu diikuti peringkat di bawahnya ke Kanan &amp; baris berikutnya.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {Array.isArray(currentValues._customSignatories) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleFieldChange('_customSignatories', undefined);
+                          handleFieldChange('_signatoriesPerRow', 2);
+                        }}
+                        className="px-2 py-1 text-[10.5px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded cursor-pointer"
+                      >
+                        Reset Bawaan Template
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => commitCustomSignatories(activeSignatoriesForEditor)}
+                      className="px-2 py-1 text-[10.5px] font-semibold bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded inline-flex items-center gap-1 cursor-pointer"
+                      title="Urutkan otomatis dari jabatan tertinggi ke terendah"
+                    >
+                      <ArrowUpDown className="w-3 h-3" />
+                      <span>Urutkan Otomatis</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tombol Tambah Cepat Pejabat */}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetSignatory('kepsek')}
+                    className="px-2 py-1 text-[10.5px] font-semibold bg-slate-800 hover:bg-slate-900 text-white rounded-md inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Kepala Sekolah</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetSignatory('wakasek')}
+                    className="px-2 py-1 text-[10.5px] font-semibold bg-sky-700 hover:bg-sky-800 text-white rounded-md inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Wakil Kepala Sekolah</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetSignatory('kasubag_tu')}
+                    className="px-2 py-1 text-[10.5px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-md inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Kasubag / Kepala TU</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetSignatory('pelaksana_staf')}
+                    className="px-2 py-1 text-[10.5px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-md inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Pejabat / Pelaksana</span>
+                  </button>
+                </div>
+
+                {/* Pilihan Kolom Per Baris saat >= 3 Penandatangan */}
+                {activeSignatoriesForEditor.length >= 3 && (
+                  <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px]">
+                    <span className="font-semibold text-slate-700">Tata Letak Kolom:</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleFieldChange('_signatoriesPerRow', 2)}
+                        className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
+                          (currentValues._signatoriesPerRow || 2) === 2
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-white text-slate-700 border border-slate-300'
+                        }`}
+                      >
+                        2 Kolom / Baris
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFieldChange('_signatoriesPerRow', 3)}
+                        className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
+                          currentValues._signatoriesPerRow === 3
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-white text-slate-700 border border-slate-300'
+                        }`}
+                      >
+                        3 Kolom Sejajar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Daftar Penandatangan Terurut */}
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {activeSignatoriesForEditor.map((sig, idx) => {
+                    const perRow = currentValues._signatoriesPerRow === 3 && activeSignatoriesForEditor.length === 3 ? 3 : 2;
+                    const posLabel =
+                      perRow === 3
+                        ? idx === 0
+                          ? 'Kiri (Tertinggi)'
+                          : idx === 1
+                            ? 'Tengah'
+                            : 'Kanan (Terendah)'
+                        : idx === 0
+                          ? 'Baris 1 · Kiri (Tertinggi)'
+                          : idx === 1
+                            ? 'Baris 1 · Kanan'
+                            : `Baris ${Math.floor(idx / 2) + 1} · ${idx % 2 === 0 ? 'Kiri' : 'Kanan'}`;
+
+                    return (
+                      <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2 text-[11px]">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-slate-900">
+                            #{idx + 1} · {posLabel}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={sig.rankOrder || 40}
+                              onChange={e =>
+                                handleUpdateCustomSignatory(idx, { rankOrder: Number(e.target.value) }, true)
+                              }
+                              className="px-1.5 py-0.5 text-[10.5px] bg-white border border-slate-300 rounded font-medium text-slate-800"
+                              title="Pilih peringkat jabatan untuk pengurutan otomatis"
+                            >
+                              {JABATAN_HIERARCHY_PRESETS.map(p => (
+                                <option key={p.id} value={p.rankOrder}>
+                                  Peringkat {p.rankOrder}: {p.defaultJabatan}
+                                </option>
+                              ))}
+                              {!JABATAN_HIERARCHY_PRESETS.some(p => p.rankOrder === (sig.rankOrder || 40)) && (
+                                <option value={sig.rankOrder || 40}>Peringkat {sig.rankOrder || 40}</option>
+                              )}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCustomSignatory(idx)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                              title="Hapus penandatangan ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          <input
+                            type="text"
+                            value={sig.roleLabel}
+                            onChange={e => handleUpdateCustomSignatory(idx, { roleLabel: e.target.value })}
+                            placeholder="Keterangan (mis. Mengetahui,)"
+                            className="px-2 py-1 bg-white border border-slate-300 rounded text-[11px]"
+                          />
+                          <input
+                            type="text"
+                            value={sig.jabatan}
+                            onChange={e => handleUpdateCustomSignatory(idx, { jabatan: e.target.value })}
+                            placeholder="Jabatan Resmi"
+                            className="px-2 py-1 bg-white border border-slate-300 rounded text-[11px] font-semibold"
+                          />
+                          <input
+                            type="text"
+                            value={sig.nama}
+                            onChange={e => handleUpdateCustomSignatory(idx, { nama: e.target.value })}
+                            placeholder="Nama Lengkap & Gelar"
+                            className="px-2 py-1 bg-white border border-slate-300 rounded text-[11px]"
+                          />
+                          <input
+                            type="text"
+                            value={sig.nip}
+                            onChange={e => handleUpdateCustomSignatory(idx, { nip: e.target.value })}
+                            placeholder="NIP / NIPPK"
+                            className="px-2 py-1 bg-white border border-slate-300 rounded text-[11px] font-mono"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
@@ -708,6 +1020,17 @@ export const BeritaAcaraManager: React.FC = () => {
                     Nomor: {effectiveGeneratedDoc.nomorSurat}
                   </p>
                 </div>
+
+                {/* Blok Tujuan Surat (khusus Surat Pengantar / Surat Resmi) */}
+                {effectiveGeneratedDoc.recipientLines && effectiveGeneratedDoc.recipientLines.length > 0 && (
+                  <div className="my-3 text-xs sm:text-[13px] leading-snug">
+                    {effectiveGeneratedDoc.recipientLines.map((line, rIdx) => (
+                      <div key={rIdx} className={rIdx === 1 ? 'font-bold' : ''}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* 3. Paragraf Pembuka Baku */}
                 <p className="text-xs sm:text-[13px] leading-relaxed text-justify indent-8 mb-3">
@@ -866,24 +1189,47 @@ export const BeritaAcaraManager: React.FC = () => {
                   {effectiveGeneratedDoc.closingParagraph}
                 </p>
 
-                {/* 10. Blok Tanda Tangan Pengesahan */}
-                <div className="grid grid-cols-2 gap-6 pt-2 break-inside-avoid">
-                  {renderPreviewSignatory(
-                    effectiveGeneratedDoc.leftSignatory,
-                    effectiveGeneratedDoc.signatoryLayout === 'two_col',
-                    false
-                  )}
-                  {renderPreviewSignatory(effectiveGeneratedDoc.rightSignatory, false, true)}
-                </div>
+                {/* 10. Blok Tanda Tangan Pengesahan (Urutan Resmi Tertinggi -> Terendah: Kiri -> Kanan) */}
+                {(() => {
+                  const perRow: 2 | 3 = effectiveGeneratedDoc.signatoriesPerRow || 2;
+                  const orderedList = effectiveGeneratedDoc.orderedSignatories && effectiveGeneratedDoc.orderedSignatories.length > 0
+                    ? effectiveGeneratedDoc.orderedSignatories
+                    : [effectiveGeneratedDoc.leftSignatory, effectiveGeneratedDoc.rightSignatory];
+                  const sigRows = chunkSignatoriesIntoRows(orderedList, perRow);
+                  const totalSigs = orderedList.length;
+                  const dateSlotIdx = totalSigs === 1 ? 0 : Math.min((perRow === 3 && totalSigs === 3 ? 3 : 2) - 1, totalSigs - 1);
 
-                {effectiveGeneratedDoc.signatoryLayout === 'two_col_plus_kepsek' &&
-                  effectiveGeneratedDoc.centerBottomSignatory && (
-                    <div className="mt-5 flex justify-center break-inside-avoid">
-                      <div className="w-72">
-                        {renderPreviewSignatory(effectiveGeneratedDoc.centerBottomSignatory, true, false)}
-                      </div>
+                  let runningIdx = 0;
+                  return (
+                    <div className="space-y-5 pt-2">
+                      {sigRows.map((rowItems, rIdx) => {
+                        if (rowItems.length === 1) {
+                          const globalIdx = runningIdx++;
+                          return (
+                            <div key={rIdx} className="flex justify-center break-inside-avoid">
+                              <div className="w-72">
+                                {renderPreviewSignatory(rowItems[0], globalIdx === 0, globalIdx === dateSlotIdx)}
+                              </div>
+                            </div>
+                          );
+                        }
+                        const gridClass = rowItems.length === 3 ? 'grid-cols-3 gap-4' : 'grid-cols-2 gap-6';
+                        return (
+                          <div key={rIdx} className={`grid ${gridClass} break-inside-avoid`}>
+                            {rowItems.map((sig, cIdx) => {
+                              const globalIdx = runningIdx++;
+                              return (
+                                <React.Fragment key={cIdx}>
+                                  {renderPreviewSignatory(sig, globalIdx === 0, globalIdx === dateSlotIdx)}
+                                </React.Fragment>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
+                  );
+                })()}
 
                 {/* Saksi-Saksi */}
                 {effectiveGeneratedDoc.witnesses && effectiveGeneratedDoc.witnesses.length > 0 && (

@@ -374,6 +374,26 @@ export const TASK_PRESETS: Record<RoleType, TaskPresetItem[]> = {
       timeStart: '10:00',
       timeEnd: '12:30',
       notes: 'Notulen telah diketik rapi dan dibagikan ke seluruh peserta rapat.'
+    },
+    {
+      category: 'surat_keluar',
+      title: 'Penerbitan Surat Pengantar Berobat Resmi Warga Satuan Pendidikan',
+      description: 'Menyusun, meregistrasikan nomor surat dinas, dan mengesahkan Surat Pengantar Berobat resmi bagi siswa maupun pendidik/tenaga kependidikan ke Puskesmas/Klinik/RSUD.',
+      location: 'Loket Pelayanan TU & Ruang UKS',
+      volumeUnit: '1 berkas Surat Pengantar Berobat',
+      timeStart: '09:15',
+      timeEnd: '10:00',
+      notes: 'Surat pengantar resmi dicap dinas dan diserahkan kepada petugas pendamping/wali.'
+    },
+    {
+      category: 'layanan_umum',
+      title: 'Penyusunan Berita Acara Rapat Umum Pihak Sekolah & Orang Tua Siswa',
+      description: 'Mendokumentasikan daftar hadir peserta, notulensi musyawarah program kerja, serta menerbitkan Berita Acara resmi Rapat Umum Sekolah bersama Orang Tua/Wali Siswa dan Komite.',
+      location: 'Aula Pertemuan & Ruang Tata Usaha',
+      volumeUnit: '1 dokumen Berita Acara rapat umum',
+      timeStart: '09:00',
+      timeEnd: '12:00',
+      notes: 'Berita acara disahkan Kepala Sekolah, Komite/Perwakilan Orang Tua, dan Notulis TU.'
     }
   ],
   SERVICE: [

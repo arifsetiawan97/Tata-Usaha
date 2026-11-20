@@ -123,10 +123,10 @@ export const TUView: React.FC = () => {
             type="button"
             onClick={() => setRoleSubTab('TU', 'berita_acara')}
             className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 text-xs sm:text-sm font-bold rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap shrink-0"
-            title="Buat Berita Acara Otomatis (Kelulusan, Kenaikan Kelas, BAST, Rapat, Kas, Ujian, dll.)"
+            title="Buat Berita Acara & Surat Resmi TU (Surat Pengantar Berobat, Rapat Sekolah & Orang Tua, Kelulusan, BAST, dll.)"
           >
             <ScrollText className="w-4 h-4" />
-            <span>Berita Acara Otomatis</span>
+            <span>Berita Acara &amp; Surat TU</span>
           </button>
 
           <button

@@ -13,6 +13,7 @@ import { InventoryTable } from '../common/InventoryTable';
 import { LibraryBookManager } from '../perpus/LibraryBookManager';
 import { LibraryMemberManager } from '../perpus/LibraryMemberManager';
 import { BeritaAcaraManager } from './BeritaAcaraManager';
+import { BERITA_ACARA_TEMPLATES } from '../../data/beritaAcaraTemplates';
 import { initialSchoolConfig } from '../../data/initialData';
 import { 
   Shield, 
@@ -156,9 +157,9 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
     ...(role === 'TU' ? [
       {
         id: 'berita_acara' as RoleSubTab,
-        label: 'Berita Acara Otomatis',
+        label: 'Berita Acara & Surat TU',
         icon: ScrollText,
-        badge: '10 template'
+        badge: `${BERITA_ACARA_TEMPLATES.length} template`
       }
     ] : []),
     ...(role === 'PERPUS' ? [

@@ -213,8 +213,20 @@ function renderWordSignatureBlock(params: {
   docDate: string;
 }): string {
   const { schoolConfig, role, operatorTitle, docDate } = params;
+  let layoutMode = '2_col';
+  try {
+    const saved = localStorage.getItem('siops_signature_layout');
+    if (saved && ['2_col', '2_col_wakasek', '3_col_wakasek', '3_col', '4_col_hierarchy'].includes(saved)) {
+      layoutMode = saved;
+    }
+  } catch {
+    // ignore
+  }
+
   const kepsek = schoolConfig.kepalaSekolah;
+  const wakasek = schoolConfig.wakilKepalaSekolah;
   const operator = schoolConfig.operatorProfiles?.[role];
+  const tuProfile = schoolConfig.operatorProfiles?.TU;
 
   const isDummyKepsek = !kepsek?.nama || /rahmat(\s*hidayat)?/i.test(kepsek.nama) || kepsek.nama.trim() === '';
   const kepsekName = isDummyKepsek ? '( .................................................. )' : formatOfficialNameWithDegree(kepsek.nama);
@@ -224,6 +236,18 @@ function renderWordSignatureBlock(params: {
         : 'NIP. .................................................')
     : formatOfficialNipOrPppk(kepsek.nip, { defaultPrefix: 'NIP.' });
 
+  const isDummyWakasek = !wakasek?.nama || !wakasek.nama.trim();
+  const wakasekName = isDummyWakasek ? '( .................................................. )' : formatOfficialNameWithDegree(wakasek!.nama);
+  const wakasekNip = isDummyWakasek || !wakasek?.nip?.trim()
+    ? 'NIP. .................................................'
+    : formatOfficialNipOrPppk(wakasek!.nip, { defaultPrefix: 'NIP.' });
+
+  const isDummyTu = !tuProfile?.nama || /nurul|rahmat/i.test(tuProfile.nama) || tuProfile.nama.trim() === '';
+  const kasubagName = isDummyTu ? '( .................................................. )' : formatOfficialNameWithDegree(tuProfile!.nama);
+  const kasubagNip = isDummyTu || !tuProfile?.nip?.trim()
+    ? 'NIP. .................................................'
+    : formatOfficialNipOrPppk(tuProfile!.nip, { defaultPrefix: 'NIP.' });
+
   const isDummyOperator = !operator?.nama || /nurul(\s*hidayat|\s*hidayati)?/i.test(operator.nama) || /rahmat(\s*hidayat)?/i.test(operator.nama) || operator.nama.trim() === '';
   const operatorName = isDummyOperator ? '( .................................................. )' : formatOfficialNameWithDegree(operator.nama);
   const operatorNip = isDummyOperator || !operator?.nip || /19920815\s*202321\s*2\s*024/.test(operator.nip)
@@ -232,27 +256,73 @@ function renderWordSignatureBlock(params: {
         : 'NIP / NIPPK. .................................................')
     : formatOfficialNipOrPppk(operator.nip, { defaultPrefix: 'NIP.' });
 
+  const makeCell = (topLabel: string, roleText: string, nameText: string, nipText: string, isDummy: boolean, widthPct?: string) => `
+    <td${widthPct ? ` style="width: ${widthPct};"` : ''}>
+      <div>${topLabel}</div>
+      <div style="font-weight: bold; margin-top: 2px;">${roleText}</div>
+      <div style="height: 70px; text-align: center; vertical-align: middle;"></div>
+      <div style="font-weight: bold; ${isDummy ? '' : 'text-decoration: underline;'} font-size: 11pt;">${nameText}</div>
+      <div style="font-size: 9.5pt; font-family: Arial, sans-serif; margin-top: 2px;">
+        ${nipText}
+      </div>
+    </td>
+  `;
+
+  if (layoutMode === '2_col_wakasek') {
+    return `
+      <table class="signatures">
+        <tr>
+          ${makeCell('Mengetahui / Mengesahkan,', kepsek?.jabatan || 'Kepala Sekolah', kepsekName, kepsekNip, isDummyKepsek)}
+          ${makeCell(`${docDate}<br/>Wakil Kepala Sekolah,`, wakasek?.jabatan || 'Wakil Kepala Sekolah', wakasekName, wakasekNip, isDummyWakasek)}
+        </tr>
+      </table>
+    `;
+  }
+
+  if (layoutMode === '3_col_wakasek') {
+    return `
+      <table class="signatures">
+        <tr>
+          ${makeCell('Mengetahui / Mengesahkan,', kepsek?.jabatan || 'Kepala Sekolah', kepsekName, kepsekNip, isDummyKepsek, '33.33%')}
+          ${makeCell('Wakil Kepala Sekolah,', wakasek?.jabatan || 'Wakil Kepala Sekolah', wakasekName, wakasekNip, isDummyWakasek, '33.33%')}
+          ${makeCell(docDate, operatorTitle, operatorName, operatorNip, isDummyOperator, '33.33%')}
+        </tr>
+      </table>
+    `;
+  }
+
+  if (layoutMode === '3_col') {
+    return `
+      <table class="signatures">
+        <tr>
+          ${makeCell('Mengetahui / Mengesahkan,', kepsek?.jabatan || 'Kepala Sekolah', kepsekName, kepsekNip, isDummyKepsek, '33.33%')}
+          ${makeCell('Menyetujui,', 'Kasubag Tata Usaha', kasubagName, kasubagNip, isDummyTu, '33.33%')}
+          ${makeCell(docDate, operatorTitle, operatorName, operatorNip, isDummyOperator, '33.33%')}
+        </tr>
+      </table>
+    `;
+  }
+
+  if (layoutMode === '4_col_hierarchy') {
+    return `
+      <table class="signatures">
+        <tr>
+          ${makeCell('Mengetahui / Mengesahkan,', kepsek?.jabatan || 'Kepala Sekolah', kepsekName, kepsekNip, isDummyKepsek, '50%')}
+          ${makeCell(`${docDate}<br/>Wakil Kepala Sekolah,`, wakasek?.jabatan || 'Wakil Kepala Sekolah', wakasekName, wakasekNip, isDummyWakasek, '50%')}
+        </tr>
+        <tr>
+          ${makeCell('Menyetujui,', 'Kasubag Tata Usaha', kasubagName, kasubagNip, isDummyTu, '50%')}
+          ${makeCell('Yang Membuat Laporan,', operatorTitle, operatorName, operatorNip, isDummyOperator, '50%')}
+        </tr>
+      </table>
+    `;
+  }
+
   return `
     <table class="signatures">
       <tr>
-        <td>
-          <div>Mengetahui / Mengesahkan,</div>
-          <div style="font-weight: bold; margin-top: 2px;">Kepala Sekolah</div>
-          <div style="height: 70px; text-align: center; vertical-align: middle;"></div>
-          <div style="font-weight: bold; ${isDummyKepsek ? '' : 'text-decoration: underline;'} font-size: 11pt;">${kepsekName}</div>
-          <div style="font-size: 9.5pt; font-family: Arial, sans-serif; margin-top: 2px;">
-            ${kepsekNip}
-          </div>
-        </td>
-        <td>
-          <div>${docDate}</div>
-          <div style="font-weight: bold; margin-top: 2px;">${operatorTitle}</div>
-          <div style="height: 70px; text-align: center; vertical-align: middle;"></div>
-          <div style="font-weight: bold; ${isDummyOperator ? '' : 'text-decoration: underline;'} font-size: 11pt;">${operatorName}</div>
-          <div style="font-size: 9.5pt; font-family: Arial, sans-serif; margin-top: 2px;">
-            ${operatorNip}
-          </div>
-        </td>
+        ${makeCell('Mengetahui / Mengesahkan,', kepsek?.jabatan || 'Kepala Sekolah', kepsekName, kepsekNip, isDummyKepsek)}
+        ${makeCell(docDate, operatorTitle, operatorName, operatorNip, isDummyOperator)}
       </tr>
     </table>
   `;

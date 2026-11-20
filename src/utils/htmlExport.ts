@@ -1296,39 +1296,108 @@ export function generateOfficialDocumentHtml(params: DocumentExportParams): stri
       </div>
       ` : ''}
 
-      <!-- V. LEMBAR PENGESAHAN RESMI (ANTI-TERPOTONG) -->
+      <!-- V. LEMBAR PENGESAHAN RESMI (URUTAN TERTINGGI -> TERENDAH, ANTI-TERPOTONG) -->
       <div class="approval-wrapper">
-        <table class="approval-table" style="width: 100%; table-layout: fixed; border-collapse: collapse;">
-          <tr>
-            <!-- Kolom Kiri: Kepala Satuan Pendidikan (Mengetahui / Mengesahkan) -->
-            <td style="width: 50%; vertical-align: top; text-align: center; padding: 0 16px;">
-              <div class="sign-date" style="visibility: hidden; height: 22px; line-height: 22px;" aria-hidden="true">&nbsp;</div>
-              <div class="sign-title" style="height: 22px; line-height: 22px; font-weight: 600;">Mengetahui / Mengesahkan,</div>
-              <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${schoolConfig.kepalaSekolah.jabatan || 'Kepala Satuan Pendidikan'}</div>
-              
+        ${(() => {
+          let layoutMode = '2_col';
+          try {
+            const saved = localStorage.getItem('siops_signature_layout');
+            if (saved && ['2_col', '2_col_wakasek', '3_col_wakasek', '3_col', '4_col_hierarchy'].includes(saved)) {
+              layoutMode = saved;
+            }
+          } catch {
+            // ignore
+          }
+
+          const wakasek = schoolConfig.wakilKepalaSekolah;
+          const isDummyWakasek = !wakasek?.nama || !wakasek.nama.trim();
+          const wakasekName = isDummyWakasek ? '( .................................................. )' : formatOfficialNameWithDegree(wakasek!.nama);
+          const wakasekNip = isDummyWakasek || !wakasek?.nip?.trim()
+            ? 'NIP. .................................................'
+            : formatOfficialNipOrPppk(wakasek!.nip, { defaultPrefix: 'NIP.' });
+
+          const tuProfile = schoolConfig.operatorProfiles?.TU;
+          const isDummyTu = !tuProfile?.nama || /nurul|rahmat/i.test(tuProfile.nama) || tuProfile.nama.trim() === '';
+          const kasubagName = isDummyTu ? '( .................................................. )' : formatOfficialNameWithDegree(tuProfile!.nama);
+          const kasubagNip = isDummyTu || !tuProfile?.nip?.trim()
+            ? 'NIP. .................................................'
+            : formatOfficialNipOrPppk(tuProfile!.nip, { defaultPrefix: 'NIP.' });
+
+          const makeHtmlCell = (dateHtml: string, actionLabel: string, jabatanText: string, namaText: string, nipText: string, isDummy: boolean, widthPct = '50%') => `
+            <td style="width: ${widthPct}; vertical-align: top; text-align: center; padding: 0 12px;">
+              ${dateHtml}
+              <div class="sign-title" style="height: 22px; line-height: 22px; font-weight: 600;">${actionLabel}</div>
+              <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${jabatanText}</div>
               <div class="sign-box" style="height: 85px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
                 <div style="height: 75px; width: 100%;"></div>
               </div>
-
-              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; ${isDefaultOrDummyKepsek ? '' : 'text-decoration: underline;'}">${displayKepsekNama}</div>
-              <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${displayKepsekNip}</div>
+              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; ${isDummy ? '' : 'text-decoration: underline;'}">${namaText}</div>
+              <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${nipText}</div>
             </td>
+          `;
 
-            <!-- Kolom Kanan: Petugas Pelaksana / Pengelola (Yang Membuat Laporan) -->
-            <td style="width: 50%; vertical-align: top; text-align: center; padding: 0 16px;">
-              <div class="sign-date" style="height: 22px; line-height: 22px;">${docDate}</div>
-              <div class="sign-title" style="height: 22px; line-height: 22px; font-weight: 600;">Yang Membuat Laporan,</div>
-              <div class="sign-title" style="height: 22px; line-height: 22px; font-size: 9pt; margin-bottom: 2px;">${operator.jabatan || (role === 'PERPUS' ? 'Pengelola Perpustakaan' : 'Petugas Pelaksana')}</div>
+          const hiddenDate = '<div class="sign-date" style="visibility: hidden; height: 22px; line-height: 22px;" aria-hidden="true">&nbsp;</div>';
+          const visibleDate = `<div class="sign-date" style="height: 22px; line-height: 22px;">${docDate}</div>`;
 
-              <div class="sign-box" style="height: 85px; position: relative; margin: 4px 0; display: flex; align-items: center; justify-content: center;">
-                <div style="height: 75px; width: 100%;"></div>
-              </div>
+          const cellKepsek = (w = '50%') => makeHtmlCell(
+            hiddenDate,
+            'Mengetahui / Mengesahkan,',
+            schoolConfig.kepalaSekolah.jabatan || 'Kepala Satuan Pendidikan',
+            displayKepsekNama,
+            displayKepsekNip,
+            isDefaultOrDummyKepsek,
+            w
+          );
+          const cellWakasek = (withDate: boolean, w = '50%') => makeHtmlCell(
+            withDate ? visibleDate : hiddenDate,
+            'Wakil Kepala Sekolah,',
+            wakasek?.jabatan || 'Wakil Kepala Sekolah',
+            wakasekName,
+            wakasekNip,
+            isDummyWakasek,
+            w
+          );
+          const cellKasubag = (w = '50%') => makeHtmlCell(
+            hiddenDate,
+            'Menyetujui,',
+            'Kasubag Tata Usaha',
+            kasubagName,
+            kasubagNip,
+            isDummyTu,
+            w
+          );
+          const cellOperator = (withDate: boolean, w = '50%') => makeHtmlCell(
+            withDate ? visibleDate : hiddenDate,
+            'Yang Membuat Laporan,',
+            operator.jabatan || (role === 'PERPUS' ? 'Pengelola Perpustakaan' : 'Petugas Pelaksana'),
+            displayOperatorNama,
+            displayOperatorNip,
+            isDefaultOrDummyOperator,
+            w
+          );
 
-              <div class="sign-name" style="height: 24px; line-height: 24px; font-weight: bold; ${isDefaultOrDummyOperator ? '' : 'text-decoration: underline;'}">${displayOperatorNama}</div>
-              <div class="sign-nip" style="height: 20px; line-height: 20px; font-family: monospace;">${displayOperatorNip}</div>
-            </td>
-          </tr>
-        </table>
+          if (layoutMode === '2_col_wakasek') {
+            return `<table class="approval-table" style="width: 100%; table-layout: fixed; border-collapse: collapse;"><tr>${cellKepsek('50%')}${cellWakasek(true, '50%')}</tr></table>`;
+          }
+          if (layoutMode === '3_col_wakasek') {
+            return `<table class="approval-table" style="width: 100%; table-layout: fixed; border-collapse: collapse;"><tr>${cellKepsek('33.33%')}${cellWakasek(false, '33.33%')}${cellOperator(true, '33.33%')}</tr></table>`;
+          }
+          if (layoutMode === '3_col') {
+            return `<table class="approval-table" style="width: 100%; table-layout: fixed; border-collapse: collapse;"><tr>${cellKepsek('33.33%')}${cellKasubag('33.33%')}${cellOperator(true, '33.33%')}</tr></table>`;
+          }
+          if (layoutMode === '4_col_hierarchy') {
+            return `
+              <table class="approval-table" style="width: 100%; table-layout: fixed; border-collapse: collapse;">
+                <tr>${cellKepsek('50%')}${cellWakasek(true, '50%')}</tr>
+              </table>
+              <table class="approval-table" style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 16px;">
+                <tr>${cellKasubag('50%')}${cellOperator(false, '50%')}</tr>
+              </table>
+            `;
+          }
+
+          return `<table class="approval-table" style="width: 100%; table-layout: fixed; border-collapse: collapse;"><tr>${cellKepsek('50%')}${cellOperator(true, '50%')}</tr></table>`;
+        })()}
 
         <div class="footnote-disclaimer">
           Dokumen ini merupakan laporan kedinasan resmi UPT Satuan Pendidikan yang diverifikasi dan disahkan sesuai dengan Pedoman Tata Naskah Dinas Satuan Pendidikan.

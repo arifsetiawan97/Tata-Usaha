@@ -287,6 +287,7 @@ export interface UserSignatureConfig {
   username?: string;
   role?: RoleType;
   kepalaSekolah?: Partial<SchoolOfficer>;
+  wakilKepalaSekolah?: Partial<SchoolOfficer>;
   operatorProfile?: Partial<SchoolOfficer>;
   stempelEnabled?: boolean;
   stempelTextLine1?: string;
@@ -321,6 +322,7 @@ export interface SchoolConfig {
   stempelTextLine2: string;
   customStempelUrl?: string; // uploaded stamp image data URL
   kepalaSekolah: SchoolOfficer;
+  wakilKepalaSekolah?: SchoolOfficer;
   operatorProfiles: Record<RoleType, SchoolOfficer>;
   userLetterheads?: Record<string, UserLetterheadConfig>;
   userSignatures?: Record<string, UserSignatureConfig>;
@@ -359,11 +361,13 @@ export type BeritaAcaraTemplateId =
   | 'bast_barang'
   | 'serah_terima_jabatan'
   | 'rapat_dinas'
+  | 'rapat_sekolah_orang_tua'
   | 'pemeriksaan_kas'
   | 'pelaksanaan_ujian'
   | 'pemusnahan_arsip_barang'
   | 'ppdb_spmb'
-  | 'kehilangan_kerusakan';
+  | 'kehilangan_kerusakan'
+  | 'surat_pengantar_berobat';
 
 export interface BeritaAcaraSignatory {
   roleLabel: string;
@@ -372,6 +376,7 @@ export interface BeritaAcaraSignatory {
   nip: string;
   signatureImage?: string;
   dateLine?: string;
+  rankOrder?: number; // Semakin besar nilai semakin tinggi jabatan (100 = Kepala Sekolah -> 20 = Pelaksana/Staf)
 }
 
 export interface BeritaAcaraDetailPair {
@@ -389,10 +394,11 @@ export interface BeritaAcaraTableData {
 export interface GeneratedBeritaAcaraContent {
   templateId: BeritaAcaraTemplateId;
   templateTitle: string;
-  documentHeading: string; // e.g. "BERITA ACARA"
+  documentHeading: string; // e.g. "BERITA ACARA" or "SURAT PENGANTAR BEROBAT"
   documentSubHeading: string; // e.g. "RAPAT DEWAN GURU PENETAPAN KELULUSAN PESERTA DIDIK"
   nomorSurat: string;
   docDateLocation: string; // e.g. "Teluk, 16 November 2026"
+  recipientLines?: string[]; // Optional "Kepada Yth." block for official letters
   openingParagraph: string;
   basisParagraphs: string[];
   detailSectionTitle?: string;
@@ -407,10 +413,12 @@ export interface GeneratedBeritaAcaraContent {
   bodyParagraphs: string[];
   tables: BeritaAcaraTableData[];
   closingParagraph: string;
-  signatoryLayout: 'two_col' | 'two_col_plus_kepsek';
+  signatoryLayout: 'two_col' | 'two_col_plus_kepsek' | 'ordered_hierarchy';
   leftSignatory: BeritaAcaraSignatory;
   rightSignatory: BeritaAcaraSignatory;
   centerBottomSignatory?: BeritaAcaraSignatory;
+  orderedSignatories?: BeritaAcaraSignatory[];
+  signatoriesPerRow?: 2 | 3;
   witnesses?: { nama: string; jabatan: string; nip?: string }[];
 }
 

@@ -107,6 +107,7 @@ interface AppContextType {
   resetUserLetterhead: () => void;
   saveUserSignature: (payload: {
     kepalaSekolah?: SchoolOfficer;
+    wakilKepalaSekolah?: SchoolOfficer;
     operatorProfile?: SchoolOfficer;
     role?: RoleType;
     stempelEnabled?: boolean;
@@ -2010,6 +2011,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const saveUserSignature = (payload: {
     kepalaSekolah?: SchoolOfficer;
+    wakilKepalaSekolah?: SchoolOfficer;
     operatorProfile?: SchoolOfficer;
     role?: RoleType;
     stempelEnabled?: boolean;
@@ -2024,6 +2026,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSchoolConfig(prev => ({
         ...prev,
         ...(payload.kepalaSekolah ? { kepalaSekolah: payload.kepalaSekolah } : {}),
+        ...(payload.wakilKepalaSekolah ? { wakilKepalaSekolah: payload.wakilKepalaSekolah } : {}),
         ...(payload.operatorProfile
           ? {
               operatorProfiles: {

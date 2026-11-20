@@ -31,6 +31,12 @@ import {
   imageSourceToPngBytes
 } from './docxExport';
 import { downloadWordBlob } from './wordExport';
+import {
+  chunkSignatoriesIntoRows,
+  extractOrderedSignatoriesFromContent,
+  prepareOrderedSignatoriesWithDate,
+  sortSignatoriesByHierarchy
+} from './signatoryOrderHelper';
 
 type DocxAlignment = (typeof AlignmentType)[keyof typeof AlignmentType];
 
@@ -254,6 +260,30 @@ export async function createBeritaAcaraDocx(
       ]
     })
   );
+
+  // 2b. Blok Tujuan Surat (Kepada Yth.) jika ada
+  if (content.recipientLines && content.recipientLines.length > 0) {
+    content.recipientLines.forEach((line, idx) => {
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: {
+            before: idx === 0 ? 40 : 0,
+            after: idx === content.recipientLines!.length - 1 ? 140 : 20,
+            line: 250
+          },
+          children: [
+            new TextRun({
+              text: line,
+              font: FONT_FAMILY,
+              size: 24,
+              bold: idx === 1
+            })
+          ]
+        })
+      );
+    });
+  }
 
   // 3. Kalimat Pembuka Baku
   children.push(
@@ -591,48 +621,116 @@ export async function createBeritaAcaraDocx(
     })
   );
 
-  // 10. Lembar Penandatangan Resmi
-  const halfW = Math.floor(CONTENT_WIDTH_DXA / 2);
-  const rightHalfW = CONTENT_WIDTH_DXA - halfW;
-
-  const [leftCell, rightCell] = await Promise.all([
-    renderDocxSignatoryColumnCells(content.leftSignatory, halfW, includeSignatureImages),
-    renderDocxSignatoryColumnCells(content.rightSignatory, rightHalfW, includeSignatureImages)
-  ]);
-
-  children.push(
-    new Table({
-      width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
-      borders: tableBordersNone,
-      rows: [
-        new TableRow({
-          cantSplit: true,
-          children: [leftCell, rightCell]
-        })
-      ]
-    })
-  );
-
-  // Center Bottom Signatory (e.g. Mengetahui Kepala Sekolah on BAST / Sertijab / Ujian)
-  if (content.signatoryLayout === 'two_col_plus_kepsek' && content.centerBottomSignatory) {
-    const centerCell = await renderDocxSignatoryColumnCells(
-      content.centerBottomSignatory,
-      CONTENT_WIDTH_DXA,
-      includeSignatureImages
+  // 10. Lembar Penandatangan Resmi (Urutan Tertinggi -> Terendah, Kiri -> Kanan)
+  if (content.signatoryLayout === 'ordered_hierarchy' || (content.orderedSignatories && content.orderedSignatories.length > 0)) {
+    const perRow: 2 | 3 = content.signatoriesPerRow || 2;
+    const preparedSignatories = prepareOrderedSignatoriesWithDate(
+      extractOrderedSignatoriesFromContent(content),
+      content.docDateLocation,
+      perRow
     );
+    const sigRows = chunkSignatoriesIntoRows(preparedSignatories, perRow);
+
+    for (let rIdx = 0; rIdx < sigRows.length; rIdx++) {
+      const rowItems = sigRows[rIdx];
+      if (rIdx > 0) {
+        children.push(new Paragraph({ spacing: { before: 120, after: 0 }, children: [] }));
+      }
+      if (rowItems.length === 1) {
+        const singleCell = await renderDocxSignatoryColumnCells(
+          rowItems[0],
+          CONTENT_WIDTH_DXA,
+          includeSignatureImages
+        );
+        children.push(
+          new Table({
+            width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+            borders: tableBordersNone,
+            rows: [
+              new TableRow({
+                cantSplit: true,
+                children: [singleCell]
+              })
+            ]
+          })
+        );
+      } else {
+        const colCount = rowItems.length;
+        const baseW = Math.floor(CONTENT_WIDTH_DXA / colCount);
+        const colWidths = rowItems.map((_, idx) =>
+          idx === colCount - 1 ? CONTENT_WIDTH_DXA - baseW * (colCount - 1) : baseW
+        );
+        const rowCells = await Promise.all(
+          rowItems.map((sig, idx) =>
+            renderDocxSignatoryColumnCells(sig, colWidths[idx], includeSignatureImages)
+          )
+        );
+        children.push(
+          new Table({
+            width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+            borders: tableBordersNone,
+            rows: [
+              new TableRow({
+                cantSplit: true,
+                children: rowCells
+              })
+            ]
+          })
+        );
+      }
+    }
+  } else {
+    const sortedPair = sortSignatoriesByHierarchy([content.leftSignatory, content.rightSignatory]);
+    const leftSig: BeritaAcaraSignatory = {
+      ...sortedPair[0],
+      dateLine: undefined
+    };
+    const rightSig: BeritaAcaraSignatory = {
+      ...sortedPair[1],
+      dateLine: sortedPair[1].dateLine || sortedPair[0].dateLine || content.docDateLocation
+    };
+    const halfW = Math.floor(CONTENT_WIDTH_DXA / 2);
+    const rightHalfW = CONTENT_WIDTH_DXA - halfW;
+
+    const [leftCell, rightCell] = await Promise.all([
+      renderDocxSignatoryColumnCells(leftSig, halfW, includeSignatureImages),
+      renderDocxSignatoryColumnCells(rightSig, rightHalfW, includeSignatureImages)
+    ]);
+
     children.push(
-      new Paragraph({ spacing: { before: 120, after: 0 }, children: [] }),
       new Table({
         width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
         borders: tableBordersNone,
         rows: [
           new TableRow({
             cantSplit: true,
-            children: [centerCell]
+            children: [leftCell, rightCell]
           })
         ]
       })
     );
+
+    // Center Bottom Signatory (legacy two_col_plus_kepsek fallback)
+    if (content.signatoryLayout === 'two_col_plus_kepsek' && content.centerBottomSignatory) {
+      const centerCell = await renderDocxSignatoryColumnCells(
+        content.centerBottomSignatory,
+        CONTENT_WIDTH_DXA,
+        includeSignatureImages
+      );
+      children.push(
+        new Paragraph({ spacing: { before: 120, after: 0 }, children: [] }),
+        new Table({
+          width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+          borders: tableBordersNone,
+          rows: [
+            new TableRow({
+              cantSplit: true,
+              children: [centerCell]
+            })
+          ]
+        })
+      );
+    }
   }
 
   // Saksi-Saksi (jika diisi)
@@ -793,6 +891,16 @@ function renderHtmlInnerContent(
       <div style="font-size:11.5pt; margin-top:3px;">Nomor: ${escapeHtml(content.nomorSurat)}</div>
     </div>
 
+    ${
+      content.recipientLines && content.recipientLines.length > 0
+        ? `<div style="margin: 8px 0 14px 0; font-size:11.5pt; line-height:1.4;">
+            ${content.recipientLines
+              .map((line, idx) => `<div${idx === 1 ? ' style="font-weight:bold;"' : ''}>${escapeHtml(line)}</div>`)
+              .join('')}
+          </div>`
+        : ''
+    }
+
     <p style="text-align:justify; text-indent: 32px; line-height:1.45; margin-bottom:10px; font-size:11.5pt;">
       ${escapeHtml(content.openingParagraph)}
     </p>
@@ -889,18 +997,57 @@ function renderHtmlInnerContent(
       ${escapeHtml(content.closingParagraph)}
     </p>
 
-    <table style="width:100%; border-collapse:collapse; margin-top: 12px; page-break-inside: avoid;">
-      <tr>
-        <td style="width:50%; vertical-align:top; padding:0 8px;">${renderSignatoryBox(content.leftSignatory)}</td>
-        <td style="width:50%; vertical-align:top; padding:0 8px;">${renderSignatoryBox(content.rightSignatory)}</td>
-      </tr>
-    </table>
+    ${(() => {
+      if (content.signatoryLayout === 'ordered_hierarchy' || (content.orderedSignatories && content.orderedSignatories.length > 0)) {
+        const perRow: 2 | 3 = content.signatoriesPerRow || 2;
+        const prepared = prepareOrderedSignatoriesWithDate(
+          extractOrderedSignatoriesFromContent(content),
+          content.docDateLocation,
+          perRow
+        );
+        const rows = chunkSignatoriesIntoRows(prepared, perRow);
+        return rows
+          .map((rowItems, rIdx) => {
+            if (rowItems.length === 1) {
+              return `<div style="margin-top:${rIdx === 0 ? '12px' : '16px'}; page-break-inside: avoid;">${renderSignatoryBox(rowItems[0])}</div>`;
+            }
+            const colWidthPct = rowItems.length === 3 ? '33.33%' : '50%';
+            return `
+              <table style="width:100%; border-collapse:collapse; margin-top:${rIdx === 0 ? '12px' : '16px'}; page-break-inside: avoid;">
+                <tr>
+                  ${rowItems
+                    .map(
+                      sig =>
+                        `<td style="width:${colWidthPct}; vertical-align:top; padding:0 8px;">${renderSignatoryBox(sig)}</td>`
+                    )
+                    .join('')}
+                </tr>
+              </table>
+            `;
+          })
+          .join('');
+      }
 
-    ${
-      content.signatoryLayout === 'two_col_plus_kepsek' && content.centerBottomSignatory
-        ? `<div style="margin-top: 16px; page-break-inside: avoid;">${renderSignatoryBox(content.centerBottomSignatory)}</div>`
-        : ''
-    }
+      const sortedPair = sortSignatoriesByHierarchy([content.leftSignatory, content.rightSignatory]);
+      const leftSig: BeritaAcaraSignatory = { ...sortedPair[0], dateLine: undefined };
+      const rightSig: BeritaAcaraSignatory = {
+        ...sortedPair[1],
+        dateLine: sortedPair[1].dateLine || sortedPair[0].dateLine || content.docDateLocation
+      };
+      return `
+        <table style="width:100%; border-collapse:collapse; margin-top: 12px; page-break-inside: avoid;">
+          <tr>
+            <td style="width:50%; vertical-align:top; padding:0 8px;">${renderSignatoryBox(leftSig)}</td>
+            <td style="width:50%; vertical-align:top; padding:0 8px;">${renderSignatoryBox(rightSig)}</td>
+          </tr>
+        </table>
+        ${
+          content.signatoryLayout === 'two_col_plus_kepsek' && content.centerBottomSignatory
+            ? `<div style="margin-top: 16px; page-break-inside: avoid;">${renderSignatoryBox(content.centerBottomSignatory)}</div>`
+            : ''
+        }
+      `;
+    })()}
 
     ${
       content.witnesses && content.witnesses.length > 0

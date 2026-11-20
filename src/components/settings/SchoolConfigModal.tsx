@@ -75,6 +75,16 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
     }
   );
 
+  const [wakasekForm, setWakasekForm] = useState<SchoolOfficer>(
+    effectiveSchoolConfig.wakilKepalaSekolah || {
+      nama: '',
+      nip: '',
+      jabatan: 'Wakil Kepala Sekolah',
+      signatureType: 'script',
+      signatureData: ''
+    }
+  );
+
   const [operatorForm, setOperatorForm] = useState<SchoolOfficer>(
     effectiveSchoolConfig.operatorProfiles?.[activeOperatorRole] || {
       nama: currentUser?.namaLengkap || '',
@@ -117,6 +127,15 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
           nama: '',
           nip: '',
           jabatan: 'Kepala Satuan Pendidikan',
+          signatureType: 'script',
+          signatureData: ''
+        })
+      });
+      setWakasekForm({
+        ...(effectiveSchoolConfig.wakilKepalaSekolah || {
+          nama: '',
+          nip: '',
+          jabatan: 'Wakil Kepala Sekolah',
           signatureType: 'script',
           signatureData: ''
         })
@@ -198,6 +217,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
   const handleSavePengesahanMandiri = () => {
     saveUserSignature({
       kepalaSekolah: kepsekForm,
+      wakilKepalaSekolah: wakasekForm,
       operatorProfile: operatorForm
     });
     showTempFeedback(
@@ -210,6 +230,15 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
   const handleResetPengesahanMandiri = () => {
     resetUserSignature();
     setKepsekForm({ ...schoolConfig.kepalaSekolah });
+    setWakasekForm({
+      ...(schoolConfig.wakilKepalaSekolah || {
+        nama: '',
+        nip: '',
+        jabatan: 'Wakil Kepala Sekolah',
+        signatureType: 'script',
+        signatureData: ''
+      })
+    });
     setOperatorForm({
       ...(schoolConfig.operatorProfiles?.[activeOperatorRole] || {
         nama: currentUser?.namaLengkap || '',
@@ -234,6 +263,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
     } else if (activeTab === 'pengesahan') {
       saveUserSignature({
         kepalaSekolah: kepsekForm,
+        wakilKepalaSekolah: wakasekForm,
         operatorProfile: operatorForm
       });
     } else if (activeTab === 'aplikasi') {
@@ -771,10 +801,10 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Sisi Kiri: Pimpinan / Kepala Sekolah */}
-                <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-                  <h4 className="font-bold text-slate-900">Pihak Kiri (Mengetahui / Pimpinan)</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {/* Peringkat 1 (Kiri): Pimpinan Tertinggi / Kepala Sekolah */}
+                <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2.5">
+                  <h4 className="font-bold text-slate-900">1. Kiri (Kepala Sekolah / Tertinggi)</h4>
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Jabatan Penandatangan</label>
                     <input
@@ -791,7 +821,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                       type="text"
                       value={kepsekForm.nama}
                       onChange={(e) => setKepsekForm((prev) => ({ ...prev, nama: e.target.value }))}
-                      placeholder="Kosongkan jika menggunakan titik-titik saat cetak"
+                      placeholder="Kosongkan jika titik-titik"
                       className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold"
                     />
                   </div>
@@ -807,12 +837,47 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                   </div>
                 </div>
 
-                {/* Sisi Kanan: Operator / Petugas Bersangkutan Saja */}
-                <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+                {/* Peringkat 2 (Tengah / Kanan): Wakil Kepala Sekolah (Opsional) */}
+                <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2.5">
+                  <h4 className="font-bold text-slate-900">2. Wakil Kepala Sekolah (Opsional)</h4>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Jabatan Wakil</label>
+                    <input
+                      type="text"
+                      value={wakasekForm.jabatan || 'Wakil Kepala Sekolah'}
+                      onChange={(e) => setWakasekForm((prev) => ({ ...prev, jabatan: e.target.value }))}
+                      placeholder="Wakil Kepala Sekolah"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Nama Wakil Kepsek &amp; Gelar</label>
+                    <input
+                      type="text"
+                      value={wakasekForm.nama}
+                      onChange={(e) => setWakasekForm((prev) => ({ ...prev, nama: e.target.value }))}
+                      placeholder="Kosongkan jika tidak dipakai"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">NIP / NIPPK Wakil Kepsek</label>
+                    <input
+                      type="text"
+                      value={wakasekForm.nip}
+                      onChange={(e) => setWakasekForm((prev) => ({ ...prev, nip: e.target.value }))}
+                      placeholder="Nomor NIP / NIPPK"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Peringkat Terakhir (Kanan): Operator / Petugas Bersangkutan Saja */}
+                <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
                       <UserCheck className="w-4 h-4 text-blue-600" />
-                      <span>Pihak Kanan ({roleLabel})</span>
+                      <span>3. Kanan ({roleLabel})</span>
                     </h4>
                   </div>
                   <div>
@@ -847,12 +912,12 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                 </div>
               </div>
 
-              {/* LIVE PREVIEW LEMBAR PENGESAHAN */}
+              {/* LIVE PREVIEW LEMBAR PENGESAHAN (TERTINGGI KIRI -> TERENDAH KANAN) */}
               <div className="pt-2 border-t border-slate-200">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
                     <Eye className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Live Preview Lembar Pengesahan (Sebelum Disimpan)</span>
+                    <span>Live Preview Urutan Resmi (Tertinggi Kiri → Terendah Kanan)</span>
                   </span>
                   <button
                     type="button"
@@ -865,7 +930,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                 </div>
 
                 <div className="p-5 bg-white border border-slate-300 rounded-lg font-serif text-slate-900">
-                  <div className="grid grid-cols-2 gap-6 text-center text-xs">
+                  <div className={`grid ${wakasekForm.nama.trim() ? 'grid-cols-3' : 'grid-cols-2'} gap-5 text-center text-xs`}>
                     <div className="flex flex-col items-center">
                       <div className="text-slate-600">Mengetahui / Mengesahkan,</div>
                       <div className="font-semibold text-slate-900 mt-0.5">
@@ -883,6 +948,25 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
                           : 'NIP. .................................................'}
                       </div>
                     </div>
+
+                    {wakasekForm.nama.trim() && (
+                      <div className="flex flex-col items-center">
+                        <div className="text-slate-600">Wakil Kepala Sekolah,</div>
+                        <div className="font-semibold text-slate-900 mt-0.5">
+                          {wakasekForm.jabatan || 'Wakil Kepala Sekolah'}
+                        </div>
+                        <div className="h-14" />
+                        <div className="font-bold underline">
+                          {formatOfficialNameWithDegree(wakasekForm.nama)}
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-700 mt-0.5">
+                          {wakasekForm.nip.trim()
+                            ? formatOfficialNipOrPppk(wakasekForm.nip, { defaultPrefix: 'NIP.' })
+                            : 'NIP. .................................................'}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-col items-center">
                       <div className="text-slate-600">{previewPlaceDate}</div>
                       <div className="font-semibold text-slate-900 mt-0.5">

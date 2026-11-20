@@ -593,11 +593,14 @@ async function createOfficialSignatureBlockDocx(params: {
 }): Promise<Table> {
   const { schoolConfig, role, operatorTitle, docDate, forceTwoCol = false } = params;
 
-  let layoutMode: '2_col' | '3_col' = '2_col';
+  type DocxSigLayout = '2_col' | '2_col_wakasek' | '3_col_wakasek' | '3_col' | '4_col_hierarchy';
+  let layoutMode: DocxSigLayout = '2_col';
   try {
     if (!forceTwoCol) {
       const savedLayout = localStorage.getItem('siops_signature_layout');
-      if (savedLayout === '3_col') layoutMode = '3_col';
+      if (savedLayout && ['2_col', '2_col_wakasek', '3_col_wakasek', '3_col', '4_col_hierarchy'].includes(savedLayout)) {
+        layoutMode = savedLayout as DocxSigLayout;
+      }
     }
   } catch {
     // ignore storage errors
@@ -611,6 +614,13 @@ async function createOfficialSignatureBlockDocx(params: {
     ? formatOfficialNipOrPppk('', { defaultPrefix: 'NIP', placeholderDots: true })
     : formatOfficialNipOrPppk(schoolConfig.kepalaSekolah.nip, { defaultPrefix: 'NIP', placeholderDots: true });
 
+  const rawWakasekNama = schoolConfig.wakilKepalaSekolah?.nama || '';
+  const isDummyWakasek = !rawWakasekNama || !rawWakasekNama.trim();
+  const wakasekName = isDummyWakasek ? '( .................................................. )' : formatOfficialNameWithDegree(rawWakasekNama);
+  const wakasekNip = isDummyWakasek || !schoolConfig.wakilKepalaSekolah?.nip?.trim()
+    ? formatOfficialNipOrPppk('', { defaultPrefix: 'NIP', placeholderDots: true })
+    : formatOfficialNipOrPppk(schoolConfig.wakilKepalaSekolah.nip, { defaultPrefix: 'NIP', placeholderDots: true });
+
   const operator = schoolConfig.operatorProfiles?.[role] || { nama: '', nip: '', jabatan: operatorTitle };
   const rawOperatorNama = operator?.nama || '';
   const isDummyOperator = !rawOperatorNama || /nurul(\s*hidayat|\s*hidayati)?/i.test(rawOperatorNama) || /rahmat(\s*hidayat)?/i.test(rawOperatorNama) || !rawOperatorNama.trim();
@@ -620,7 +630,7 @@ async function createOfficialSignatureBlockDocx(params: {
     ? formatOfficialNipOrPppk('', { defaultPrefix: 'NIPPK', placeholderDots: true })
     : formatOfficialNipOrPppk(operator.nip, { defaultPrefix: 'NIPPK', placeholderDots: true });
 
-  // Kasubag TU for 3-col layout
+  // Kasubag TU for 3-col / 4-col layout
   const tuProfile = schoolConfig.operatorProfiles?.TU;
   const rawTuNama = tuProfile?.nama || '';
   const isDummyTu = !rawTuNama || /nurul|rahmat/i.test(rawTuNama);
@@ -693,8 +703,27 @@ async function createOfficialSignatureBlockDocx(params: {
     });
   };
 
-  if (layoutMode === '3_col') {
+  if (layoutMode === '3_col' || layoutMode === '3_col_wakasek') {
     const signW3 = [2645, 2646, 2646]; // sum = 7937
+    const centerCell =
+      layoutMode === '3_col_wakasek'
+        ? makeSignatureCell({
+            widthDxa: signW3[1],
+            topLine: 'Wakil Kepala Sekolah,',
+            roleLine: schoolConfig.wakilKepalaSekolah?.jabatan || 'Wakil Kepala Sekolah',
+            nameText: wakasekName,
+            nipText: wakasekNip,
+            isDummy: isDummyWakasek
+          })
+        : makeSignatureCell({
+            widthDxa: signW3[1],
+            topLine: 'Diperiksa / Diverifikasi,',
+            roleLine: 'Kasubag / Koordinator TU',
+            nameText: kasubagName,
+            nipText: kasubagNip,
+            isDummy: isDummyTu
+          });
+
     return new Table({
       width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
       borders: tableBordersNone,
@@ -711,14 +740,7 @@ async function createOfficialSignatureBlockDocx(params: {
               sigImg: kepsekSigImg,
               isDummy: isDummyKepsek
             }),
-            makeSignatureCell({
-              widthDxa: signW3[1],
-              topLine: 'Diperiksa / Diverifikasi,',
-              roleLine: 'Koordinator Urusan TU',
-              nameText: kasubagName,
-              nipText: kasubagNip,
-              isDummy: isDummyTu
-            }),
+            centerCell,
             makeSignatureCell({
               widthDxa: signW3[2],
               topLine: docDate,
@@ -735,6 +757,91 @@ async function createOfficialSignatureBlockDocx(params: {
   }
 
   const signW2 = [3968, 3969]; // sum = 7937
+
+  if (layoutMode === '4_col_hierarchy') {
+    return new Table({
+      width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+      borders: tableBordersNone,
+      rows: [
+        new TableRow({
+          cantSplit: true,
+          children: [
+            makeSignatureCell({
+              widthDxa: signW2[0],
+              topLine: 'Mengetahui / Mengesahkan,',
+              roleLine: schoolConfig.kepalaSekolah?.jabatan || 'Kepala Satuan Pendidikan',
+              nameText: kepsekName,
+              nipText: kepsekNip,
+              sigImg: kepsekSigImg,
+              isDummy: isDummyKepsek
+            }),
+            makeSignatureCell({
+              widthDxa: signW2[1],
+              topLine: `${docDate}\nWakil Kepala Sekolah,`,
+              roleLine: schoolConfig.wakilKepalaSekolah?.jabatan || 'Wakil Kepala Sekolah',
+              nameText: wakasekName,
+              nipText: wakasekNip,
+              isDummy: isDummyWakasek
+            })
+          ]
+        }),
+        new TableRow({
+          cantSplit: true,
+          children: [
+            makeSignatureCell({
+              widthDxa: signW2[0],
+              topLine: 'Menyetujui,',
+              roleLine: 'Kasubag Tata Usaha',
+              nameText: kasubagName,
+              nipText: kasubagNip,
+              isDummy: isDummyTu
+            }),
+            makeSignatureCell({
+              widthDxa: signW2[1],
+              topLine: 'Yang Membuat Laporan,',
+              roleLine: operator?.jabatan || operatorTitle,
+              nameText: operatorName,
+              nipText: operatorNip,
+              sigImg: opSigImg,
+              isDummy: isDummyOperator
+            })
+          ]
+        })
+      ]
+    });
+  }
+
+  if (layoutMode === '2_col_wakasek') {
+    return new Table({
+      width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+      borders: tableBordersNone,
+      rows: [
+        new TableRow({
+          cantSplit: true,
+          children: [
+            makeSignatureCell({
+              widthDxa: signW2[0],
+              topLine: 'Mengetahui / Mengesahkan,',
+              roleLine: schoolConfig.kepalaSekolah?.jabatan || 'Kepala Satuan Pendidikan',
+              nameText: kepsekName,
+              nipText: kepsekNip,
+              sigImg: kepsekSigImg,
+              isDummy: isDummyKepsek
+            }),
+            makeSignatureCell({
+              widthDxa: signW2[1],
+              topLine: `${docDate}\nWakil Kepala Sekolah,`,
+              roleLine: schoolConfig.wakilKepalaSekolah?.jabatan || 'Wakil Kepala Sekolah',
+              nameText: wakasekName,
+              nipText: wakasekNip,
+              isDummy: isDummyWakasek
+            })
+          ]
+        })
+      ]
+    });
+  }
+
   return new Table({
     width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
     borders: tableBordersNone,

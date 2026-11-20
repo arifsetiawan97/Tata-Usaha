@@ -33,7 +33,12 @@ export interface BeritaAcaraFieldDef {
 
 export interface BeritaAcaraTemplateDef {
   id: BeritaAcaraTemplateId;
-  category: 'Kesiswaan & Akademik' | 'Aset & Sapras' | 'Kepegawaian & Rapat' | 'Keuangan & Kearsipan';
+  category:
+    | 'Kesiswaan & Akademik'
+    | 'Aset & Sapras'
+    | 'Kepegawaian & Rapat'
+    | 'Keuangan & Kearsipan'
+    | 'Persuratan & Layanan Umum';
   shortTitle: string;
   fullTitle: string;
   description: string;
@@ -247,14 +252,16 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           jabatan: kepsek.jabatan,
           nama: kepsek.nama,
           nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
         rightSignatory: {
           roleLabel: 'Sekretaris / Ketua Panitia,',
           jabatan: v.penandatanganKananJabatan || 'Sekretaris Rapat Kelulusan',
           nama: formatSignatoryName(v.penandatanganKananNama),
           nip: formatSignatoryNip(v.penandatanganKananNip, 'NIPPK'),
-          dateLine: `${place}, ${dt.formattedLong}`
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 40
         }
       };
     }
@@ -360,14 +367,16 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           jabatan: kepsek.jabatan,
           nama: kepsek.nama,
           nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
         rightSignatory: {
           roleLabel: 'Sekretaris / Notulis Rapat,',
           jabatan: 'Wakil Kurikulum / Tata Usaha',
           nama: formatSignatoryName(v.notulisNama),
           nip: formatSignatoryNip(v.notulisNip, 'NIPPK'),
-          dateLine: `${place}, ${dt.formattedLong}`
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 45
         }
       };
     }
@@ -479,27 +488,55 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           }
         ],
         closingParagraph: 'Sejak ditandatanganinya Berita Acara Serah Terima ini, tanggung jawab pengelolaan, pemeliharaan, dan pencatatan pada Kartu Inventaris Barang (KIB/KIR) beralih kepada PIHAK KEDUA. Demikian Berita Acara ini dibuat dalam rangkap secukupnya untuk dipergunakan sebagaimana mestinya.',
-        signatoryLayout: 'two_col_plus_kepsek',
+        signatoryLayout: 'ordered_hierarchy',
         leftSignatory: {
-          roleLabel: 'PIHAK KEDUA,',
-          jabatan: 'Yang Menerima',
-          nama: formatSignatoryName(v.pihak2Nama),
-          nip: formatSignatoryNip(v.pihak2Nip, 'NIP')
-        },
-        rightSignatory: {
-          roleLabel: 'PIHAK PERTAMA,',
-          jabatan: 'Yang Menyerahkan',
-          nama: formatSignatoryName(v.pihak1Nama),
-          nip: formatSignatoryNip(v.pihak1Nip, 'NIPPK'),
-          dateLine: `${place}, ${dt.formattedLong}`
-        },
-        centerBottomSignatory: {
           roleLabel: 'Mengetahui / Mengesahkan,',
           jabatan: kepsek.jabatan,
           nama: kepsek.nama,
           nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
+        rightSignatory: {
+          roleLabel: 'PIHAK KEDUA,',
+          jabatan: v.pihak2Jabatan || 'Yang Menerima',
+          nama: formatSignatoryName(v.pihak2Nama),
+          nip: formatSignatoryNip(v.pihak2Nip, 'NIP'),
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 65
+        },
+        centerBottomSignatory: {
+          roleLabel: 'PIHAK PERTAMA,',
+          jabatan: v.pihak1Jabatan || 'Yang Menyerahkan',
+          nama: formatSignatoryName(v.pihak1Nama),
+          nip: formatSignatoryNip(v.pihak1Nip, 'NIPPK'),
+          rankOrder: 60
+        },
+        orderedSignatories: [
+          {
+            roleLabel: 'Mengetahui / Mengesahkan,',
+            jabatan: kepsek.jabatan,
+            nama: kepsek.nama,
+            nip: kepsek.nip,
+            signatureImage: kepsek.signatureImage,
+            rankOrder: 100
+          },
+          {
+            roleLabel: 'PIHAK KEDUA (Yang Menerima),',
+            jabatan: v.pihak2Jabatan || 'Penerima / Penanggung Jawab Unit',
+            nama: formatSignatoryName(v.pihak2Nama),
+            nip: formatSignatoryNip(v.pihak2Nip, 'NIP'),
+            dateLine: `${place}, ${dt.formattedLong}`,
+            rankOrder: 65
+          },
+          {
+            roleLabel: 'PIHAK PERTAMA (Yang Menyerahkan),',
+            jabatan: v.pihak1Jabatan || 'Pengurus / Penyedia Barang',
+            nama: formatSignatoryName(v.pihak1Nama),
+            nip: formatSignatoryNip(v.pihak1Nip, 'NIPPK'),
+            rankOrder: 60
+          }
+        ],
         witnesses: witnesses.length > 0 ? witnesses : undefined
       };
     }
@@ -590,27 +627,55 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           }
         ],
         closingParagraph: 'Terhitung mulai tanggal penandatanganan Berita Acara ini, seluruh hak, kewajiban, dan tanggung jawab jabatan sebagaimana dimaksud beralih sepenuhnya kepada PIHAK KEDUA. Demikian Berita Acara ini dibuat dengan penuh tanggung jawab.',
-        signatoryLayout: 'two_col_plus_kepsek',
+        signatoryLayout: 'ordered_hierarchy',
         leftSignatory: {
-          roleLabel: 'PIHAK KEDUA (Yang Menerima),',
-          jabatan: 'Pejabat Baru',
-          nama: formatSignatoryName(v.pejabatBaruNama),
-          nip: formatSignatoryNip(v.pejabatBaruNip, 'NIPPK')
+          roleLabel: 'Mengetahui / Mengesahkan,',
+          jabatan: kepsek.jabatan,
+          nama: kepsek.nama,
+          nip: kepsek.nip,
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
         rightSignatory: {
           roleLabel: 'PIHAK PERTAMA (Yang Menyerahkan),',
           jabatan: 'Pejabat Lama',
           nama: formatSignatoryName(v.pejabatLamaNama),
           nip: formatSignatoryNip(v.pejabatLamaNip, 'NIP'),
-          dateLine: `${place}, ${dt.formattedLong}`
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 65
         },
         centerBottomSignatory: {
-          roleLabel: 'Mengetahui / Mengesahkan,',
-          jabatan: kepsek.jabatan,
-          nama: kepsek.nama,
-          nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
-        }
+          roleLabel: 'PIHAK KEDUA (Yang Menerima),',
+          jabatan: 'Pejabat Baru',
+          nama: formatSignatoryName(v.pejabatBaruNama),
+          nip: formatSignatoryNip(v.pejabatBaruNip, 'NIPPK'),
+          rankOrder: 60
+        },
+        orderedSignatories: [
+          {
+            roleLabel: 'Mengetahui / Mengesahkan,',
+            jabatan: kepsek.jabatan,
+            nama: kepsek.nama,
+            nip: kepsek.nip,
+            signatureImage: kepsek.signatureImage,
+            rankOrder: 100
+          },
+          {
+            roleLabel: 'PIHAK PERTAMA (Yang Menyerahkan),',
+            jabatan: `${v.namaJabatan || 'Pejabat'} (Lama)`,
+            nama: formatSignatoryName(v.pejabatLamaNama),
+            nip: formatSignatoryNip(v.pejabatLamaNip, 'NIP'),
+            dateLine: `${place}, ${dt.formattedLong}`,
+            rankOrder: 65
+          },
+          {
+            roleLabel: 'PIHAK KEDUA (Yang Menerima),',
+            jabatan: `${v.namaJabatan || 'Pejabat'} (Baru)`,
+            nama: formatSignatoryName(v.pejabatBaruNama),
+            nip: formatSignatoryNip(v.pejabatBaruNip, 'NIPPK'),
+            rankOrder: 60
+          }
+        ]
       };
     }
   },
@@ -699,14 +764,16 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           jabatan: kepsek.jabatan,
           nama: kepsek.nama,
           nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
         rightSignatory: {
           roleLabel: 'Notulis Rapat,',
           jabatan: 'Tata Usaha / Sekretaris Rapat',
           nama: formatSignatoryName(v.notulisNama),
           nip: formatSignatoryNip(v.notulisNip, 'NIPPK'),
-          dateLine: `${place}, ${dt.formattedLong}`
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 25
         }
       };
     }
@@ -803,14 +870,16 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           jabatan: kepsek.jabatan,
           nama: kepsek.nama,
           nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
         rightSignatory: {
           roleLabel: 'Yang Diperiksa / Bendahara,',
           jabatan: `Bendahara ${v.sumberDana || 'BOSP'}`,
           nama: formatSignatoryName(v.bendaharaNama),
           nip: formatSignatoryNip(v.bendaharaNip, 'NIPPK'),
-          dateLine: `${place}, ${dt.formattedLong}`
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 40
         }
       };
     }
@@ -901,27 +970,55 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           { label: 'Kejadian Penting', value: v.catatanKejadian || 'Nihil, ujian berjalan lancar.' }
         ],
         closingParagraph: 'Demikian Berita Acara Pelaksanaan Asesmen/Ujian ini dibuat dengan sesungguhnya untuk dilampirkan bersama daftar hadir dan berkas hasil ujian.',
-        signatoryLayout: 'two_col_plus_kepsek',
+        signatoryLayout: 'ordered_hierarchy',
         leftSignatory: {
-          roleLabel: 'Proktor / Panitia Ujian,',
-          jabatan: 'Proktor / Sekretaris Panitia',
-          nama: formatSignatoryName(v.proktorNama),
-          nip: formatSignatoryNip(v.proktorNip, 'NIPPK')
+          roleLabel: 'Mengetahui,',
+          jabatan: kepsek.jabatan,
+          nama: kepsek.nama,
+          nip: kepsek.nip,
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
         rightSignatory: {
           roleLabel: 'Pengawas Ruang,',
           jabatan: 'Pengawas Ujian',
           nama: formatSignatoryName(v.pengawasNama),
           nip: formatSignatoryNip(v.pengawasNip, 'NIP'),
-          dateLine: `${place}, ${dt.formattedLong}`
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 50
         },
         centerBottomSignatory: {
-          roleLabel: 'Mengetahui,',
-          jabatan: kepsek.jabatan,
-          nama: kepsek.nama,
-          nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
-        }
+          roleLabel: 'Proktor / Panitia Ujian,',
+          jabatan: 'Proktor / Sekretaris Panitia',
+          nama: formatSignatoryName(v.proktorNama),
+          nip: formatSignatoryNip(v.proktorNip, 'NIPPK'),
+          rankOrder: 40
+        },
+        orderedSignatories: [
+          {
+            roleLabel: 'Mengetahui,',
+            jabatan: kepsek.jabatan,
+            nama: kepsek.nama,
+            nip: kepsek.nip,
+            signatureImage: kepsek.signatureImage,
+            rankOrder: 100
+          },
+          {
+            roleLabel: 'Pengawas Ruang,',
+            jabatan: 'Pengawas Ujian',
+            nama: formatSignatoryName(v.pengawasNama),
+            nip: formatSignatoryNip(v.pengawasNip, 'NIP'),
+            dateLine: `${place}, ${dt.formattedLong}`,
+            rankOrder: 50
+          },
+          {
+            roleLabel: 'Proktor / Panitia Ujian,',
+            jabatan: 'Proktor / Sekretaris Panitia',
+            nama: formatSignatoryName(v.proktorNama),
+            nip: formatSignatoryNip(v.proktorNip, 'NIPPK'),
+            rankOrder: 40
+          }
+        ]
       };
     }
   },
@@ -1020,14 +1117,16 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           jabatan: kepsek.jabatan,
           nama: kepsek.nama,
           nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
         rightSignatory: {
           roleLabel: 'Ketua Tim / Pelaksana,',
           jabatan: 'Pengurus Barang / Arsiparis TU',
           nama: formatSignatoryName(v.ketuaTimNama),
           nip: formatSignatoryNip(v.ketuaTimNip, 'NIPPK'),
-          dateLine: `${place}, ${dt.formattedLong}`
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 40
         },
         witnesses: witnesses.length > 0 ? witnesses : undefined
       };
@@ -1124,14 +1223,16 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           jabatan: kepsek.jabatan,
           nama: kepsek.nama,
           nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
         rightSignatory: {
           roleLabel: 'Ketua / Sekretaris Panitia,',
           jabatan: 'Panitia SPMB / Tata Usaha',
           nama: formatSignatoryName(v.ketuaPanitiaNama),
           nip: formatSignatoryNip(v.ketuaPanitiaNip, 'NIPPK'),
-          dateLine: `${place}, ${dt.formattedLong}`
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 60
         }
       };
     }
@@ -1235,16 +1336,317 @@ export const BERITA_ACARA_TEMPLATES: BeritaAcaraTemplateDef[] = [
           jabatan: kepsek.jabatan,
           nama: kepsek.nama,
           nip: kepsek.nip,
-          signatureImage: kepsek.signatureImage
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
         },
         rightSignatory: {
           roleLabel: 'Pelapor / Pengurus Barang,',
           jabatan: 'Tata Usaha / Sarpras',
           nama: formatSignatoryName(v.pelaporNama),
           nip: formatSignatoryNip(v.pelaporNip, 'NIPPK'),
-          dateLine: `${place}, ${dt.formattedLong}`
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 40
         },
         witnesses
+      };
+    }
+  },
+
+  // 11. RAPAT UMUM ANTARA PIHAK SEKOLAH DAN ORANG TUA / WALI SISWA
+  {
+    id: 'rapat_sekolah_orang_tua',
+    category: 'Kepegawaian & Rapat',
+    shortTitle: 'Rapat Umum Sekolah & Orang Tua',
+    fullTitle: 'Berita Acara Rapat Umum Antara Pihak Sekolah dan Orang Tua / Wali Siswa',
+    description: 'Dokumentasi resmi musyawarah umum pihak sekolah bersama orang tua/wali murid dan komite sekolah beserta butir kesepakatannya.',
+    defaultValues: (config) => {
+      const kepsek = getKepsekInfo(config);
+      const tu = getTuOperatorInfo(config);
+      const year = new Date().getFullYear();
+      return {
+        nomorSurat: `005/BA-RAPAT-ORTU/${config.npsn || 'SEKOLAH'}/${year}`,
+        tanggal: getTodayIso(),
+        pukul: '09.00 WIB s.d. 11.30 WIB',
+        tempat: `Aula / Ruang Pertemuan ${config.namaSekolah || 'Sekolah'}`,
+        tahunPelajaran: `${year}/${year + 1}`,
+        sasaranPeserta: 'Seluruh Orang Tua / Wali Siswa, Pengurus Komite Sekolah, Dewan Guru, dan Staf Tata Usaha',
+        agendaRapat: 'Sosialisasi Program Kerja Sekolah, Tata Tertib Peserta Didik, Kalender Pendidikan, dan Sinergi Pembinaan Siswa',
+        pemimpinRapat: kepsek.nama.includes('...') ? 'Kepala Sekolah' : kepsek.nama,
+        jumlahUndanganOrtu: 120,
+        jumlahHadirOrtu: 112,
+        jumlahHadirSekolah: 18,
+        pokokKeputusan:
+          'Program Kerja & Kalender Pendidikan Tahun Berjalan | Orang tua/wali memahami dan mendukung agenda pembelajaran, asesmen, serta kegiatan pembinaan karakter siswa | Kepala Sekolah & Waka Kurikulum\nTata Tertib, Kedisiplinan & Kehadiran Peserta Didik | Disepakati komunikasi aktif antara wali kelas dan orang tua untuk pemantauan kehadiran, ketertiban seragam, serta izin siswa | Wali Kelas, BK & Orang Tua\nSinergi Komite & Dukungan Lingkungan Belajar | Pengurus Komite dan orang tua/wali sepakat mendukung program peningkatan mutu layanan sekolah sesuai ketentuan peraturan perundang-undangan | Komite Sekolah & Tata Usaha',
+        ketuaKomiteNama: '',
+        ketuaKomiteJabatan: 'Ketua Komite Sekolah / Perwakilan Orang Tua',
+        notulisNama: tu.nama.includes('...') ? '' : tu.nama,
+        notulisNip: tu.nip.includes('...') ? '' : tu.nip,
+        saksiOrtuNama: ''
+      };
+    },
+    fields: [
+      { key: 'nomorSurat', label: 'Nomor Berita Acara Rapat', type: 'text', halfWidth: true },
+      { key: 'tanggal', label: 'Tanggal Rapat Umum', type: 'date', halfWidth: true },
+      { key: 'pukul', label: 'Waktu / Pukul Pelaksanaan', type: 'text', halfWidth: true },
+      { key: 'tahunPelajaran', label: 'Tahun Pelajaran', type: 'text', halfWidth: true },
+      { key: 'tempat', label: 'Tempat Rapat Umum', type: 'text' },
+      { key: 'sasaranPeserta', label: 'Unsur Peserta Rapat', type: 'text' },
+      { key: 'agendaRapat', label: 'Agenda / Topik Utama Rapat Umum', type: 'text' },
+      { key: 'pemimpinRapat', label: 'Pemimpin Rapat', type: 'text', halfWidth: true },
+      { key: 'jumlahUndanganOrtu', label: 'Jumlah Orang Tua Diundang', type: 'number', halfWidth: true },
+      { key: 'jumlahHadirOrtu', label: 'Jumlah Orang Tua Hadir', type: 'number', halfWidth: true },
+      { key: 'jumlahHadirSekolah', label: 'Jumlah Unsur Sekolah Hadir', type: 'number', halfWidth: true },
+      {
+        key: 'pokokKeputusan',
+        label: 'Pokok Bahasan & Kesepakatan Bersama (Format: Pokok Bahasan | Hasil Kesepakatan | Pihak Terkait)',
+        type: 'textarea'
+      },
+      { key: 'ketuaKomiteNama', label: 'Nama Perwakilan Orang Tua / Ketua Komite', type: 'text', halfWidth: true },
+      { key: 'ketuaKomiteJabatan', label: 'Jabatan Perwakilan Orang Tua', type: 'text', halfWidth: true },
+      { key: 'notulisNama', label: 'Nama Notulis / Sekretaris Rapat (TU)', type: 'text', halfWidth: true },
+      { key: 'notulisNip', label: 'NIP / PPPK Notulis', type: 'text', halfWidth: true },
+      { key: 'saksiOrtuNama', label: 'Nama Saksi Perwakilan Orang Tua (Opsional)', type: 'text' }
+    ],
+    buildContent: (v, config) => {
+      const dt = formatOfficialIndonesianOpeningDate(v.tanggal);
+      const place = getPlaceName(config);
+      const kepsek = getKepsekInfo(config);
+      const undanganOrtu = safeInt(v.jumlahUndanganOrtu);
+      const hadirOrtu = safeInt(v.jumlahHadirOrtu);
+      const hadirSekolah = safeInt(v.jumlahHadirSekolah);
+      const pctOrtu = undanganOrtu > 0 ? ((hadirOrtu / undanganOrtu) * 100).toFixed(1).replace('.', ',') : '0,0';
+      const rows = parseStructuredLines(v.pokokKeputusan, 3, [
+        '1',
+        v.agendaRapat || '-',
+        'Disepakati secara musyawarah mufakat',
+        'Sekolah & Orang Tua'
+      ]);
+      const witnesses = v.saksiOrtuNama?.trim()
+        ? [{ nama: formatSignatoryName(v.saksiOrtuNama), jabatan: 'Saksi Perwakilan Orang Tua / Wali Siswa' }]
+        : undefined;
+
+      return {
+        templateId: 'rapat_sekolah_orang_tua',
+        templateTitle: 'Berita Acara Rapat Umum Sekolah & Orang Tua Siswa',
+        documentHeading: 'BERITA ACARA',
+        documentSubHeading: 'RAPAT UMUM ANTARA PIHAK SEKOLAH DAN ORANG TUA / WALI SISWA',
+        nomorSurat: v.nomorSurat || '-',
+        docDateLocation: `${place}, ${dt.formattedLong}`,
+        openingParagraph: `${dt.sentencePrefix}, pukul ${v.pukul || '09.00 WIB s.d. selesai'}, bertempat di ${v.tempat || config.namaSekolah}, telah dilaksanakan Rapat Umum antara Pihak ${config.namaSekolah || 'Satuan Pendidikan'} bersama Orang Tua / Wali Peserta Didik Tahun Pelajaran ${v.tahunPelajaran || '-'} dengan agenda utama "${v.agendaRapat || '-'}".`,
+        basisParagraphs: [
+          `Rapat umum dipimpin oleh ${v.pemimpinRapat || 'Kepala Sekolah'} dan dihadiri oleh ${hadirSekolah} orang unsur pihak sekolah (Kepala Sekolah, Dewan Guru, dan Tata Usaha) serta ${hadirOrtu} orang Orang Tua / Wali Siswa dari total ${undanganOrtu} undangan (tingkat kehadiran ${pctOrtu}%, daftar hadir terlampir sebagai bagian tidak terpisahkan dari Berita Acara ini).`
+        ],
+        bodyParagraphs: [
+          'Setelah mendengarkan pemaparan program satuan pendidikan, sesi dialog terbuka, serta musyawarah mufakat antara pihak sekolah dan orang tua/wali siswa, forum rapat umum menetapkan hasil kesepakatan bersama sebagai berikut:'
+        ],
+        tables: [
+          {
+            title: 'RISALAH & KESEPAKATAN RAPAT UMUM SEKOLAH DAN ORANG TUA SISWA',
+            columns: [
+              { header: 'No', align: 'center', widthPercent: 7 },
+              { header: 'Pokok Bahasan / Program', align: 'left', widthPercent: 30 },
+              { header: 'Hasil Keputusan & Kesepakatan Bersama', align: 'left', widthPercent: 42 },
+              { header: 'Penanggung Jawab', align: 'left', widthPercent: 21 }
+            ],
+            rows
+          }
+        ],
+        detailSectionTitle: 'Ringkasan Kehadiran & Unsur Forum:',
+        detailPairs: [
+          { label: 'Tahun Pelajaran', value: v.tahunPelajaran || '-' },
+          { label: 'Unsur Peserta Rapat', value: v.sasaranPeserta || '-' },
+          { label: 'Kehadiran Orang Tua / Wali', value: `${hadirOrtu} orang hadir dari ${undanganOrtu} undangan (${pctOrtu}%)` },
+          { label: 'Kehadiran Pihak Sekolah', value: `${hadirSekolah} orang (Pimpinan, Dewan Guru & Staf TU)` },
+          { label: 'Total Peserta Forum', value: `${hadirOrtu + hadirSekolah} orang` }
+        ],
+        closingParagraph: 'Demikian Berita Acara Rapat Umum antara Pihak Sekolah dan Orang Tua / Wali Siswa ini dibuat dengan sebenar-benarnya sebagai dokumen resmi hasil kesepakatan bersama untuk dipedomani dan dilaksanakan oleh seluruh pihak terkait.',
+        signatoryLayout: 'ordered_hierarchy',
+        leftSignatory: {
+          roleLabel: 'Mengetahui / Mengesahkan,',
+          jabatan: kepsek.jabatan,
+          nama: kepsek.nama,
+          nip: kepsek.nip,
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
+        },
+        rightSignatory: {
+          roleLabel: 'Perwakilan Orang Tua / Wali Siswa,',
+          jabatan: v.ketuaKomiteJabatan || 'Ketua Komite Sekolah / Perwakilan Orang Tua',
+          nama: formatSignatoryName(v.ketuaKomiteNama),
+          nip: 'Perwakilan Orang Tua / Wali Peserta Didik',
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 75
+        },
+        centerBottomSignatory: {
+          roleLabel: 'Notulis / Sekretaris Rapat,',
+          jabatan: 'Tata Usaha Satuan Pendidikan',
+          nama: formatSignatoryName(v.notulisNama),
+          nip: formatSignatoryNip(v.notulisNip, 'NIPPK'),
+          rankOrder: 25
+        },
+        orderedSignatories: [
+          {
+            roleLabel: 'Mengetahui / Mengesahkan,',
+            jabatan: kepsek.jabatan,
+            nama: kepsek.nama,
+            nip: kepsek.nip,
+            signatureImage: kepsek.signatureImage,
+            rankOrder: 100
+          },
+          {
+            roleLabel: 'Perwakilan Orang Tua / Wali Siswa,',
+            jabatan: v.ketuaKomiteJabatan || 'Ketua Komite Sekolah / Perwakilan Orang Tua',
+            nama: formatSignatoryName(v.ketuaKomiteNama),
+            nip: 'Perwakilan Orang Tua / Wali Peserta Didik',
+            dateLine: `${place}, ${dt.formattedLong}`,
+            rankOrder: 75
+          },
+          {
+            roleLabel: 'Notulis / Sekretaris Rapat,',
+            jabatan: 'Tata Usaha Satuan Pendidikan',
+            nama: formatSignatoryName(v.notulisNama),
+            nip: formatSignatoryNip(v.notulisNip, 'NIPPK'),
+            rankOrder: 25
+          }
+        ],
+        witnesses
+      };
+    }
+  },
+
+  // 12. SURAT PENGANTAR BEROBAT RESMI (UNTUK SISWA, GURU, MAUPUN STAF/PEGAWAI)
+  {
+    id: 'surat_pengantar_berobat',
+    category: 'Persuratan & Layanan Umum',
+    shortTitle: 'Surat Pengantar Berobat',
+    fullTitle: 'Surat Pengantar Berobat / Pemeriksaan Kesehatan Resmi',
+    description: 'Surat pengantar resmi dan sah dari sekolah untuk pelayanan pemeriksaan kesehatan/berobat ke Puskesmas, Klinik, atau Rumah Sakit.',
+    defaultValues: (config) => {
+      const tu = getTuOperatorInfo(config);
+      const year = new Date().getFullYear();
+      return {
+        nomorSurat: `441.5/SP-BEROBAT/${config.npsn || 'SEKOLAH'}/${year}`,
+        tanggal: getTodayIso(),
+        waktuBerangkat: '09.30 WIB',
+        faskesTujuan: 'Kepala Puskesmas / Dokter Pemeriksa Fasilitas Kesehatan',
+        alamatFaskes: 'Tempat',
+        statusPasien: 'Peserta Didik (Siswa)',
+        namaPasien: '',
+        nomorIdentitas: '',
+        tempatTglLahir: '',
+        jenisKelamin: 'Laki-laki',
+        kelasAtauJabatan: '',
+        nomorBpjs: '-',
+        alamatPasien: '',
+        waliKontakDarurat: '',
+        keluhanMedis: 'Mengalami gangguan kesehatan pada jam operasional sekolah (demam / pusing / keluhan fisik) sehingga memerlukan pemeriksaan medis dan penanganan dokter.',
+        pendampingNama: tu.nama.includes('...') ? '' : tu.nama,
+        pendampingNip: tu.nip.includes('...') ? '' : tu.nip,
+        pendampingJabatan: tu.jabatan || 'Petugas UKS / Pelaksana Tata Usaha'
+      };
+    },
+    fields: [
+      { key: 'nomorSurat', label: 'Nomor Surat Pengantar', type: 'text', halfWidth: true },
+      { key: 'tanggal', label: 'Tanggal Surat', type: 'date', halfWidth: true },
+      { key: 'waktuBerangkat', label: 'Waktu / Pukul Keberangkatan', type: 'text', halfWidth: true },
+      {
+        key: 'statusPasien',
+        label: 'Status Warga Sekolah',
+        type: 'select',
+        halfWidth: true,
+        options: [
+          { value: 'Peserta Didik (Siswa)', label: 'Peserta Didik (Siswa)' },
+          { value: 'Pendidik (Guru)', label: 'Pendidik (Guru)' },
+          { value: 'Tenaga Kependidikan (TU / Staf)', label: 'Tenaga Kependidikan (TU / Staf)' }
+        ]
+      },
+      { key: 'faskesTujuan', label: 'Ditujukan Kepada (Puskesmas / Klinik / RS)', type: 'text' },
+      { key: 'alamatFaskes', label: 'Kota / Lokasi Faskes Tujuan', type: 'text', halfWidth: true },
+      { key: 'namaPasien', label: 'Nama Lengkap Pasien', type: 'text', halfWidth: true },
+      { key: 'nomorIdentitas', label: 'NISN / NIP / NIPPK / NIK', type: 'text', halfWidth: true },
+      { key: 'tempatTglLahir', label: 'Tempat, Tgl. Lahir / Umur', type: 'text', halfWidth: true, placeholder: 'Contoh: Teluk, 12 Mei 2012 (14 Tahun)' },
+      {
+        key: 'jenisKelamin',
+        label: 'Jenis Kelamin',
+        type: 'select',
+        halfWidth: true,
+        options: [
+          { value: 'Laki-laki', label: 'Laki-laki' },
+          { value: 'Perempuan', label: 'Perempuan' }
+        ]
+      },
+      { key: 'kelasAtauJabatan', label: 'Kelas / Jabatan / Unit Kerja', type: 'text', halfWidth: true, placeholder: 'Contoh: Kelas VIII-A / Guru Mapel' },
+      { key: 'nomorBpjs', label: 'Nomor Kartu JKN / BPJS / KIS (Opsional)', type: 'text', halfWidth: true },
+      { key: 'waliKontakDarurat', label: 'Nama Orang Tua / Wali & No. HP Darurat', type: 'text', halfWidth: true },
+      { key: 'alamatPasien', label: 'Alamat Lengkap Tempat Tinggal', type: 'text' },
+      { key: 'keluhanMedis', label: 'Keluhan Awal / Keperluan Pemeriksaan Medis', type: 'textarea' },
+      { key: 'pendampingNama', label: 'Petugas Pendamping / Pengantar (UKS / TU)', type: 'text', halfWidth: true },
+      { key: 'pendampingNip', label: 'NIP / PPPK Pendamping (Opsional)', type: 'text', halfWidth: true },
+      { key: 'pendampingJabatan', label: 'Jabatan Petugas Pendamping', type: 'text' }
+    ],
+    buildContent: (v, config) => {
+      const dt = formatOfficialIndonesianOpeningDate(v.tanggal);
+      const place = getPlaceName(config);
+      const kepsek = getKepsekInfo(config);
+      const faskes = v.faskesTujuan?.trim() || 'Pimpinan / Dokter Jaga Puskesmas / Klinik / Rumah Sakit';
+      const lokasiFaskes = v.alamatFaskes?.trim() || 'Tempat';
+
+      return {
+        templateId: 'surat_pengantar_berobat',
+        templateTitle: 'Surat Pengantar Berobat Resmi',
+        documentHeading: 'SURAT PENGANTAR BEROBAT',
+        documentSubHeading: 'PELAYANAN PEMERIKSAAN KESEHATAN WARGA SATUAN PENDIDIKAN',
+        nomorSurat: v.nomorSurat || '-',
+        docDateLocation: `${place}, ${dt.formattedLong}`,
+        recipientLines: [
+          'Kepada Yth.',
+          faskes,
+          `di ${lokasiFaskes}`
+        ],
+        openingParagraph: `Dengan hormat, yang bertanda tangan di bawah ini Kepala ${config.namaSekolah || 'Satuan Pendidikan'}, dengan ini menerangkan dan mengantarkan warga satuan pendidikan kami yang tersebut identitasnya di bawah ini untuk mendapatkan pelayanan pemeriksaan kesehatan dan pengobatan:`,
+        basisParagraphs: [],
+        detailSectionTitle: 'Identitas Pasien / Yang Diberi Pengantar:',
+        detailPairs: [
+          { label: 'Nama Lengkap', value: v.namaPasien?.trim() || '........................................................' },
+          { label: 'Status di Sekolah', value: v.statusPasien || 'Peserta Didik (Siswa)' },
+          { label: 'NISN / NIP / NIK', value: v.nomorIdentitas?.trim() || '........................................................' },
+          { label: 'Tempat, Tgl. Lahir / Umur', value: v.tempatTglLahir?.trim() || '........................................................' },
+          { label: 'Jenis Kelamin', value: v.jenisKelamin || 'Laki-laki' },
+          { label: 'Kelas / Jabatan / Unit', value: v.kelasAtauJabatan?.trim() || '........................................................' },
+          { label: 'Nomor JKN / BPJS / KIS', value: v.nomorBpjs?.trim() || '-' },
+          { label: 'Alamat Tempat Tinggal', value: v.alamatPasien?.trim() || '........................................................' },
+          { label: 'Orang Tua / Wali & No. HP', value: v.waliKontakDarurat?.trim() || '........................................................' },
+          { label: 'Hari, Tanggal & Pukul', value: `${dt.formattedLong}, Pukul ${v.waktuBerangkat || '-'}` },
+          { label: 'Keluhan / Keperluan Medis', value: v.keluhanMedis?.trim() || 'Pemeriksaan kesehatan umum dan pengobatan medis.' },
+          {
+            label: 'Petugas Pendamping',
+            value: v.pendampingNama?.trim()
+              ? `${formatSignatoryName(v.pendampingNama)} (${v.pendampingJabatan || 'Petugas UKS / TU'})`
+              : 'Didampingi Orang Tua / Wali / Mandiri'
+          }
+        ],
+        bodyParagraphs: [
+          `Sehubungan dengan kondisi tersebut, kami mohon bantuan Bapak/Ibu Dokter serta tenaga medis pada ${faskes} untuk berkenan melakukan pemeriksaan kesehatan, memberikan pengobatan ataupun tindakan medis yang diperlukan sesuai ketentuan, serta menerbitkan surat keterangan medis apabila diperlukan sebagai dasar administrasi sekolah.`
+        ],
+        tables: [],
+        closingParagraph: 'Demikian Surat Pengantar Berobat ini dibuat dengan sebenar-benarnya untuk dapat dipergunakan sebagaimana mestinya. Atas perhatian, bantuan, dan kerja sama Bapak/Ibu, kami ucapkan terima kasih.',
+        signatoryLayout: 'two_col',
+        leftSignatory: {
+          roleLabel: 'Mengetahui / Mengesahkan,',
+          jabatan: kepsek.jabatan,
+          nama: kepsek.nama,
+          nip: kepsek.nip,
+          signatureImage: kepsek.signatureImage,
+          rankOrder: 100
+        },
+        rightSignatory: {
+          roleLabel: 'Petugas Pengantar / UKS,',
+          jabatan: v.pendampingJabatan || 'Pelaksana Tata Usaha / UKS',
+          nama: formatSignatoryName(v.pendampingNama),
+          nip: formatSignatoryNip(v.pendampingNip, 'NIPPK'),
+          dateLine: `${place}, ${dt.formattedLong}`,
+          rankOrder: 25
+        }
       };
     }
   }
