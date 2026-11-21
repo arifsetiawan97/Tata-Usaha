@@ -24,7 +24,11 @@ import {
   Database,
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  RefreshCw,
+  WifiOff,
+  ShieldCheck,
+  X
 } from 'lucide-react';
 import { initialSchoolConfig } from '../../data/initialData';
 import { AiAssistantModal } from './AiAssistantModal';
@@ -49,7 +53,15 @@ export const Header: React.FC = () => {
     updateAccessUserPassword,
     completePasswordResetWithNewPassword,
     accessRules,
-    syncStatus
+    syncStatus,
+    databaseCapacitySummary,
+    isAdminAuthenticated,
+    actionFeedback,
+    clearActionFeedback,
+    sessionExpiredNotice,
+    clearSessionExpiredNotice,
+    connectionError,
+    retryConnection
   } = useApp();
 
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -59,6 +71,7 @@ export const Header: React.FC = () => {
   const [newPinInput, setNewPinInput] = useState('');
   const [confirmPinInput, setConfirmPinInput] = useState('');
   const [showPinInput, setShowPinInput] = useState(false);
+  const [isSubmittingPin, setIsSubmittingPin] = useState(false);
   const [pinChangeNotice, setPinChangeNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const [isSecretAiOpen, setIsSecretAiOpen] = useState(false);
@@ -227,22 +240,37 @@ export const Header: React.FC = () => {
 
             {/* Right: Active Role Account Profile & Logout (Protected Role Isolation) */}
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              {/* Database Server Sync Badge */}
-              <div 
-                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all ${
-                  syncStatus === 'synced' 
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-                    : syncStatus === 'saving' 
-                    ? 'bg-amber-50 text-amber-800 border-amber-200' 
+              {/* Database Server Sync & Mode Badge */}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
+                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer tabular-nums ${
+                  isAdminAuthenticated
+                    ? 'bg-amber-50 text-amber-900 border-amber-300'
+                    : syncStatus === 'synced'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : syncStatus === 'saving'
+                    ? 'bg-amber-50 text-amber-800 border-amber-200'
                     : 'bg-slate-100 text-slate-700 border-slate-200'
                 }`}
-                title="Status koneksi basis data server (CRUD otomatis & persistent)"
+                title="Klik untuk membuka Panel Database Admin Satu Pintu"
               >
-                <Database className={`w-3.5 h-3.5 ${syncStatus === 'saving' ? 'animate-pulse text-amber-600' : syncStatus === 'synced' ? 'text-emerald-600' : 'text-slate-500'}`} />
+                {isAdminAuthenticated ? (
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                ) : (
+                  <Database className={`w-3.5 h-3.5 ${syncStatus === 'saving' ? 'text-amber-600' : syncStatus === 'synced' ? 'text-emerald-600' : 'text-slate-500'}`} />
+                )}
                 <span>
-                  {syncStatus === 'synced' ? 'Database Terhubung' : syncStatus === 'saving' ? 'Menyimpan ke Server...' : 'Mode Lokal'}
+                  {isAdminAuthenticated
+                    ? 'Admin DB Aktif'
+                    : syncStatus === 'saving'
+                    ? 'Menyimpan...'
+                    : syncStatus === 'synced'
+                    ? 'DB Satu Pintu'
+                    : 'Koneksi Terputus'}
+                  {databaseCapacitySummary ? ` · ${databaseCapacitySummary.totalPercentUsed}%` : ''}
                 </span>
-              </div>
+              </button>
 
               {/* Operator Profile Tag */}
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs ${roleMeta.badgeClass} shadow-2xs`}>
@@ -307,12 +335,16 @@ export const Header: React.FC = () => {
                 <Settings className="w-4 h-4" />
               </button>
 
-              {/* Reset Data Button */}
+              {/* Reset Data Button (Admin Only) */}
               <button
                 type="button"
                 onClick={() => setIsResetConfirmOpen(true)}
-                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                title="Reset ke Data Bawaan"
+                className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                  isAdminAuthenticated
+                    ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'
+                    : 'text-slate-300 hover:text-slate-500'
+                }`}
+                title={isAdminAuthenticated ? 'Reset ke Data Bawaan (Admin)' : 'Reset Data (Hanya Admin Database)'}
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
@@ -367,6 +399,112 @@ export const Header: React.FC = () => {
             })}
           </div>
         </div>
+
+        {/* Automatic Database Capacity Warning / Lock Banner (>=80%, >=95%, 100%) */}
+        {databaseCapacitySummary &&
+          databaseCapacitySummary.effectiveAlertLevel !== 'NORMAL' && (
+            <div
+              className={`border-t text-xs ${
+                databaseCapacitySummary.effectiveAlertLevel === 'FULL'
+                  ? 'bg-rose-600 text-white border-rose-700'
+                  : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
+                  ? 'bg-rose-50 text-rose-900 border-rose-200'
+                  : 'bg-amber-50 text-amber-950 border-amber-200'
+              }`}
+            >
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-semibold">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span className="tabular-nums">
+                    {databaseCapacitySummary.effectiveAlertLevel === 'FULL'
+                      ? `KAPASITAS DATABASE PENUH (${databaseCapacitySummary.totalPercentUsed}%) — Penulisan data baru dikunci otomatis oleh sistem. Hubungi Admin untuk perluasan kuota atau pengarsipan.`
+                      : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
+                      ? `PERINGATAN KRITIS KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Sisa ruang penyimpanan hampir habis. Segera hubungi Admin.`
+                      : `PERINGATAN KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Penggunaan Database Admin telah mencapai 80% atau lebih.`}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
+                    databaseCapacitySummary.effectiveAlertLevel === 'FULL'
+                      ? 'bg-white text-rose-700 hover:bg-rose-50'
+                      : 'bg-slate-900 text-white hover:bg-slate-800'
+                  }`}
+                >
+                  Kelola Kapasitas (Admin)
+                </button>
+              </div>
+            </div>
+          )}
+
+        {/* Network Error + Retry Banner */}
+        {connectionError && (
+          <div className="bg-rose-50 border-t border-rose-200">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-900">
+              <div className="flex items-center gap-2">
+                <WifiOff className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{connectionError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => retryConnection()}
+                className="px-3 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Coba Lagi</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Session Expiry Banner */}
+        {sessionExpiredNotice && (
+          <div className="bg-amber-50 border-t border-amber-200">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2 text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{sessionExpiredNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={clearSessionExpiredNotice}
+                className="p-1 text-amber-700 hover:text-amber-950 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Action Feedback Banner (Staff Proposal Queue / Admin Guard Notice) */}
+        {actionFeedback && (
+          <div
+            className={`border-t text-xs ${
+              actionFeedback.ok
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-rose-50 border-rose-200 text-rose-900'
+            }`}
+          >
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-medium">
+                {actionFeedback.ok ? (
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{actionFeedback.text}</span>
+              </div>
+              <button
+                type="button"
+                onClick={clearActionFeedback}
+                className="p-1 opacity-70 hover:opacity-100 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* In-service Reminder Banner when logged in with Temporary Reset Password */}
         {currentUser?.mustChangePassword && (
@@ -507,41 +645,46 @@ export const Header: React.FC = () => {
             </div>
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                if (!newPinInput.trim()) return;
-                if (currentUser?.mustChangePassword) {
-                  if (newPinInput.trim() !== confirmPinInput.trim()) {
-                    setPinChangeNotice({
-                      ok: false,
-                      text: 'Konfirmasi sandi baru tidak cocok. Pastikan kedua kolom sandi baru sama.'
-                    });
-                    return;
-                  }
-                  const res = completePasswordResetWithNewPassword(currentUser.id, newPinInput.trim());
-                  setPinChangeNotice({ ok: res.ok, text: res.message });
-                  if (res.ok) {
-                    setTimeout(() => {
-                      setIsPinModalOpen(false);
-                      setPinChangeNotice(null);
-                    }, 1400);
-                  }
-                } else if (currentUser) {
-                  const res = updateAccessUserPassword(currentUser.id, newPinInput.trim());
-                  setPinChangeNotice({ ok: res.ok, text: res.message });
-                  if (res.ok) {
+                if (!newPinInput.trim() || isSubmittingPin) return;
+                setIsSubmittingPin(true);
+                try {
+                  if (currentUser?.mustChangePassword) {
+                    if (newPinInput.trim() !== confirmPinInput.trim()) {
+                      setPinChangeNotice({
+                        ok: false,
+                        text: 'Konfirmasi sandi baru tidak cocok. Pastikan kedua kolom sandi baru sama.'
+                      });
+                      return;
+                    }
+                    const res = await completePasswordResetWithNewPassword(currentUser.id, newPinInput.trim());
+                    setPinChangeNotice({ ok: res.ok, text: res.message });
+                    if (res.ok) {
+                      setTimeout(() => {
+                        setIsPinModalOpen(false);
+                        setPinChangeNotice(null);
+                      }, 1400);
+                    }
+                  } else if (currentUser) {
+                    const res = await updateAccessUserPassword(currentUser.id, newPinInput.trim());
+                    setPinChangeNotice({ ok: res.ok, text: res.message });
+                    if (res.ok) {
+                      setTimeout(() => {
+                        setIsPinModalOpen(false);
+                        setPinChangeNotice(null);
+                      }, 1500);
+                    }
+                  } else {
+                    updateRolePin(currentRole, newPinInput.trim());
+                    setPinChangeNotice({ ok: true, text: 'Sandi akun berhasil diperbarui!' });
                     setTimeout(() => {
                       setIsPinModalOpen(false);
                       setPinChangeNotice(null);
                     }, 1500);
                   }
-                } else {
-                  updateRolePin(currentRole, newPinInput.trim());
-                  setPinChangeNotice({ ok: true, text: 'Sandi akun berhasil diperbarui!' });
-                  setTimeout(() => {
-                    setIsPinModalOpen(false);
-                    setPinChangeNotice(null);
-                  }, 1500);
+                } finally {
+                  setIsSubmittingPin(false);
                 }
               }}
               className="space-y-3 pt-2"
@@ -623,10 +766,10 @@ export const Header: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={!newPinInput.trim()}
+                  disabled={!newPinInput.trim() || isSubmittingPin}
                   className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg shadow-xs cursor-pointer"
                 >
-                  Simpan Sandi Baru
+                  {isSubmittingPin ? 'Menyimpan...' : 'Simpan Sandi Baru'}
                 </button>
               </div>
             </form>

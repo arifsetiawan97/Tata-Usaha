@@ -1,47 +1,86 @@
 /**
- * Storage & Database Persistence Service (CRUD Layer)
+ * Centralized Single-Door Database & Auth API Client
  *
- * Memisahkan antara logika antarmuka (UI) dan logika penyimpanan data.
- * Terintegrasi dengan database cloud/server satu pintu (RESTful /api/state & /api/crud)
- * dengan dukungan Vite/Vercel Serverless & fallback local storage offline-first.
+ * - Bearer session tokens (Admin & Staff) kept strictly in JS memory (never localStorage/sessionStorage).
+ * - All Admin database operations carry verified Admin Bearer Authorization headers.
+ * - Includes automatic timeouts, transient retry, and friendly error formatting.
  */
 
 import {
-  TaskLog,
-  InventoryItem,
-  MonthlyReport,
+  AccessSecurityRules,
   AnnualReport,
   ArchiveDocument,
-  SchoolConfig,
+  AuditLogEntry,
+  BackupScheduleConfig,
   CustomCategory,
-  TupoksiDefinitionsMap,
+  DatabaseBackupMeta,
+  DatabaseCapacityQuickSummary,
+  DatabaseFieldDef,
+  DatabaseMetricsSummary,
+  DatabaseModuleMetrics,
+  InventoryItem,
   LibraryBookItem,
   LibraryMemberItem,
   LibraryMemberStats,
+  MigrationReport,
+  MonthlyReport,
   RegisteredAccessUser,
-  AccessSecurityRules
+  RoleType,
+  SavedBeritaAcaraRecord,
+  SchoolConfig,
+  SiteSettings,
+  SoftDeletedItem,
+  StaffSubmissionItem,
+  TaskLog,
+  TupoksiDefinitionsMap,
+  UserAccountStatus
 } from '../types';
 
 export type ServerStorageMode = 'upstash' | 'supabase' | 'local-file' | 'vercel-ephemeral' | 'offline';
 
 export interface AppStateData {
-  tasks: TaskLog[];
-  inventories: InventoryItem[];
-  monthlyReports: MonthlyReport[];
-  annualReports: AnnualReport[];
-  schoolConfig: SchoolConfig;
-  archives: ArchiveDocument[];
-  tupoksiDefinitions: TupoksiDefinitionsMap;
-  customCategories: CustomCategory[];
+  publicOnly?: boolean;
+  isAdminView?: boolean;
+  tasks?: TaskLog[];
+  inventories?: InventoryItem[];
+  monthlyReports?: MonthlyReport[];
+  annualReports?: AnnualReport[];
+  schoolConfig?: SchoolConfig;
+  archives?: ArchiveDocument[];
+  tupoksiDefinitions?: TupoksiDefinitionsMap;
+  customCategories?: CustomCategory[];
   libraryBooks?: LibraryBookItem[];
   libraryMembers?: LibraryMemberItem[];
   libraryMemberStats?: LibraryMemberStats;
+  beritaAcaraHistory?: SavedBeritaAcaraRecord[];
+  customDatabases?: DatabaseModuleMetrics[];
+  customDatabaseRecords?: Record<string, any[]>;
+  databaseRegistry?: DatabaseModuleMetrics[];
+  databaseQuotaBytes?: number;
+  databaseMetrics?: DatabaseMetricsSummary;
+  databaseCapacitySummary?: DatabaseCapacityQuickSummary;
+  siteSettings?: SiteSettings;
+  softDeletedItems?: SoftDeletedItem[];
+  backups?: DatabaseBackupMeta[];
+  backupSchedule?: BackupScheduleConfig;
+  auditLogs?: AuditLogEntry[];
+  staffSubmissions?: StaffSubmissionItem[];
+  migrationLogs?: MigrationReport[];
   accessUsers?: RegisteredAccessUser[];
   deletedAccessUserIds?: string[];
   accessRules?: AccessSecurityRules;
-  adminPassword?: string;
+  approvedRoleCounts?: Record<RoleType, number>;
   clientHydratedFromServer?: boolean;
   lastUpdated?: string;
+}
+
+export interface ApiResponse<T = any> {
+  ok: boolean;
+  status: number;
+  data?: T;
+  error?: string;
+  message?: string;
+  code?: string;
 }
 
 export interface StateSyncResponse {
@@ -50,6 +89,7 @@ export interface StateSyncResponse {
   storageMode?: ServerStorageMode;
   cloudPersistent?: boolean;
   label?: string;
+  error?: string;
 }
 
 export type CrudCollection =
@@ -60,7 +100,8 @@ export type CrudCollection =
   | 'archives'
   | 'customCategories'
   | 'libraryBooks'
-  | 'libraryMembers';
+  | 'libraryMembers'
+  | 'beritaAcaraHistory';
 
 function resolveApiBaseUrl(): string {
   const envBase = (import.meta.env?.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
@@ -83,26 +124,42 @@ function resolveApiBaseUrl(): string {
   return envBase;
 }
 
-async function parseJsonResponse(response: Response): Promise<any | null> {
+async function parseJsonSafe(response: Response): Promise<any | null> {
   const ct = (response.headers.get('content-type') || '').toLowerCase();
   if (!ct.includes('application/json')) {
     return null;
   }
-  return response.json();
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
 class StorageService {
-  private isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  // Strictly in-memory session tokens (never persisted in localStorage or sessionStorage)
+  private staffToken: string | null = null;
+  private adminToken: string | null = null;
+  private onAuthExpiredCallback: ((type: 'staff' | 'admin') => void) | null = null;
 
-  constructor() {
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => {
-        this.isOnline = true;
-      });
-      window.addEventListener('offline', () => {
-        this.isOnline = false;
-      });
-    }
+  setStaffToken(token: string | null) {
+    this.staffToken = token && token.trim() ? token.trim() : null;
+  }
+
+  getStaffToken(): string | null {
+    return this.staffToken;
+  }
+
+  setAdminToken(token: string | null) {
+    this.adminToken = token && token.trim() ? token.trim() : null;
+  }
+
+  getAdminToken(): string | null {
+    return this.adminToken;
+  }
+
+  setOnAuthExpired(cb: ((type: 'staff' | 'admin') => void) | null) {
+    this.onAuthExpiredCallback = cb;
   }
 
   getApiUrl(path: string): string {
@@ -126,53 +183,107 @@ class StorageService {
     }
   }
 
-  private async fetchJsonWithFallback(path: string, init?: RequestInit): Promise<any | null> {
+  private getAuthHeader(tokenPreference: 'admin' | 'staff' | 'auto' | 'none'): Record<string, string> {
+    if (tokenPreference === 'none') return {};
+    if (tokenPreference === 'admin') {
+      return this.adminToken ? { Authorization: `Bearer ${this.adminToken}` } : {};
+    }
+    if (tokenPreference === 'staff') {
+      return this.staffToken ? { Authorization: `Bearer ${this.staffToken}` } : {};
+    }
+    const chosen = this.adminToken || this.staffToken;
+    return chosen ? { Authorization: `Bearer ${chosen}` } : {};
+  }
+
+  private async requestJson<T = any>(
+    path: string,
+    options: RequestInit & { tokenType?: 'admin' | 'staff' | 'auto' | 'none'; retries?: number } = {}
+  ): Promise<ApiResponse<T>> {
+    const { tokenType = 'auto', retries = 1, ...init } = options;
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     const primaryUrl = this.getApiUrl(cleanPath);
 
-    const attemptOnce = async (targetUrl: string): Promise<any | null> => {
+    const runAttempt = async (targetUrl: string): Promise<ApiResponse<T> & { networkFailure?: boolean }> => {
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
       try {
-        const response = await fetch(targetUrl, {
+        const headers: Record<string, string> = {
+          Accept: 'application/json',
+          ...(init.headers as Record<string, string> | undefined),
+          ...this.getAuthHeader(tokenType)
+        };
+        const res = await fetch(targetUrl, {
           ...init,
+          headers,
+          cache: 'no-store',
           ...(controller ? { signal: controller.signal } : {})
         });
-        if (!response.ok) return null;
-        return await parseJsonResponse(response);
-      } catch {
-        return null;
+        const json = await parseJsonSafe(res);
+        if (!res.ok) {
+          if (res.status === 401 && json?.code === 'ADMIN_AUTH_REQUIRED' && this.adminToken) {
+            this.adminToken = null;
+            this.onAuthExpiredCallback?.('admin');
+          } else if (res.status === 401 && json?.code === 'AUTH_REQUIRED' && this.staffToken) {
+            this.staffToken = null;
+            this.onAuthExpiredCallback?.('staff');
+          }
+          return {
+            ok: false,
+            status: res.status,
+            data: json,
+            error: json?.error || json?.message || `Permintaan gagal (Kode ${res.status}).`,
+            message: json?.message || json?.error,
+            code: json?.code
+          };
+        }
+        if (!json) {
+          return {
+            ok: false,
+            status: res.status,
+            networkFailure: true,
+            error: 'Respons server tidak berbentuk JSON yang valid.'
+          };
+        }
+        return {
+          ok: true,
+          status: res.status,
+          data: json as T,
+          message: json?.message
+        };
+      } catch (err: any) {
+        return {
+          ok: false,
+          status: 0,
+          networkFailure: true,
+          error:
+            err?.name === 'AbortError'
+              ? 'Waktu koneksi ke server habis. Silakan tekan Coba Lagi.'
+              : 'Tidak dapat terhubung ke server Database Admin. Periksa koneksi jaringan Anda.'
+        };
       } finally {
         if (timer) clearTimeout(timer);
       }
     };
 
-    const attemptWithRetry = async (targetUrl: string): Promise<any | null> => {
-      const first = await attemptOnce(targetUrl);
-      if (first) return first;
-      await new Promise(resolve => setTimeout(resolve, 350));
-      return await attemptOnce(targetUrl);
-    };
+    let result = await runAttempt(primaryUrl);
+    if (result.networkFailure && retries > 0) {
+      await new Promise(r => setTimeout(r, 350));
+      result = await runAttempt(primaryUrl);
+    }
 
-    const primaryResult = await attemptWithRetry(primaryUrl);
-    if (primaryResult) return primaryResult;
-
-    // If a custom hub URL failed or returned HTML/404, automatically self-heal to same-origin /api/*
-    if (primaryUrl !== cleanPath) {
-      const fallbackResult = await attemptWithRetry(cleanPath);
-      if (fallbackResult) {
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.removeItem('siops_central_api_base');
-          } catch {
-            // Ignore storage removal errors
-          }
+    if (result.networkFailure && primaryUrl !== cleanPath) {
+      const fallback = await runAttempt(cleanPath);
+      if (fallback.ok) {
+        try {
+          localStorage.removeItem('siops_central_api_base');
+        } catch {
+          // ignore
         }
-        return fallbackResult;
+        return fallback;
       }
     }
 
-    return null;
+    return result;
   }
 
   async checkHealth(): Promise<{
@@ -181,60 +292,57 @@ class StorageService {
     cloudPersistent?: boolean;
     label?: string;
   }> {
-    const json = await this.fetchJsonWithFallback('/api/health', {
-      headers: { Accept: 'application/json' },
-      cache: 'no-store'
-    });
-    if (!json || json.status !== 'ok') return { ok: false };
+    const res = await this.requestJson<any>('/api/health', { tokenType: 'none', retries: 1 });
+    if (!res.ok || res.data?.status !== 'ok') return { ok: false };
     return {
       ok: true,
-      storageMode: json.storageMode,
-      cloudPersistent: json.cloudPersistent,
-      label: json.label
+      storageMode: res.data.storageMode,
+      cloudPersistent: res.data.cloudPersistent,
+      label: res.data.label
     };
   }
 
   // =========================================================================
-  // FULL STATE SYNC & HYDRATION (Server / Cloud Database <-> Client)
+  // STATE READ & ADMIN STATE WRITE
   // =========================================================================
 
   async fetchServerState(): Promise<{
     initialized: boolean;
+    accessLevel?: 'PUBLIC' | 'STAFF' | 'ADMIN';
+    adminSetupRequired?: boolean;
     data?: AppStateData;
     storageMode?: ServerStorageMode;
     cloudPersistent?: boolean;
     label?: string;
   } | null> {
-    try {
-      return await this.fetchJsonWithFallback('/api/state', {
-        headers: { Accept: 'application/json' },
-        cache: 'no-store'
-      });
-    } catch (error) {
-      console.warn('[StorageService] Gagal memuat state dari database server:', error);
-      return null;
-    }
+    const res = await this.requestJson<any>('/api/state', { tokenType: 'auto', retries: 1 });
+    if (!res.ok || !res.data) return null;
+    return res.data;
   }
 
   async syncServerStateDetailed(data: Partial<AppStateData>): Promise<StateSyncResponse> {
-    try {
-      const json = await this.fetchJsonWithFallback('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!json) return { ok: false };
+    if (!this.adminToken) {
       return {
-        ok: true,
-        data: json.data,
-        storageMode: json.storageMode,
-        cloudPersistent: json.cloudPersistent,
-        label: json.label
+        ok: false,
+        error: 'Hanya Admin terautentikasi yang dapat menulis langsung ke Database Admin.'
       };
-    } catch (error) {
-      console.error('[StorageService] Gagal sinkronisasi data ke server database:', error);
-      return { ok: false };
     }
+    const res = await this.requestJson<any>('/api/state', {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok || !res.data) {
+      return { ok: false, error: res.error };
+    }
+    return {
+      ok: true,
+      data: res.data.data,
+      storageMode: res.data.storageMode,
+      cloudPersistent: res.data.cloudPersistent,
+      label: res.data.label
+    };
   }
 
   async syncServerState(data: Partial<AppStateData>): Promise<boolean> {
@@ -242,97 +350,432 @@ class StorageService {
     return res.ok;
   }
 
-  async deleteAccessUser(id: string): Promise<boolean> {
-    try {
-      const json = await this.fetchJsonWithFallback(`/api/access-users/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: { Accept: 'application/json' }
-      });
-      return Boolean(json?.success);
-    } catch (error) {
-      console.warn('[StorageService] Gagal hapus akun pengguna di server:', error);
-      return false;
+  // =========================================================================
+  // PUBLIC & STAFF AUTH ENDPOINTS
+  // =========================================================================
+
+  async authRegister(payload: {
+    namaLengkap: string;
+    username: string;
+    role: RoleType;
+    password: string;
+  }): Promise<ApiResponse<{ ok: boolean; user?: RegisteredAccessUser; message: string }>> {
+    return this.requestJson('/api/auth/register', {
+      method: 'POST',
+      tokenType: 'none',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async authLogin(payload: {
+    username: string;
+    password: string;
+    expectedRole?: RoleType;
+  }): Promise<
+    ApiResponse<{
+      ok: boolean;
+      token: string;
+      expiresAt: string;
+      requiresPasswordChange?: boolean;
+      user: RegisteredAccessUser;
+      message: string;
+    }>
+  > {
+    const res = await this.requestJson<any>('/api/auth/login', {
+      method: 'POST',
+      tokenType: 'none',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok && res.data?.token) {
+      this.setStaffToken(res.data.token);
     }
+    return res;
+  }
+
+  async authRefresh(): Promise<boolean> {
+    if (!this.staffToken) return false;
+    const res = await this.requestJson<any>('/api/auth/refresh', {
+      method: 'POST',
+      tokenType: 'staff',
+      retries: 1
+    });
+    if (res.ok && res.data?.token) {
+      this.setStaffToken(res.data.token);
+      return true;
+    }
+    return false;
+  }
+
+  async authRequestReset(payload: { username: string; note?: string }) {
+    return this.requestJson('/api/auth/request-reset', {
+      method: 'POST',
+      tokenType: 'none',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async authStatusLookup(username: string): Promise<ApiResponse<{ ok: boolean; user: RegisteredAccessUser }>> {
+    return this.requestJson('/api/auth/status-lookup', {
+      method: 'POST',
+      tokenType: 'none',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
+  }
+
+  async authChangePassword(newPassword: string) {
+    return this.requestJson('/api/auth/change-password', {
+      method: 'POST',
+      tokenType: 'staff',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword })
+    });
   }
 
   // =========================================================================
-  // GRANULAR CRUD
+  // STAFF SAFE PROPOSAL SUBMISSION QUEUE (NO DIRECT DB WRITE/DELETE)
   // =========================================================================
-  async createItem<T extends { id?: string }>(collection: CrudCollection, item: T): Promise<T | null> {
-    try {
-      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}`, {
+
+  async submitStaffProposal(payload: {
+    targetCollection: string;
+    operationType: 'CREATE' | 'UPDATE';
+    payload: any;
+    note?: string;
+  }) {
+    return this.requestJson<{ ok: boolean; submission: StaffSubmissionItem; message: string }>(
+      '/api/staff/submissions',
+      {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(item)
-      });
-      return (result?.created as T) || null;
-    } catch (error) {
-      console.warn(`[StorageService] Offline create fallback for ${collection}:`, error);
-    }
-    return null;
+        tokenType: 'staff',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }
+    );
   }
 
-  async readCollection<T>(collection: CrudCollection): Promise<T[]> {
-    try {
-      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}`, {
-        headers: { Accept: 'application/json' },
-        cache: 'no-store'
-      });
-      return (result?.data as T[]) || [];
-    } catch (error) {
-      console.warn(`[StorageService] Offline read fallback for ${collection}:`, error);
-    }
-    return [];
+  // =========================================================================
+  // ADMIN AUTH & GOVERNANCE ENDPOINTS
+  // =========================================================================
+
+  async adminAuthStatus() {
+    return this.requestJson<{ envOverrideActive: boolean; isClaimed: boolean; setupRequired: boolean }>(
+      '/api/admin/auth/status',
+      { method: 'GET', tokenType: 'none' }
+    );
   }
 
-  async readItem<T>(collection: CrudCollection, id: string): Promise<T | null> {
-    try {
-      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}/${encodeURIComponent(id)}`, {
-        headers: { Accept: 'application/json' },
-        cache: 'no-store'
-      });
-      return (result?.data as T) || null;
-    } catch (error) {
-      console.warn(`[StorageService] Failed to read item ${id} from ${collection}:`, error);
+  async adminAuthClaim(password: string) {
+    const res = await this.requestJson<{ ok: boolean; token: string; expiresAt: string; message: string }>(
+      '/api/admin/auth/claim',
+      {
+        method: 'POST',
+        tokenType: 'none',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      }
+    );
+    if (res.ok && res.data?.token) {
+      this.setAdminToken(res.data.token);
     }
-    return null;
+    return res;
   }
 
-  async updateItem<T>(collection: CrudCollection, id: string, updates: Partial<T>): Promise<T | null> {
-    try {
-      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}/${encodeURIComponent(id)}`, {
+  async adminAuthLogin(password: string) {
+    const res = await this.requestJson<{
+      ok: boolean;
+      token: string;
+      expiresAt: string;
+      setupRequired?: boolean;
+      message: string;
+    }>('/api/admin/auth/login', {
+      method: 'POST',
+      tokenType: 'none',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    if (res.ok && res.data?.token) {
+      this.setAdminToken(res.data.token);
+    }
+    return res;
+  }
+
+  async adminAuthRefresh(): Promise<boolean> {
+    if (!this.adminToken) return false;
+    const res = await this.requestJson<{ ok: boolean; token: string }>('/api/admin/auth/refresh', {
+      method: 'POST',
+      tokenType: 'admin'
+    });
+    if (res.ok && res.data?.token) {
+      this.setAdminToken(res.data.token);
+      return true;
+    }
+    return false;
+  }
+
+  async adminAuthChangePassword(newPassword: string) {
+    return this.requestJson('/api/admin/auth/change-password', {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword })
+    });
+  }
+
+  async adminGetDashboard() {
+    return this.requestJson<{ ok: boolean; data: AppStateData; storageMode?: ServerStorageMode; label?: string }>(
+      '/api/admin/dashboard',
+      { method: 'GET', tokenType: 'admin' }
+    );
+  }
+
+  async adminUpdateSiteSettings(payload: { welcomeHeadline: string; welcomeSubheadline?: string }) {
+    return this.requestJson('/api/admin/site-settings', {
+      method: 'PUT',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async adminUpdateQuota(databaseQuotaBytes: number) {
+    return this.requestJson('/api/admin/quota', {
+      method: 'PUT',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ databaseQuotaBytes })
+    });
+  }
+
+  async adminCreateDatabase(payload: {
+    code: string;
+    name: string;
+    module: string;
+    description?: string;
+    capacityLimitBytes: number;
+    maxRecords: number;
+    status: 'ACTIVE' | 'ARCHIVED';
+    fields?: DatabaseFieldDef[];
+  }) {
+    return this.requestJson('/api/admin/databases', {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async adminUpdateDatabase(
+    code: string,
+    updates: Partial<{
+      name: string;
+      module: string;
+      description: string;
+      capacityLimitBytes: number;
+      maxRecords: number;
+      status: 'ACTIVE' | 'ARCHIVED' | 'LOCKED';
+    }>
+  ) {
+    return this.requestJson(`/api/admin/databases/${encodeURIComponent(code)}`, {
+      method: 'PUT',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+  }
+
+  async adminDeleteDatabase(code: string) {
+    return this.requestJson(`/api/admin/databases/${encodeURIComponent(code)}`, {
+      method: 'DELETE',
+      tokenType: 'admin'
+    });
+  }
+
+  async adminCreateRecord(collection: string, record: any) {
+    return this.requestJson(`/api/admin/records/${encodeURIComponent(collection)}`, {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record)
+    });
+  }
+
+  async adminUpdateRecord(collection: string, id: string, updates: any) {
+    return this.requestJson(
+      `/api/admin/records/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`,
+      {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        tokenType: 'admin',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
-      });
-      return (result?.updated as T) || null;
-    } catch (error) {
-      console.warn(`[StorageService] Offline update fallback for ${collection}/${id}:`, error);
-    }
-    return null;
+      }
+    );
   }
 
-  async deleteItem(collection: CrudCollection, id: string): Promise<boolean> {
-    try {
-      const result = await this.fetchJsonWithFallback(`/api/crud/${collection}/${encodeURIComponent(id)}`, {
+  async adminSoftDeleteRecord(collection: string, id: string) {
+    return this.requestJson(
+      `/api/admin/records/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`,
+      {
         method: 'DELETE',
-        headers: { Accept: 'application/json' }
-      });
-      return Boolean(result?.success);
-    } catch (error) {
-      console.warn(`[StorageService] Offline delete fallback for ${collection}/${id}:`, error);
-      return false;
-    }
+        tokenType: 'admin'
+      }
+    );
   }
 
-  async downloadServerBackup(): Promise<void> {
-    if (typeof window === 'undefined') return;
-    const a = document.createElement('a');
-    a.href = this.getApiUrl('/api/backup');
-    a.download = `backup-siops-database-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  async adminRestoreTrash(trashId: string) {
+    return this.requestJson(`/api/admin/trash/${encodeURIComponent(trashId)}/restore`, {
+      method: 'POST',
+      tokenType: 'admin'
+    });
+  }
+
+  async adminPurgeTrash(trashId: string) {
+    return this.requestJson(`/api/admin/trash/${encodeURIComponent(trashId)}/purge`, {
+      method: 'DELETE',
+      tokenType: 'admin',
+      headers: { 'X-Confirm-Purge': 'CONFIRM_PERMANENT_DELETE' }
+    });
+  }
+
+  async adminCreateBackup(label?: string) {
+    return this.requestJson('/api/admin/backups', {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label })
+    });
+  }
+
+  async adminUpdateBackupSchedule(enabled: boolean, intervalHours: number) {
+    return this.requestJson('/api/admin/backups/schedule', {
+      method: 'PUT',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled, intervalHours })
+    });
+  }
+
+  async adminRestoreBackup(payload: { backupId?: string; uploadedSnapshot?: any }) {
+    return this.requestJson('/api/admin/backups/restore', {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async adminRunMigration(payload: {
+    sourceName: string;
+    targetCollection: string;
+    records: any[];
+    duplicateStrategy: 'SKIP' | 'OVERWRITE' | 'RENAME_ID';
+    columnMapping?: Record<string, string>;
+  }) {
+    return this.requestJson<{ ok: boolean; report: MigrationReport; message: string }>('/api/admin/migrate', {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async adminRollbackMigration(migrationId: string) {
+    return this.requestJson('/api/admin/migrate/rollback', {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ migrationId })
+    });
+  }
+
+  async adminApproveSubmission(submissionId: string) {
+    return this.requestJson(`/api/admin/submissions/${encodeURIComponent(submissionId)}/approve`, {
+      method: 'POST',
+      tokenType: 'admin'
+    });
+  }
+
+  async adminRejectSubmission(submissionId: string, reason?: string) {
+    return this.requestJson(`/api/admin/submissions/${encodeURIComponent(submissionId)}/reject`, {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason })
+    });
+  }
+
+  async adminUpdateSecurityRules(updates: Partial<AccessSecurityRules>) {
+    return this.requestJson('/api/admin/users/rules', {
+      method: 'PUT',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+  }
+
+  async adminCreateUser(payload: {
+    namaLengkap: string;
+    username: string;
+    role: RoleType;
+    password: string;
+    status?: UserAccountStatus;
+  }) {
+    return this.requestJson('/api/admin/users', {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async adminUserAction(
+    userId: string,
+    action: 'approve' | 'reject' | 'reset-password' | 'set-password',
+    password?: string
+  ) {
+    return this.requestJson(`/api/admin/users/${encodeURIComponent(userId)}/${action}`, {
+      method: 'POST',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(password !== undefined ? { password } : {})
+    });
+  }
+
+  async deleteAccessUser(id: string): Promise<boolean> {
+    const res = await this.requestJson(`/api/access-users/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      tokenType: 'admin'
+    });
+    return res.ok;
+  }
+
+  async downloadServerBackup(): Promise<{ ok: boolean; error?: string }> {
+    if (typeof window === 'undefined') return { ok: false };
+    try {
+      const res = await fetch(this.getApiUrl('/api/backup'), {
+        headers: {
+          Accept: 'application/json',
+          ...this.getAuthHeader('admin')
+        }
+      });
+      if (!res.ok) {
+        return { ok: false, error: 'Hanya Admin terautentikasi yang dapat mengunduh cadangan database.' };
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup-database-admin-siops-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Gagal mengunduh cadangan dari server.' };
+    }
   }
 }
 

@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
-import { 
-  RoleType, 
-  TaskLog, 
-  InventoryItem, 
-  MonthlyReport, 
-  AnnualReport, 
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import {
+  RoleType,
+  TaskLog,
+  InventoryItem,
+  MonthlyReport,
+  AnnualReport,
   SchoolConfig,
   SchoolOfficer,
   UserLetterheadConfig,
@@ -19,13 +19,24 @@ import {
   RegisteredAccessUser,
   AccessSecurityRules,
   UserAccountStatus,
-  AuthActionResult
+  AuthActionResult,
+  SiteSettings,
+  DatabaseCapacityQuickSummary,
+  SavedBeritaAcaraRecord,
+  DatabaseModuleMetrics,
+  DatabaseMetricsSummary,
+  SoftDeletedItem,
+  DatabaseBackupMeta,
+  BackupScheduleConfig,
+  AuditLogEntry,
+  StaffSubmissionItem,
+  MigrationReport
 } from '../types';
-import { 
-  initialSchoolConfig, 
-  initialTasks, 
-  initialInventories, 
-  initialMonthlyReports, 
+import {
+  initialSchoolConfig,
+  initialTasks,
+  initialInventories,
+  initialMonthlyReports,
   initialAnnualReports,
   initialArchives,
   initialCustomCategories,
@@ -34,17 +45,15 @@ import {
   initialLibraryMemberStats
 } from '../data/initialData';
 import { ROLE_OPERATIONAL_SPECS } from '../data/roleOperationalSpecs';
-import { ServerStorageMode, storageService } from '../services/storageService';
-import { 
-  isTaskInMonth, 
-  isTaskInYear, 
-  getTaskClassification, 
-  OFFICIAL_TUPOKSI_DEFINITIONS, 
-  parseTaskMonthYear 
+import { AppStateData, ServerStorageMode, storageService } from '../services/storageService';
+import {
+  isTaskInMonth,
+  getTaskClassification,
+  OFFICIAL_TUPOKSI_DEFINITIONS,
+  parseTaskMonthYear
 } from '../utils/taskClassification';
 import {
   DEFAULT_ACCESS_RULES,
-  DEFAULT_ADMIN_PASSWORD,
   mergeRegisteredUsers
 } from '../utils/accessSync';
 import {
@@ -57,6 +66,30 @@ import {
 import { generateAnnualNarrativeBundle } from '../utils/annualPerformanceHelper';
 
 export type { RoleSubTab };
+
+export const DEFAULT_WELCOME_HEADLINE = 'SELAMAT DATANG OPERATOR LAYANAN OPERASIONAL';
+export const DEFAULT_WELCOME_SUBHEADLINE =
+  'Portal Satu Pintu Layanan Tata Usaha, Penjaga Sekolah, Kebersihan, Perpustakaan & Laboratorium IPA';
+
+export interface AdminAuthStatusState {
+  envOverrideActive: boolean;
+  isClaimed: boolean;
+  setupRequired: boolean;
+}
+
+export interface AdminDashboardState {
+  databaseMetrics: DatabaseMetricsSummary | null;
+  databaseRegistry: DatabaseModuleMetrics[];
+  customDatabases: DatabaseModuleMetrics[];
+  customDatabaseRecords: Record<string, any[]>;
+  databaseQuotaBytes: number;
+  softDeletedItems: SoftDeletedItem[];
+  backups: DatabaseBackupMeta[];
+  backupSchedule: BackupScheduleConfig;
+  auditLogs: AuditLogEntry[];
+  staffSubmissions: StaffSubmissionItem[];
+  migrationLogs: MigrationReport[];
+}
 
 interface AppContextType {
   currentRole: RoleType | null;
@@ -73,14 +106,12 @@ interface AppContextType {
   deleteInventory: (id: string) => void;
   deleteMultipleInventories: (ids: string[]) => void;
   importInventories: (newItems: Omit<InventoryItem, 'id'>[]) => void;
-  // Koleksi & Inventaris Buku Khusus Perpustakaan
   libraryBooks: LibraryBookItem[];
   addLibraryBook: (book: Omit<LibraryBookItem, 'id'>) => void;
   updateLibraryBook: (id: string, updated: Partial<LibraryBookItem>) => void;
   deleteLibraryBook: (id: string) => void;
   deleteMultipleLibraryBooks: (ids: string[]) => void;
   importLibraryBooks: (books: Omit<LibraryBookItem, 'id'>[]) => void;
-  // Pendataan Anggota Perpustakaan (Guru, Staff, Siswa)
   libraryMembers: LibraryMemberItem[];
   addLibraryMember: (member: Omit<LibraryMemberItem, 'id'>) => void;
   updateLibraryMember: (id: string, updated: Partial<LibraryMemberItem>) => void;
@@ -98,6 +129,9 @@ interface AppContextType {
   updateArchive: (id: string, updated: Partial<ArchiveDocument>) => void;
   deleteArchive: (id: string) => void;
   archiveReport: (type: 'monthly' | 'annual', data: any, customTitle?: string) => ArchiveDocument;
+  beritaAcaraHistory: SavedBeritaAcaraRecord[];
+  saveBeritaAcaraRecord: (record: SavedBeritaAcaraRecord) => Promise<{ ok: boolean; message?: string }>;
+  deleteBeritaAcaraRecord: (id: string) => Promise<{ ok: boolean; message?: string }>;
   schoolConfig: SchoolConfig;
   effectiveSchoolConfig: SchoolConfig;
   hasCustomLetterhead: boolean;
@@ -142,6 +176,7 @@ interface AppContextType {
   verifyRolePin: (role: RoleType, pin: string) => boolean;
   updateRolePin: (role: RoleType, newPin: string) => void;
   accessUsers: RegisteredAccessUser[];
+  approvedRoleCounts: Record<RoleType, number>;
   accessRules: AccessSecurityRules;
   currentUser: RegisteredAccessUser | null;
   setCurrentUser: (user: RegisteredAccessUser | null) => void;
@@ -150,37 +185,57 @@ interface AppContextType {
     username: string;
     role: RoleType;
     password: string;
-  }) => AuthActionResult;
+  }) => Promise<AuthActionResult>;
   loginAccessUser: (payload: {
     username: string;
     password: string;
     expectedRole?: RoleType;
-  }) => AuthActionResult;
+  }) => Promise<AuthActionResult>;
   logoutAccessUser: () => void;
-  approveAccessUser: (userId: string, assignedPassword?: string) => AuthActionResult;
-  rejectAccessUser: (userId: string) => void;
-  deleteAccessUser: (userId: string) => void;
-  updateAccessUserPassword: (userId: string, newPassword: string) => AuthActionResult;
+  approveAccessUser: (userId: string, assignedPassword?: string) => Promise<AuthActionResult>;
+  rejectAccessUser: (userId: string) => Promise<AuthActionResult>;
+  deleteAccessUser: (userId: string) => Promise<AuthActionResult>;
+  updateAccessUserPassword: (userId: string, newPassword: string) => Promise<AuthActionResult>;
   createAccessUserByAdmin: (payload: {
     namaLengkap: string;
     username: string;
     role: RoleType;
     password: string;
     status?: UserAccountStatus;
-  }) => AuthActionResult;
-  updateAccessRules: (updates: Partial<AccessSecurityRules>) => void;
-  verifyAdminPassword: (password: string) => boolean;
-  updateAdminPassword: (newPassword: string) => AuthActionResult;
-  adminPassword: string;
-  requestPasswordReset: (payload: { username: string; note?: string }) => AuthActionResult;
-  issueResetPasswordByAdmin: (userId: string, tempResetPassword: string) => AuthActionResult;
-  completePasswordResetWithNewPassword: (userId: string, newPassword: string) => AuthActionResult;
+  }) => Promise<AuthActionResult>;
+  updateAccessRules: (updates: Partial<AccessSecurityRules>) => Promise<AuthActionResult>;
+  updateAdminPassword: (newPassword: string) => Promise<AuthActionResult>;
+  requestPasswordReset: (payload: { username: string; note?: string }) => Promise<AuthActionResult>;
+  issueResetPasswordByAdmin: (userId: string, tempResetPassword: string) => Promise<AuthActionResult>;
+  completePasswordResetWithNewPassword: (userId: string, newPassword: string) => Promise<AuthActionResult>;
+  lookupTrackedAccount: (username: string) => Promise<AuthActionResult>;
   trackedUsername: string | null;
   setTrackedUsername: (username: string | null) => void;
+  trackedUserAccount: RegisteredAccessUser | null;
   refreshAccessState: (force?: boolean) => Promise<RegisteredAccessUser[]>;
   syncStatus: 'synced' | 'saving' | 'offline';
   serverStorageMode: ServerStorageMode;
   cloudPersistent: boolean;
+  isInitialLoading: boolean;
+  connectionError: string | null;
+  retryConnection: () => Promise<void>;
+  siteSettings: SiteSettings;
+  databaseCapacitySummary: DatabaseCapacityQuickSummary | null;
+  customDatabases: DatabaseModuleMetrics[];
+  customDatabaseRecords: Record<string, any[]>;
+  staffSubmissions: StaffSubmissionItem[];
+  isAdminAuthenticated: boolean;
+  adminAuthStatus: AdminAuthStatusState;
+  adminDashboardData: AdminDashboardState;
+  refreshAdminAuthStatus: () => Promise<AdminAuthStatusState>;
+  claimAdminPassword: (password: string) => Promise<AuthActionResult>;
+  loginAdminSession: (password: string) => Promise<AuthActionResult>;
+  logoutAdminSession: () => void;
+  refreshAdminDashboard: () => Promise<boolean>;
+  actionFeedback: { ok: boolean; text: string } | null;
+  clearActionFeedback: () => void;
+  sessionExpiredNotice: string | null;
+  clearSessionExpiredNotice: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -194,26 +249,19 @@ const ROLE_LABELS_MAP: Record<RoleType, string> = {
 };
 
 const STORAGE_KEYS = {
-  ROLE: 'siops_current_role',
-  CURRENT_USER: 'siops_current_user',
   TRACKED_USERNAME: 'siops_tracked_username',
-  ACCESS_USERS: 'siops_access_users',
-  ACCESS_RULES: 'siops_access_rules',
-  ADMIN_PASSWORD: 'siops_admin_password',
-  TASKS: 'siops_tasks',
-  INVENTORY: 'siops_inventory',
-  LIBRARY_BOOKS: 'siops_library_books',
-  LIBRARY_MEMBERS: 'siops_library_members',
-  LIBRARY_MEMBER_STATS: 'siops_library_member_stats',
-  MONTHLY: 'siops_monthly_reports',
-  ANNUAL: 'siops_annual_reports',
-  ARCHIVES: 'siops_archives',
-  CONFIG: 'siops_school_config',
-  TUPOKSI: 'siops_tupoksi_definitions',
   SUBTABS: 'siops_role_subtabs',
-  PINS: 'siops_role_pins',
-  CUSTOM_CATEGORIES: 'siops_custom_categories'
+  PINS: 'siops_role_pins'
 };
+
+const EMPTY_ROLE_COUNTS: Record<RoleType, number> = {
+  TU: 0,
+  PENJAGA: 0,
+  SERVICE: 0,
+  PERPUS: 0,
+  LAB_IPA: 0
+};
+
 export const mergeSchoolConfigWithDefaults = (
   sourceConfig: any,
   existingConfig?: SchoolConfig
@@ -249,13 +297,13 @@ export const mergeSchoolConfigWithDefaults = (
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentRole, setCurrentRoleState] = useState<RoleType | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ROLE);
-    if (saved === 'TU' || saved === 'PENJAGA' || saved === 'SERVICE' || saved === 'PERPUS' || saved === 'LAB_IPA') {
-      return saved as RoleType;
-    }
-    return null;
-  });
+  // Active workspace role & user — only populated after server-verified authentication
+  const [currentRole, setCurrentRoleState] = useState<RoleType | null>(null);
+  const [currentUser, setCurrentUserState] = useState<RegisteredAccessUser | null>(null);
+
+  const setCurrentUser = useCallback((user: RegisteredAccessUser | null) => {
+    setCurrentUserState(user);
+  }, []);
 
   const [rolePins, setRolePins] = useState<Record<RoleType, string>>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PINS);
@@ -269,7 +317,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           PERPUS: parsed.PERPUS || '2104',
           LAB_IPA: parsed.LAB_IPA || '2105'
         };
-      } catch (e) { console.error(e); }
+      } catch {
+        // Ignore parse error
+      }
     }
     return {
       TU: '2101',
@@ -281,11 +331,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const verifyRolePin = (role: RoleType, pin: string): boolean => {
-    const fallbackPin = 
-      role === 'TU' ? '2101' : 
-      role === 'PENJAGA' ? '2102' : 
-      role === 'SERVICE' ? '2103' : 
-      role === 'PERPUS' ? '2104' : '2105';
+    const fallbackPin =
+      role === 'TU' ? '2101' : role === 'PENJAGA' ? '2102' : role === 'SERVICE' ? '2103' : role === 'PERPUS' ? '2104' : '2105';
     const expected = rolePins[role] || fallbackPin;
     return pin.trim() === expected.trim();
   };
@@ -299,160 +346,121 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const [accessUsers, setAccessUsers] = useState<RegisteredAccessUser[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ACCESS_USERS);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (e) { console.error(e); }
-    }
-    return [];
-  });
-
-  const [accessRules, setAccessRules] = useState<AccessSecurityRules>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ACCESS_RULES);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return { ...DEFAULT_ACCESS_RULES, ...parsed };
-      } catch (e) { console.error(e); }
-    }
-    return DEFAULT_ACCESS_RULES;
-  });
-
-  const [adminPassword, setAdminPassword] = useState<string>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ADMIN_PASSWORD);
-    return saved && saved.trim() ? saved.trim() : DEFAULT_ADMIN_PASSWORD;
-  });
-
-  const [currentUser, setCurrentUserState] = useState<RegisteredAccessUser | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return null;
-  });
-
-  const setCurrentUser = (user: RegisteredAccessUser | null) => {
-    setCurrentUserState(user);
-    if (user) {
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-    }
-  };
+  const [accessUsers, setAccessUsers] = useState<RegisteredAccessUser[]>([]);
+  const [approvedRoleCounts, setApprovedRoleCounts] = useState<Record<RoleType, number>>(EMPTY_ROLE_COUNTS);
+  const [accessRules, setAccessRules] = useState<AccessSecurityRules>(DEFAULT_ACCESS_RULES);
 
   const [trackedUsername, setTrackedUsernameState] = useState<string | null>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.TRACKED_USERNAME);
     return saved && saved.trim() ? saved.trim() : null;
   });
+  const [trackedUserAccount, setTrackedUserAccount] = useState<RegisteredAccessUser | null>(null);
 
-  const setTrackedUsername = (username: string | null) => {
+  const setTrackedUsername = useCallback((username: string | null) => {
     const clean = username && username.trim() ? username.trim() : null;
     setTrackedUsernameState(clean);
     if (clean) {
       localStorage.setItem(STORAGE_KEYS.TRACKED_USERNAME, clean);
     } else {
       localStorage.removeItem(STORAGE_KEYS.TRACKED_USERNAME);
+      setTrackedUserAccount(null);
     }
-  };
+  }, []);
 
   const [activeNavTab, setActiveNavTab] = useState<string>('dashboard');
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'offline'>('synced');
   const [serverStorageMode, setServerStorageMode] = useState<ServerStorageMode>('local-file');
   const [cloudPersistent, setCloudPersistent] = useState<boolean>(true);
-  const isInitialLoad = useRef(true);
-  const hasHydratedFromServerRef = useRef(false);
-  const skipNextServerSyncRef = useRef(false);
-  const isPendingLocalSaveRef = useRef(false);
-  const pendingDeletedAccessUserIdsRef = useRef<string[]>([]);
-  const accessUsersRef = useRef<RegisteredAccessUser[]>(accessUsers);
-  const accessRulesRef = useRef<AccessSecurityRules>(accessRules);
-  const adminPasswordRef = useRef<string>(adminPassword);
-  accessUsersRef.current = accessUsers;
-  accessRulesRef.current = accessRules;
-  adminPasswordRef.current = adminPassword;
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | null>(null);
 
-  const [tasks, setTasks] = useState<TaskLog[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.TASKS);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return initialTasks;
+  const [actionFeedback, setActionFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const feedbackTimerRef = useRef<any>(null);
+  const showActionFeedback = useCallback((ok: boolean, text: string) => {
+    setActionFeedback({ ok, text });
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = setTimeout(() => {
+      setActionFeedback(null);
+    }, 5500);
+  }, []);
+  const clearActionFeedback = useCallback(() => setActionFeedback(null), []);
+  const clearSessionExpiredNotice = useCallback(() => setSessionExpiredNotice(null), []);
+
+  // Core Operational State
+  const [tasks, setTasks] = useState<TaskLog[]>(initialTasks);
+  const [inventories, setInventories] = useState<InventoryItem[]>(initialInventories);
+  const [libraryBooks, setLibraryBooks] = useState<LibraryBookItem[]>(initialLibraryBooks);
+  const [libraryMembers, setLibraryMembers] = useState<LibraryMemberItem[]>(initialLibraryMembers);
+  const [libraryMemberStats, setLibraryMemberStats] = useState<LibraryMemberStats>(initialLibraryMemberStats);
+  const [monthlyReports, setMonthlyReports] = useState<MonthlyReport[]>(initialMonthlyReports);
+  const [annualReports, setAnnualReports] = useState<AnnualReport[]>(initialAnnualReports);
+  const [archives, setArchives] = useState<ArchiveDocument[]>(initialArchives);
+  const [beritaAcaraHistory, setBeritaAcaraHistory] = useState<SavedBeritaAcaraRecord[]>([]);
+  const [schoolConfig, setSchoolConfig] = useState<SchoolConfig>(initialSchoolConfig);
+  const [tupoksiDefinitions, setTupoksiDefinitions] = useState<TupoksiDefinitionsMap>(() =>
+    JSON.parse(JSON.stringify(OFFICIAL_TUPOKSI_DEFINITIONS))
+  );
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>(initialCustomCategories);
+
+  // Governance, Site Settings & Admin Database State
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>({
+    welcomeHeadline: DEFAULT_WELCOME_HEADLINE,
+    welcomeSubheadline: DEFAULT_WELCOME_SUBHEADLINE
+  });
+  const [databaseCapacitySummary, setDatabaseCapacitySummary] = useState<DatabaseCapacityQuickSummary | null>(null);
+  const [customDatabases, setCustomDatabases] = useState<DatabaseModuleMetrics[]>([]);
+  const [customDatabaseRecords, setCustomDatabaseRecords] = useState<Record<string, any[]>>({});
+  const [staffSubmissions, setStaffSubmissions] = useState<StaffSubmissionItem[]>([]);
+
+  // Admin Authentication & Console Dashboard State
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+  const [adminAuthStatus, setAdminAuthStatus] = useState<AdminAuthStatusState>({
+    envOverrideActive: false,
+    isClaimed: false,
+    setupRequired: true
+  });
+  const [adminDashboardData, setAdminDashboardData] = useState<AdminDashboardState>({
+    databaseMetrics: null,
+    databaseRegistry: [],
+    customDatabases: [],
+    customDatabaseRecords: {},
+    databaseQuotaBytes: 5 * 1024 * 1024,
+    softDeletedItems: [],
+    backups: [],
+    backupSchedule: { enabled: true, intervalHours: 24, lastBackupAt: '' },
+    auditLogs: [],
+    staffSubmissions: [],
+    migrationLogs: []
   });
 
-  const [inventories, setInventories] = useState<InventoryItem[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.INVENTORY);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return initialInventories;
-  });
-
-  const [libraryBooks, setLibraryBooks] = useState<LibraryBookItem[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.LIBRARY_BOOKS);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return initialLibraryBooks;
-  });
-
-  const [libraryMembers, setLibraryMembers] = useState<LibraryMemberItem[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.LIBRARY_MEMBERS);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return initialLibraryMembers;
-  });
-
-  const [libraryMemberStats, setLibraryMemberStats] = useState<LibraryMemberStats>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.LIBRARY_MEMBER_STATS);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return initialLibraryMemberStats;
-  });
-
-  const [monthlyReports, setMonthlyReports] = useState<MonthlyReport[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.MONTHLY);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return initialMonthlyReports;
-  });
-
-  const [annualReports, setAnnualReports] = useState<AnnualReport[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ANNUAL);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return initialAnnualReports;
-  });
-
-  const [archives, setArchives] = useState<ArchiveDocument[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ARCHIVES);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return initialArchives;
-  });
-
-  const [schoolConfig, setSchoolConfig] = useState<SchoolConfig>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
+  const [roleSubTabs, setRoleSubTabs] = useState<Record<RoleType, RoleSubTab>>(() => {
+    const defaultTabs: Record<RoleType, RoleSubTab> = {
+      TU: 'tasks',
+      PENJAGA: 'tasks',
+      SERVICE: 'tasks',
+      PERPUS: 'tasks',
+      LAB_IPA: 'tasks'
+    };
+    const saved = localStorage.getItem(STORAGE_KEYS.SUBTABS);
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        return mergeSchoolConfigWithDefaults(parsed);
-      } catch (e) {
-        console.error(e);
+        return { ...defaultTabs, ...JSON.parse(saved) };
+      } catch {
+        // ignore
       }
     }
-    return initialSchoolConfig;
+    return defaultTabs;
   });
+
+  const [lastAddedTaskMonthYear, setLastAddedTaskMonthYear] = useState<{ month: number; year: number } | null>(null);
 
   const schoolConfigRef = useRef<SchoolConfig>(schoolConfig);
   schoolConfigRef.current = schoolConfig;
+  const accessUsersRef = useRef<RegisteredAccessUser[]>(accessUsers);
+  accessUsersRef.current = accessUsers;
+  const hasHydratedFromServerRef = useRef(false);
+  const isFetchingRef = useRef(false);
 
   const effectiveSchoolConfig = useMemo<SchoolConfig>(
     () => getEffectiveSchoolConfigForUser(schoolConfig, currentUser, currentRole),
@@ -469,44 +477,405 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [schoolConfig, currentUser]
   );
 
-  const [tupoksiDefinitions, setTupoksiDefinitions] = useState<TupoksiDefinitionsMap>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.TUPOKSI);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return {
-          ...OFFICIAL_TUPOKSI_DEFINITIONS,
-          ...parsed
-        };
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return JSON.parse(JSON.stringify(OFFICIAL_TUPOKSI_DEFINITIONS));
-  });
+  const applyServerStatePayload = useCallback((serverData: AppStateData) => {
+    if (!serverData) return;
 
-  const [roleSubTabs, setRoleSubTabs] = useState<Record<RoleType, RoleSubTab>>(() => {
-    const defaultTabs: Record<RoleType, RoleSubTab> = {
-      TU: 'tasks',
-      PENJAGA: 'tasks',
-      SERVICE: 'tasks',
-      PERPUS: 'tasks',
-      LAB_IPA: 'tasks'
-    };
-    const saved = localStorage.getItem(STORAGE_KEYS.SUBTABS);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return { ...defaultTabs, ...parsed };
-      } catch (e) {
-        console.error(e);
+    if (serverData.siteSettings && typeof serverData.siteSettings === 'object') {
+      setSiteSettings({
+        welcomeHeadline: serverData.siteSettings.welcomeHeadline?.trim() || DEFAULT_WELCOME_HEADLINE,
+        welcomeSubheadline: serverData.siteSettings.welcomeSubheadline?.trim() || DEFAULT_WELCOME_SUBHEADLINE,
+        updatedAt: serverData.siteSettings.updatedAt,
+        updatedBy: serverData.siteSettings.updatedBy
+      });
+    }
+
+    if (serverData.accessRules && typeof serverData.accessRules === 'object') {
+      setAccessRules({ ...DEFAULT_ACCESS_RULES, ...serverData.accessRules });
+    }
+
+    if (serverData.approvedRoleCounts && typeof serverData.approvedRoleCounts === 'object') {
+      setApprovedRoleCounts({ ...EMPTY_ROLE_COUNTS, ...serverData.approvedRoleCounts });
+    }
+
+    if (serverData.databaseCapacitySummary) {
+      setDatabaseCapacitySummary(serverData.databaseCapacitySummary);
+    } else if (serverData.databaseMetrics) {
+      setDatabaseCapacitySummary({
+        totalUsedBytes: serverData.databaseMetrics.totalUsedBytes,
+        totalQuotaBytes: serverData.databaseMetrics.totalQuotaBytes,
+        totalPercentUsed: serverData.databaseMetrics.totalPercentUsed,
+        effectiveAlertLevel: serverData.databaseMetrics.effectiveAlertLevel
+      });
+    }
+
+    if (serverData.schoolConfig) {
+      setSchoolConfig(prev => mergeSchoolConfigWithDefaults(serverData.schoolConfig, prev));
+    }
+
+    // Operational collections hydrated on STAFF / ADMIN view
+    if (!serverData.publicOnly) {
+      if (Array.isArray(serverData.tasks)) setTasks(serverData.tasks);
+      if (Array.isArray(serverData.inventories)) setInventories(serverData.inventories);
+      if (Array.isArray(serverData.monthlyReports)) setMonthlyReports(serverData.monthlyReports);
+      if (Array.isArray(serverData.annualReports)) setAnnualReports(serverData.annualReports);
+      if (Array.isArray(serverData.archives)) setArchives(serverData.archives);
+      if (Array.isArray(serverData.beritaAcaraHistory)) setBeritaAcaraHistory(serverData.beritaAcaraHistory);
+      if (serverData.tupoksiDefinitions) {
+        setTupoksiDefinitions({
+          ...OFFICIAL_TUPOKSI_DEFINITIONS,
+          ...serverData.tupoksiDefinitions
+        });
+      }
+      if (Array.isArray(serverData.customCategories)) setCustomCategories(serverData.customCategories);
+      if (Array.isArray(serverData.libraryBooks)) setLibraryBooks(serverData.libraryBooks);
+      if (Array.isArray(serverData.libraryMembers)) setLibraryMembers(serverData.libraryMembers);
+      if (serverData.libraryMemberStats && typeof serverData.libraryMemberStats === 'object') {
+        setLibraryMemberStats(serverData.libraryMemberStats);
+      }
+      if (Array.isArray(serverData.customDatabases)) {
+        setCustomDatabases(serverData.customDatabases);
+      }
+      if (serverData.customDatabaseRecords && typeof serverData.customDatabaseRecords === 'object') {
+        setCustomDatabaseRecords(serverData.customDatabaseRecords);
+      }
+      if (Array.isArray(serverData.staffSubmissions)) {
+        setStaffSubmissions(serverData.staffSubmissions);
+      }
+      if (Array.isArray(serverData.accessUsers)) {
+        const merged = mergeRegisteredUsers(
+          serverData.accessUsers,
+          [],
+          Array.isArray(serverData.deletedAccessUserIds) ? serverData.deletedAccessUserIds : []
+        );
+        setAccessUsers(merged);
+
+        // Compute approved counts if not provided
+        if (!serverData.approvedRoleCounts) {
+          const counts = { ...EMPTY_ROLE_COUNTS };
+          merged.forEach(u => {
+            if (u.status === 'APPROVED' && counts[u.role] !== undefined) {
+              counts[u.role] += 1;
+            }
+          });
+          setApprovedRoleCounts(counts);
+        }
+
+        setCurrentUserState(prevUser => {
+          if (!prevUser) return prevUser;
+          const freshMatch = merged.find(u => u.id === prevUser.id);
+          return freshMatch || prevUser;
+        });
       }
     }
-    return defaultTabs;
-  });
+
+    if (serverData.isAdminView) {
+      setAdminDashboardData({
+        databaseMetrics: serverData.databaseMetrics || null,
+        databaseRegistry: serverData.databaseRegistry || [],
+        customDatabases: serverData.customDatabases || [],
+        customDatabaseRecords: serverData.customDatabaseRecords || {},
+        databaseQuotaBytes: serverData.databaseQuotaBytes || 5 * 1024 * 1024,
+        softDeletedItems: serverData.softDeletedItems || [],
+        backups: serverData.backups || [],
+        backupSchedule: serverData.backupSchedule || { enabled: true, intervalHours: 24, lastBackupAt: '' },
+        auditLogs: serverData.auditLogs || [],
+        staffSubmissions: serverData.staffSubmissions || [],
+        migrationLogs: serverData.migrationLogs || []
+      });
+    }
+
+    hasHydratedFromServerRef.current = true;
+  }, []);
+
+  const refreshAdminAuthStatus = useCallback(async (): Promise<AdminAuthStatusState> => {
+    const res = await storageService.adminAuthStatus();
+    if (res.ok && res.data) {
+      setAdminAuthStatus(res.data);
+      return res.data;
+    }
+    return adminAuthStatus;
+  }, [adminAuthStatus]);
+
+  const refreshAdminDashboard = useCallback(async (): Promise<boolean> => {
+    if (!storageService.getAdminToken()) {
+      setIsAdminAuthenticated(false);
+      return false;
+    }
+    const res = await storageService.adminGetDashboard();
+    if (!res.ok || !res.data?.data) {
+      if (res.status === 401 || res.status === 403) {
+        storageService.setAdminToken(null);
+        setIsAdminAuthenticated(false);
+      }
+      return false;
+    }
+    setIsAdminAuthenticated(true);
+    if (res.data.storageMode) setServerStorageMode(res.data.storageMode);
+    applyServerStatePayload(res.data.data);
+    return true;
+  }, [applyServerStatePayload]);
+
+  const fetchLatestState = useCallback(async (): Promise<RegisteredAccessUser[]> => {
+    if (isFetchingRef.current) return accessUsersRef.current;
+    isFetchingRef.current = true;
+    try {
+      const json = await storageService.fetchServerState();
+      if (!json) {
+        setServerStorageMode('offline');
+        setCloudPersistent(false);
+        setSyncStatus('offline');
+        setConnectionError('Tidak dapat terhubung ke server Database Admin. Periksa koneksi jaringan Anda.');
+        return accessUsersRef.current;
+      }
+
+      setConnectionError(null);
+      if (json.storageMode) setServerStorageMode(json.storageMode);
+      if (typeof json.cloudPersistent === 'boolean') setCloudPersistent(json.cloudPersistent);
+      if (typeof json.adminSetupRequired === 'boolean') {
+        setAdminAuthStatus(prev => ({
+          ...prev,
+          setupRequired: Boolean(json.adminSetupRequired),
+          isClaimed: !json.adminSetupRequired
+        }));
+      }
+
+      if (json.initialized && json.data) {
+        applyServerStatePayload(json.data);
+      }
+
+      // Also refresh tracked user status silently if set
+      if (trackedUsername) {
+        const lookup = await storageService.authStatusLookup(trackedUsername);
+        if (lookup.ok && lookup.data?.user) {
+          setTrackedUserAccount(lookup.data.user);
+        } else if (lookup.status === 404) {
+          setTrackedUserAccount(null);
+        }
+      }
+
+      setSyncStatus('synced');
+      return accessUsersRef.current;
+    } catch {
+      setServerStorageMode('offline');
+      setCloudPersistent(false);
+      setSyncStatus('offline');
+      setConnectionError('Gagal menghubungi server Database Admin. Klik Coba Lagi untuk menghubungkan ulang.');
+      return accessUsersRef.current;
+    } finally {
+      isFetchingRef.current = false;
+      setIsInitialLoading(false);
+    }
+  }, [applyServerStatePayload, trackedUsername]);
+
+  const refreshAccessState = useCallback(async (_force: boolean = false): Promise<RegisteredAccessUser[]> => {
+    return fetchLatestState();
+  }, [fetchLatestState]);
+
+  const retryConnection = useCallback(async () => {
+    setIsInitialLoading(true);
+    setConnectionError(null);
+    await fetchLatestState();
+    await refreshAdminAuthStatus();
+  }, [fetchLatestState, refreshAdminAuthStatus]);
+
+  // Register auth-expired handler so 24h stability handles expired tokens gracefully
+  useEffect(() => {
+    storageService.setOnAuthExpired(type => {
+      if (type === 'admin') {
+        setIsAdminAuthenticated(false);
+        setSessionExpiredNotice(
+          'Sesi Admin Database telah berakhir demi keamanan. Silakan masuk kembali pada Panel Admin (perubahan Anda yang belum dikirim aman).'
+        );
+      } else {
+        setSessionExpiredNotice(
+          'Sesi operator Anda perlu diperbarui. Silakan masuk kembali untuk melanjutkan pengiriman ajuan ke Database Admin.'
+        );
+      }
+    });
+    return () => storageService.setOnAuthExpired(null);
+  }, []);
+
+  // Initial Hydration + Admin Auth Status Check
+  useEffect(() => {
+    fetchLatestState();
+    refreshAdminAuthStatus();
+  }, [fetchLatestState, refreshAdminAuthStatus]);
+
+  // Sync tracked user notification immediately when trackedUsername changes
+  useEffect(() => {
+    if (!trackedUsername) {
+      setTrackedUserAccount(null);
+      return;
+    }
+    storageService.authStatusLookup(trackedUsername).then(res => {
+      if (res.ok && res.data?.user) {
+        setTrackedUserAccount(res.data.user);
+      }
+    });
+  }, [trackedUsername]);
+
+  // 24-Hour Uptime Background Polling & Token Refresh (30 min token refresh + focus/online sync)
+  useEffect(() => {
+    const pollMs = currentRole ? 25000 : 12000;
+    const stateInterval = setInterval(() => {
+      fetchLatestState();
+    }, pollMs);
+
+    const tokenRefreshInterval = setInterval(() => {
+      if (storageService.getStaffToken()) {
+        storageService.authRefresh();
+      }
+      if (storageService.getAdminToken()) {
+        storageService.adminAuthRefresh();
+      }
+    }, 30 * 60 * 1000); // Every 30 minutes
+
+    const handleFocusOrOnline = () => {
+      fetchLatestState();
+    };
+
+    window.addEventListener('focus', handleFocusOrOnline);
+    window.addEventListener('online', handleFocusOrOnline);
+    return () => {
+      clearInterval(stateInterval);
+      clearInterval(tokenRefreshInterval);
+      window.removeEventListener('focus', handleFocusOrOnline);
+      window.removeEventListener('online', handleFocusOrOnline);
+    };
+  }, [currentRole, fetchLatestState]);
+
+  // Helper: Persist Admin mutation directly to server OR submit Staff Proposal queue
+  const persistDirectAdminState = useCallback(
+    async (partialState: Partial<AppStateData>, fallbackActionName?: string): Promise<boolean> => {
+      if (storageService.getAdminToken()) {
+        setSyncStatus('saving');
+        const res = await storageService.syncServerStateDetailed({
+          ...partialState,
+          clientHydratedFromServer: true
+        });
+        if (res.ok) {
+          setSyncStatus('synced');
+          if (res.data) applyServerStatePayload(res.data);
+          return true;
+        }
+        setSyncStatus(storageService.getAdminToken() ? 'synced' : 'offline');
+        showActionFeedback(false, res.error || `Gagal menyimpan ${fallbackActionName || 'perubahan'} ke Database Admin.`);
+        return false;
+      }
+      return false;
+    },
+    [applyServerStatePayload, showActionFeedback]
+  );
+
+  const persistAdminOrStaffRecord = useCallback(
+    async (
+      collection: string,
+      operationType: 'CREATE' | 'UPDATE',
+      record: any,
+      fallbackLabel: string
+    ): Promise<boolean> => {
+      if (storageService.getAdminToken()) {
+        setSyncStatus('saving');
+        const res =
+          operationType === 'CREATE'
+            ? await storageService.adminCreateRecord(collection, record)
+            : await storageService.adminUpdateRecord(collection, record.id, record);
+        if (res.ok) {
+          setSyncStatus('synced');
+          if (res.data?.databaseMetrics) {
+            setDatabaseCapacitySummary({
+              totalUsedBytes: res.data.databaseMetrics.totalUsedBytes,
+              totalQuotaBytes: res.data.databaseMetrics.totalQuotaBytes,
+              totalPercentUsed: res.data.databaseMetrics.totalPercentUsed,
+              effectiveAlertLevel: res.data.databaseMetrics.effectiveAlertLevel
+            });
+          }
+          return true;
+        }
+        setSyncStatus('synced');
+        showActionFeedback(false, res.error || `Gagal menyimpan ${fallbackLabel}.`);
+        return false;
+      }
+
+      if (storageService.getStaffToken()) {
+        setSyncStatus('saving');
+        const res = await storageService.submitStaffProposal({
+          targetCollection: collection,
+          operationType,
+          payload: record,
+          note: `${operationType === 'CREATE' ? 'Tambah' : 'Perbarui'} ${fallbackLabel}`
+        });
+        setSyncStatus('synced');
+        if (res.ok) {
+          showActionFeedback(
+            true,
+            res.data?.message || `${fallbackLabel} dikirim ke antrean validasi Admin Database.`
+          );
+          if (res.data?.submission) {
+            setStaffSubmissions(prev => [res.data!.submission, ...prev]);
+          }
+          return true;
+        }
+        showActionFeedback(false, res.error || `Pengajuan ${fallbackLabel} ditolak server.`);
+        return false;
+      }
+
+      showActionFeedback(false, 'Silakan masuk terlebih dahulu untuk menyimpan data.');
+      return false;
+    },
+    [showActionFeedback]
+  );
+
+  const performAdminOnlySoftDelete = useCallback(
+    async (collection: string, id: string, label: string): Promise<boolean> => {
+      if (!storageService.getAdminToken()) {
+        showActionFeedback(
+          false,
+          `Penghapusan ${label} dinonaktifkan untuk non-admin! Semua penghapusan wajib melalui otorisasi Admin Database Satu Pintu (Soft-Delete).`
+        );
+        return false;
+      }
+      setSyncStatus('saving');
+      const res = await storageService.adminSoftDeleteRecord(collection, id);
+      setSyncStatus('synced');
+      if (res.ok) {
+        showActionFeedback(true, `${label} dipindahkan ke Arsip Sementara (Soft-Delete) Database Admin.`);
+        return true;
+      }
+      showActionFeedback(false, res.error || `Gagal menghapus ${label}.`);
+      return false;
+    },
+    [showActionFeedback]
+  );
+
+  // =========================================================================
+  // ROLE & NAVIGATION
+  // =========================================================================
+
+  const setCurrentRole = (role: RoleType | null) => {
+    setCurrentRoleState(role);
+    if (role) {
+      if (['dashboard', 'penjaga', 'tu', 'service'].includes(activeNavTab)) {
+        if (role === 'PENJAGA') setActiveNavTab('penjaga');
+        else if (role === 'TU') setActiveNavTab('tu');
+        else if (role === 'SERVICE') setActiveNavTab('service');
+      }
+    }
+  };
+
+  const setRoleSubTab = (role: RoleType, tab: RoleSubTab) => {
+    setRoleSubTabs(prev => {
+      const next = { ...prev, [role]: tab };
+      localStorage.setItem(STORAGE_KEYS.SUBTABS, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // =========================================================================
+  // REPORT BUILDERS & AUTO-SYNC
+  // =========================================================================
 
   const STANDARD_CATEGORY_LABELS: Record<string, string> = {
-    // TU
     kepegawaian: 'Kepegawaian (SKP, Pangkat, BKN, Cuti)',
     siswa: 'Kesiswaan (Buku Induk, Mutasi, Suket)',
     sapras: 'Sarpras & Aset (KIR, KIB, BAST)',
@@ -521,7 +890,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pelayanan_mutasi: 'Pelayanan Mutasi & Surat Rekomendasi',
     fasilitasi_rapat: 'Fasilitasi Rapat & Notula Dinas',
     legalisir_dokumen: 'Pelayanan Legalisir Ijazah & Berkas',
-    // PENJAGA
     keamanan: 'Keamanan Umum (Patroli, Gerbang)',
     inspeksi_malam: 'Inspeksi & Ronda Malam',
     protokoler_tamu: 'Protokoler Tamu & Parkir',
@@ -535,7 +903,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     koordinasi_keamanan: 'Koordinasi Kamtibmas Polsek/Babinsa',
     penataan_parkir: 'Penataan Area Parkir Guru & Tamu',
     evakuasi_sarpras: 'Kesiapsiagaan Evakuasi Bencana/Cuaca',
-    // SERVICE
     kebersihan_wc: 'Kebersihan Toilet / WC',
     kebersihan_kantor: 'Kebersihan Ruang Kerja & Kelas',
     kebersihan_sampah: 'Kebersihan Sampah & TPS',
@@ -548,7 +915,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     persiapan_aula: 'Penataan Meja/Kursi Aula & Rapat',
     sterilisasi_ruang: 'Sterilisasi Ruang Isolasi/UKS & Musholla',
     pengecatan_ringan: 'Pengecatan Ringan & Restorasi Dinding',
-    // PERPUS
     katalogisasi_buku: 'Katalogisasi DDC & Barcode Buku',
     sirkulasi_peminjaman: 'Sirkulasi Peminjaman Buku',
     layanan_literasi: 'Layanan Literasi (GLS & Pojok Baca)',
@@ -560,7 +926,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     layanan_referensi: 'Layanan Referensi & Penelusuran Informasi',
     penyiangan_weeding: 'Penyiangan Buku Rusak (Weeding)',
     kerjasama_perpustakaan: 'Kerjasama Perpustakaan & Hibah Buku',
-    // LAB IPA
     persiapan_praktikum: 'Persiapan Praktikum Sains',
     pemeliharaan_alat: 'Pemeliharaan Alat Gelas Lab',
     inventaris_bahan: 'Inventaris Reagen Kimia',
@@ -574,701 +939,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     penataan_spesimen: 'Penataan Preparat & Spesimen Awetan'
   };
 
-  const [customCategories, setCustomCategories] = useState<CustomCategory[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.CUSTOM_CATEGORIES);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return initialCustomCategories;
-  });
-
-  const addCustomCategory = (cat: {
-    role: RoleType;
-    name: string;
-    classification: 'pokok' | 'tambahan';
-    description?: string;
-  }): CustomCategory => {
-    const trimmed = cat.name.trim();
-    const baseSlug = trimmed
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '') || `kategori_${Date.now()}`;
-    const exists = customCategories.some(c => c.slug === baseSlug);
-    const finalSlug = exists ? `${baseSlug}_${Math.random().toString(36).substring(2, 6)}` : baseSlug;
-
-    const newCategory: CustomCategory = {
-      id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      role: cat.role,
-      name: trimmed,
-      slug: finalSlug,
-      classification: cat.classification,
-      description: cat.description?.trim(),
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-
-    setCustomCategories(prev => {
-      const next = [...prev, newCategory];
-      localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(next));
-      return next;
-    });
-
-    return newCategory;
-  };
-
-  const updateCustomCategory = (id: string, updated: Partial<CustomCategory>) => {
-    setCustomCategories(prev => {
-      const next = prev.map(c => c.id === id ? { ...c, ...updated } : c);
-      localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const deleteCustomCategory = (id: string) => {
-    setCustomCategories(prev => {
-      const next = prev.filter(c => c.id !== id);
-      localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const getRoleCustomCategories = (role: RoleType): CustomCategory[] => {
-    return customCategories.filter(c => c.role === role);
-  };
+  const getRoleCustomCategories = (role: RoleType): CustomCategory[] =>
+    customCategories.filter(c => c.role === role);
 
   const getCategoryLabel = (categoryKey: string, role?: RoleType): string => {
-    if (STANDARD_CATEGORY_LABELS[categoryKey]) {
-      return STANDARD_CATEGORY_LABELS[categoryKey];
-    }
-    const match = customCategories.find(c => 
-      (c.slug === categoryKey || c.name.toLowerCase() === categoryKey.toLowerCase()) && 
-      (!role || c.role === role)
+    if (STANDARD_CATEGORY_LABELS[categoryKey]) return STANDARD_CATEGORY_LABELS[categoryKey];
+    const match = customCategories.find(
+      c =>
+        (c.slug === categoryKey || c.name.toLowerCase() === categoryKey.toLowerCase()) &&
+        (!role || c.role === role)
     );
     if (match) return match.name;
     return categoryKey.replace(/_/g, ' ');
-  };
-
-  const [lastAddedTaskMonthYear, setLastAddedTaskMonthYear] = useState<{ month: number; year: number } | null>(null);
-
-  const setRoleSubTab = (role: RoleType, tab: RoleSubTab) => {
-    setRoleSubTabs(prev => {
-      const next = { ...prev, [role]: tab };
-      localStorage.setItem(STORAGE_KEYS.SUBTABS, JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const addTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', text: string) => {
-    if (!text.trim()) return;
-    setTupoksiDefinitions(prev => {
-      const currentRoleObj = prev[role] || { tupoksiList: [], tugasTambahanList: [] };
-      const next: TupoksiDefinitionsMap = {
-        ...prev,
-        [role]: {
-          ...currentRoleObj,
-          tupoksiList: type === 'pokok' 
-            ? [...currentRoleObj.tupoksiList, text.trim()] 
-            : currentRoleObj.tupoksiList,
-          tugasTambahanList: type === 'tambahan' 
-            ? [...currentRoleObj.tugasTambahanList, text.trim()] 
-            : currentRoleObj.tugasTambahanList
-        }
-      };
-      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const updateTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', index: number, newText: string) => {
-    if (!newText.trim()) return;
-    setTupoksiDefinitions(prev => {
-      const currentRoleObj = prev[role] || { tupoksiList: [], tugasTambahanList: [] };
-      const next: TupoksiDefinitionsMap = {
-        ...prev,
-        [role]: {
-          ...currentRoleObj,
-          tupoksiList: type === 'pokok'
-            ? currentRoleObj.tupoksiList.map((item, i) => i === index ? newText.trim() : item)
-            : currentRoleObj.tupoksiList,
-          tugasTambahanList: type === 'tambahan'
-            ? currentRoleObj.tugasTambahanList.map((item, i) => i === index ? newText.trim() : item)
-            : currentRoleObj.tugasTambahanList
-        }
-      };
-      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const deleteTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', indexOrText: number | string) => {
-    setTupoksiDefinitions(prev => {
-      const currentRoleObj = prev[role] || { 
-        tupoksiList: [...(OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tupoksiList || [])], 
-        tugasTambahanList: [...(OFFICIAL_TUPOKSI_DEFINITIONS[role]?.tugasTambahanList || [])] 
-      };
-
-      let updatedPokok = [...(currentRoleObj.tupoksiList || [])];
-      let updatedTambahan = [...(currentRoleObj.tugasTambahanList || [])];
-
-      if (type === 'pokok') {
-        if (typeof indexOrText === 'number') {
-          updatedPokok = updatedPokok.filter((_, i) => i !== indexOrText);
-        } else {
-          updatedPokok = updatedPokok.filter(item => item !== indexOrText);
-        }
-      } else {
-        if (typeof indexOrText === 'number') {
-          updatedTambahan = updatedTambahan.filter((_, i) => i !== indexOrText);
-        } else {
-          updatedTambahan = updatedTambahan.filter(item => item !== indexOrText);
-        }
-      }
-
-      const next: TupoksiDefinitionsMap = {
-        ...prev,
-        [role]: {
-          tupoksiList: updatedPokok,
-          tugasTambahanList: updatedTambahan
-        }
-      };
-      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const resetTupoksiToDefault = (role?: RoleType) => {
-    setTupoksiDefinitions(prev => {
-      let next: TupoksiDefinitionsMap;
-      if (role) {
-        next = {
-          ...prev,
-          [role]: {
-            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS[role].tupoksiList],
-            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS[role].tugasTambahanList]
-          }
-        };
-      } else {
-        next = {
-          TU: {
-            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.TU.tupoksiList],
-            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.TU.tugasTambahanList]
-          },
-          PENJAGA: {
-            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.PENJAGA.tupoksiList],
-            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.PENJAGA.tugasTambahanList]
-          },
-          SERVICE: {
-            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.SERVICE.tupoksiList],
-            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.SERVICE.tugasTambahanList]
-          },
-          PERPUS: {
-            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.PERPUS.tupoksiList],
-            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.PERPUS.tugasTambahanList]
-          },
-          LAB_IPA: {
-            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS.LAB_IPA.tupoksiList],
-            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS.LAB_IPA.tugasTambahanList]
-          }
-        };
-      }
-      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const applyHydratedStateFromServer = (serverData: any) => {
-    skipNextServerSyncRef.current = true;
-    const serverDeletedIds: string[] = Array.isArray(serverData.deletedAccessUserIds)
-      ? serverData.deletedAccessUserIds
-      : [];
-    const combinedDeletedIds = Array.from(
-      new Set([...serverDeletedIds, ...pendingDeletedAccessUserIdsRef.current])
-    );
-
-    if (Array.isArray(serverData.tasks) && serverData.tasks.length > 0) {
-      setTasks(serverData.tasks);
-      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(serverData.tasks));
-    }
-    if (Array.isArray(serverData.inventories) && serverData.inventories.length > 0) {
-      setInventories(serverData.inventories);
-      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(serverData.inventories));
-    }
-    if (Array.isArray(serverData.monthlyReports) && serverData.monthlyReports.length > 0) {
-      setMonthlyReports(serverData.monthlyReports);
-      localStorage.setItem(STORAGE_KEYS.MONTHLY, JSON.stringify(serverData.monthlyReports));
-    }
-    if (Array.isArray(serverData.annualReports) && serverData.annualReports.length > 0) {
-      setAnnualReports(serverData.annualReports);
-      localStorage.setItem(STORAGE_KEYS.ANNUAL, JSON.stringify(serverData.annualReports));
-    }
-    if (Array.isArray(serverData.archives) && serverData.archives.length > 0) {
-      setArchives(serverData.archives);
-      localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(serverData.archives));
-    }
-    if (serverData.schoolConfig) {
-      const mergedConfig = mergeSchoolConfigWithDefaults(
-        serverData.schoolConfig,
-        schoolConfigRef.current
-      );
-      setSchoolConfig(mergedConfig);
-      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(mergedConfig));
-    }
-    if (serverData.tupoksiDefinitions) {
-      const mergedTupoksi: TupoksiDefinitionsMap = {
-        ...OFFICIAL_TUPOKSI_DEFINITIONS,
-        ...serverData.tupoksiDefinitions
-      };
-      setTupoksiDefinitions(mergedTupoksi);
-      localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(mergedTupoksi));
-    }
-    if (Array.isArray(serverData.customCategories)) {
-      setCustomCategories(serverData.customCategories);
-      localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(serverData.customCategories));
-    }
-    if (Array.isArray(serverData.libraryBooks)) {
-      setLibraryBooks(serverData.libraryBooks);
-      localStorage.setItem(STORAGE_KEYS.LIBRARY_BOOKS, JSON.stringify(serverData.libraryBooks));
-    }
-    if (Array.isArray(serverData.libraryMembers)) {
-      setLibraryMembers(serverData.libraryMembers);
-      localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBERS, JSON.stringify(serverData.libraryMembers));
-    }
-    if (serverData.libraryMemberStats && typeof serverData.libraryMemberStats === 'object') {
-      setLibraryMemberStats(serverData.libraryMemberStats);
-      localStorage.setItem(
-        STORAGE_KEYS.LIBRARY_MEMBER_STATS,
-        JSON.stringify(serverData.libraryMemberStats)
-      );
-    }
-
-    // Non-destructive merge: preserve any local unsynced users + all server users (unless explicitly deleted)
-    let localUsersRaw: RegisteredAccessUser[] = [];
-    try {
-      const localSaved = localStorage.getItem(STORAGE_KEYS.ACCESS_USERS);
-      if (localSaved) {
-        const parsedLocal = JSON.parse(localSaved);
-        if (Array.isArray(parsedLocal)) localUsersRaw = parsedLocal;
-      }
-    } catch {
-      localUsersRaw = [];
-    }
-    const serverUsersRaw = Array.isArray(serverData.accessUsers) ? serverData.accessUsers : [];
-    const mergedUsers = mergeRegisteredUsers(serverUsersRaw, localUsersRaw, combinedDeletedIds);
-    setAccessUsers(mergedUsers);
-    localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, JSON.stringify(mergedUsers));
-
-    // Sync active logged-in user record non-destructively if present
-    setCurrentUserState(prevUser => {
-      if (!prevUser) return prevUser;
-      const freshMatch = mergedUsers.find(u => u.id === prevUser.id);
-      if (freshMatch) {
-        localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(freshMatch));
-        return freshMatch;
-      }
-      return prevUser;
-    });
-
-    if (serverData.accessRules && typeof serverData.accessRules === 'object') {
-      const mergedRules = { ...DEFAULT_ACCESS_RULES, ...serverData.accessRules };
-      setAccessRules(mergedRules);
-      localStorage.setItem(STORAGE_KEYS.ACCESS_RULES, JSON.stringify(mergedRules));
-    }
-    if (typeof serverData.adminPassword === 'string' && serverData.adminPassword.trim()) {
-      setAdminPassword(serverData.adminPassword.trim());
-      localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, serverData.adminPassword.trim());
-    }
-
-    hasHydratedFromServerRef.current = true;
-    setSyncStatus('synced');
-
-    // If local storage had accounts not yet on the server, push them back non-destructively right away
-    if (mergedUsers.length > serverUsersRaw.length) {
-      storageService.syncServerState({
-        accessUsers: mergedUsers,
-        deletedAccessUserIds: combinedDeletedIds,
-        clientHydratedFromServer: true
-      });
-    }
-  };
-
-  // Sync from server database on first load (to ensure shared URL gets stored data!)
-  useEffect(() => {
-    let isMounted = true;
-    async function loadServerState() {
-      try {
-        const json = await storageService.fetchServerState();
-        if (json && isMounted) {
-          if (json.storageMode) setServerStorageMode(json.storageMode);
-          if (typeof json.cloudPersistent === 'boolean') setCloudPersistent(json.cloudPersistent);
-          if (json.initialized && json.data) {
-            applyHydratedStateFromServer(json.data);
-          } else {
-            setSyncStatus('synced');
-          }
-        } else if (isMounted) {
-          setServerStorageMode('offline');
-          setCloudPersistent(false);
-          setSyncStatus('offline');
-        }
-      } catch (err) {
-        console.warn('Server offline / fallback to local storage', err);
-        if (isMounted) {
-          setServerStorageMode('offline');
-          setCloudPersistent(false);
-          setSyncStatus('offline');
-        }
-      } finally {
-        isInitialLoad.current = false;
-      }
-    }
-    loadServerState();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const syncAccessChangeNow = (
-    nextUsers: RegisteredAccessUser[],
-    overrides?: {
-      accessRules?: AccessSecurityRules;
-      adminPassword?: string;
-      extraDeletedId?: string;
-    }
-  ) => {
-    const deletedIds = overrides?.extraDeletedId
-      ? Array.from(new Set([...pendingDeletedAccessUserIdsRef.current, overrides.extraDeletedId]))
-      : pendingDeletedAccessUserIdsRef.current;
-
-    localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, JSON.stringify(nextUsers));
-    if (overrides?.accessRules) {
-      localStorage.setItem(STORAGE_KEYS.ACCESS_RULES, JSON.stringify(overrides.accessRules));
-    }
-    if (overrides?.adminPassword) {
-      localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, overrides.adminPassword);
-    }
-
-    const payload = {
-      accessUsers: nextUsers,
-      deletedAccessUserIds: deletedIds,
-      accessRules: overrides?.accessRules || accessRulesRef.current,
-      adminPassword: overrides?.adminPassword || adminPasswordRef.current,
-      clientHydratedFromServer: hasHydratedFromServerRef.current
-    };
-
-    isPendingLocalSaveRef.current = true;
-    setSyncStatus('saving');
-
-    storageService
-      .syncServerStateDetailed(payload)
-      .then(async res => {
-        if (!res.ok) {
-          // Retry once immediately so new registrations/approvals reach server without delay
-          res = await storageService.syncServerStateDetailed(payload);
-        }
-        if (res.ok) {
-          setSyncStatus('synced');
-          if (res.storageMode) setServerStorageMode(res.storageMode);
-          if (typeof res.cloudPersistent === 'boolean') setCloudPersistent(res.cloudPersistent);
-          if (!overrides?.extraDeletedId && pendingDeletedAccessUserIdsRef.current.length > 0) {
-            pendingDeletedAccessUserIdsRef.current = [];
-          }
-          // Reconcile server-merged user list immediately so concurrent registrations from other users appear right away
-          if (res.data && Array.isArray(res.data.accessUsers)) {
-            const mergedFromServer = mergeRegisteredUsers(
-              res.data.accessUsers,
-              [],
-              Array.isArray(res.data.deletedAccessUserIds) ? res.data.deletedAccessUserIds : deletedIds
-            );
-            const mergedStr = JSON.stringify(mergedFromServer);
-            if (mergedStr !== localStorage.getItem(STORAGE_KEYS.ACCESS_USERS)) {
-              skipNextServerSyncRef.current = true;
-              setAccessUsers(mergedFromServer);
-              localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, mergedStr);
-            }
-          }
-        } else {
-          setServerStorageMode('offline');
-          setCloudPersistent(false);
-          setSyncStatus('offline');
-        }
-      })
-      .catch(() => {
-        setServerStorageMode('offline');
-        setCloudPersistent(false);
-        setSyncStatus('offline');
-      })
-      .finally(() => {
-        isPendingLocalSaveRef.current = false;
-      });
-  };
-
-  const refreshAccessState = async (force: boolean = false): Promise<RegisteredAccessUser[]> => {
-    if (!force && (isPendingLocalSaveRef.current || isInitialLoad.current)) {
-      return accessUsersRef.current;
-    }
-    try {
-      const json = await storageService.fetchServerState();
-      if (!json) {
-        setServerStorageMode('offline');
-        setCloudPersistent(false);
-        setSyncStatus('offline');
-        return accessUsersRef.current;
-      }
-
-      if (json.storageMode) setServerStorageMode(json.storageMode);
-      if (typeof json.cloudPersistent === 'boolean') setCloudPersistent(json.cloudPersistent);
-
-      if (json.initialized && json.data) {
-        if (!hasHydratedFromServerRef.current) {
-          applyHydratedStateFromServer(json.data);
-          return Array.isArray(json.data.accessUsers) ? json.data.accessUsers : accessUsersRef.current;
-        }
-
-        const serverDeletedIds: string[] = Array.isArray(json.data.deletedAccessUserIds)
-          ? json.data.deletedAccessUserIds
-          : [];
-        const combinedDeletedIds = Array.from(
-          new Set([...serverDeletedIds, ...pendingDeletedAccessUserIdsRef.current])
-        );
-
-        let localUsersRaw: RegisteredAccessUser[] = accessUsersRef.current;
-        try {
-          const localStr = localStorage.getItem(STORAGE_KEYS.ACCESS_USERS);
-          if (localStr) {
-            const parsed = JSON.parse(localStr);
-            if (Array.isArray(parsed)) localUsersRaw = parsed;
-          }
-        } catch {
-          localUsersRaw = accessUsersRef.current;
-        }
-
-        const serverUsersRaw = Array.isArray(json.data.accessUsers) ? json.data.accessUsers : [];
-        const mergedUsers = mergeRegisteredUsers(
-          serverUsersRaw,
-          localUsersRaw,
-          combinedDeletedIds
-        );
-
-        let changed = false;
-        const mergedStr = JSON.stringify(mergedUsers);
-        const currentLocalStr = localStorage.getItem(STORAGE_KEYS.ACCESS_USERS);
-        if (mergedStr !== currentLocalStr) {
-          skipNextServerSyncRef.current = true;
-          setAccessUsers(mergedUsers);
-          localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, mergedStr);
-          changed = true;
-        }
-
-        if (json.data.accessRules && typeof json.data.accessRules === 'object') {
-          const mergedRules = { ...DEFAULT_ACCESS_RULES, ...json.data.accessRules };
-          const remoteRulesStr = JSON.stringify(mergedRules);
-          const localRulesStr = localStorage.getItem(STORAGE_KEYS.ACCESS_RULES);
-          if (remoteRulesStr !== localRulesStr) {
-            skipNextServerSyncRef.current = true;
-            setAccessRules(mergedRules);
-            localStorage.setItem(STORAGE_KEYS.ACCESS_RULES, remoteRulesStr);
-            changed = true;
-          }
-        }
-        if (typeof json.data.adminPassword === 'string' && json.data.adminPassword.trim()) {
-          const remotePass = json.data.adminPassword.trim();
-          const localPass = localStorage.getItem(STORAGE_KEYS.ADMIN_PASSWORD);
-          if (remotePass !== localPass) {
-            skipNextServerSyncRef.current = true;
-            setAdminPassword(remotePass);
-            localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, remotePass);
-            changed = true;
-          }
-        }
-
-        // Reconcile server-isolated userLetterheads & userSignatures non-destructively (multi-tenant isolation)
-        if (json.data.schoolConfig && typeof json.data.schoolConfig === 'object') {
-          const currentCfg = schoolConfigRef.current;
-          const mergedLetterheads = mergeUserIsolatedRecords(
-            currentCfg.userLetterheads,
-            json.data.schoolConfig.userLetterheads
-          );
-          const mergedSignatures = mergeUserIsolatedRecords(
-            currentCfg.userSignatures,
-            json.data.schoolConfig.userSignatures
-          );
-          const prevLHStr = JSON.stringify(currentCfg.userLetterheads || {});
-          const nextLHStr = JSON.stringify(mergedLetterheads || {});
-          const prevSigStr = JSON.stringify(currentCfg.userSignatures || {});
-          const nextSigStr = JSON.stringify(mergedSignatures || {});
-          if (prevLHStr !== nextLHStr || prevSigStr !== nextSigStr) {
-            const nextConfig: SchoolConfig = {
-              ...currentCfg,
-              ...(mergedLetterheads ? { userLetterheads: mergedLetterheads } : {}),
-              ...(mergedSignatures ? { userSignatures: mergedSignatures } : {})
-            };
-            skipNextServerSyncRef.current = true;
-            setSchoolConfig(nextConfig);
-            localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(nextConfig));
-          }
-        }
-
-        // Push back if local had unsynced accounts or newer local records so server always catches up
-        if (mergedUsers.length > serverUsersRaw.length) {
-          syncAccessChangeNow(mergedUsers);
-        }
-
-        setSyncStatus('synced');
-        if (changed) {
-          setCurrentUserState(prevUser => {
-            if (!prevUser) return prevUser;
-            const freshMatch = mergedUsers.find(u => u.id === prevUser.id);
-            if (freshMatch) {
-              localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(freshMatch));
-              return freshMatch;
-            }
-            return prevUser;
-          });
-        }
-        return mergedUsers;
-      }
-      setSyncStatus('synced');
-    } catch {
-      // Ignore transient network errors during background poll
-    }
-    return accessUsersRef.current;
-  };
-
-  const refreshAccessStateRef = useRef(refreshAccessState);
-  refreshAccessStateRef.current = refreshAccessState;
-
-  // Real-time background polling & cross-tab listener so registrations, approvals, and reset notifications confirm rapidly
-  useEffect(() => {
-    const pollMs = currentRole ? 5000 : 2000;
-    const interval = setInterval(() => {
-      refreshAccessStateRef.current();
-    }, pollMs);
-    const handleFocus = () => {
-      refreshAccessStateRef.current();
-    };
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEYS.ACCESS_USERS && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) {
-            skipNextServerSyncRef.current = true;
-            setAccessUsers(parsed);
-          }
-        } catch {
-          // Ignore malformed storage event
-        }
-      } else if (e.key === STORAGE_KEYS.ACCESS_RULES && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          if (parsed && typeof parsed === 'object') {
-            skipNextServerSyncRef.current = true;
-            setAccessRules({ ...DEFAULT_ACCESS_RULES, ...parsed });
-          }
-        } catch {
-          // Ignore malformed storage event
-        }
-      } else if (e.key === STORAGE_KEYS.ADMIN_PASSWORD && e.newValue && e.newValue.trim()) {
-        skipNextServerSyncRef.current = true;
-        setAdminPassword(e.newValue.trim());
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [currentRole]);
-
-  // Save changes to localStorage AND server backend so all users and devices share the exact state
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
-    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventories));
-    localStorage.setItem(STORAGE_KEYS.LIBRARY_BOOKS, JSON.stringify(libraryBooks));
-    localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBERS, JSON.stringify(libraryMembers));
-    localStorage.setItem(STORAGE_KEYS.LIBRARY_MEMBER_STATS, JSON.stringify(libraryMemberStats));
-    localStorage.setItem(STORAGE_KEYS.MONTHLY, JSON.stringify(monthlyReports));
-    localStorage.setItem(STORAGE_KEYS.ANNUAL, JSON.stringify(annualReports));
-    localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify(archives));
-    localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(schoolConfig));
-    localStorage.setItem(STORAGE_KEYS.TUPOKSI, JSON.stringify(tupoksiDefinitions));
-    localStorage.setItem(STORAGE_KEYS.SUBTABS, JSON.stringify(roleSubTabs));
-    localStorage.setItem(STORAGE_KEYS.CUSTOM_CATEGORIES, JSON.stringify(customCategories));
-    localStorage.setItem(STORAGE_KEYS.ACCESS_USERS, JSON.stringify(accessUsers));
-    localStorage.setItem(STORAGE_KEYS.ACCESS_RULES, JSON.stringify(accessRules));
-    localStorage.setItem(STORAGE_KEYS.ADMIN_PASSWORD, adminPassword);
-
-    if (skipNextServerSyncRef.current) {
-      skipNextServerSyncRef.current = false;
-      return;
-    }
-
-    if (!isInitialLoad.current) {
-      isPendingLocalSaveRef.current = true;
-      setSyncStatus('saving');
-      const timer = setTimeout(async () => {
-        try {
-          const res = await storageService.syncServerStateDetailed({
-            tasks,
-            inventories,
-            monthlyReports,
-            annualReports,
-            archives,
-            schoolConfig,
-            tupoksiDefinitions,
-            customCategories,
-            libraryBooks,
-            libraryMembers,
-            libraryMemberStats,
-            accessUsers,
-            deletedAccessUserIds: pendingDeletedAccessUserIdsRef.current,
-            accessRules,
-            adminPassword,
-            clientHydratedFromServer: hasHydratedFromServerRef.current
-          });
-          if (res.ok) {
-            setSyncStatus('synced');
-            if (res.storageMode) setServerStorageMode(res.storageMode);
-            if (typeof res.cloudPersistent === 'boolean') setCloudPersistent(res.cloudPersistent);
-            pendingDeletedAccessUserIdsRef.current = [];
-          } else {
-            setSyncStatus('offline');
-          }
-        } catch (e) {
-          setSyncStatus('offline');
-        } finally {
-          isPendingLocalSaveRef.current = false;
-        }
-      }, 300);
-      return () => {
-        clearTimeout(timer);
-        isPendingLocalSaveRef.current = false;
-      };
-    }
-  }, [tasks, inventories, libraryBooks, libraryMembers, libraryMemberStats, monthlyReports, annualReports, archives, schoolConfig, tupoksiDefinitions, customCategories, accessUsers, accessRules, adminPassword]);
-
-  useEffect(() => {
-    if (currentRole) {
-      localStorage.setItem(STORAGE_KEYS.ROLE, currentRole);
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.ROLE);
-    }
-  }, [currentRole]);
-
-  const setCurrentRole = (role: RoleType | null) => {
-    setCurrentRoleState(role);
-    if (role) {
-      if (['dashboard', 'penjaga', 'tu', 'service'].includes(activeNavTab)) {
-        if (role === 'PENJAGA') setActiveNavTab('penjaga');
-        else if (role === 'TU') setActiveNavTab('tu');
-        else if (role === 'SERVICE') setActiveNavTab('service');
-      }
-    }
   };
 
   const buildMonthlyReportObject = (
@@ -1280,22 +962,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     existingList: MonthlyReport[],
     forceFresh: boolean = false
   ): MonthlyReport => {
-    const roleTasks = allTasks.filter(t => {
-      if (t.role !== role) return false;
-      return isTaskInMonth(t.date, month, year);
-    });
-
+    const roleTasks = allTasks.filter(t => t.role === role && isTaskInMonth(t.date, month, year));
     const completed = roleTasks.filter(t => t.status === 'selesai');
     const tupoksiTasks = roleTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'pokok');
     const tambahanTasks = roleTasks.filter(t => getTaskClassification(role, t.category, t.taskType) === 'tambahan');
     const tupoksiCompleted = tupoksiTasks.filter(t => t.status === 'selesai');
     const tambahanCompleted = tambahanTasks.filter(t => t.status === 'selesai');
-
-    const roleTitle = 
-      role === 'TU' ? 'Tata Usaha (Administrasi Sekolah)' : 
-      role === 'PENJAGA' ? 'Penjaga Sekolah (Keamanan & Sarpras)' : 
-      role === 'SERVICE' ? 'Layanan Kebersihan (Service)' :
-      role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
 
     const monthNames = [
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -1307,204 +979,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const achievementsList: string[] = [];
     if (role === 'PERPUS') {
-      const sirkulasiCount = roleTasks.filter(t => t.category === 'sirkulasi_peminjaman' || t.title.toLowerCase().includes('pinjam') || t.title.toLowerCase().includes('kembali')).length;
-      const katalogCount = roleTasks.filter(t => t.category === 'katalogisasi_buku' || t.title.toLowerCase().includes('katalog') || t.title.toLowerCase().includes('induk') || t.title.toLowerCase().includes('barcode')).length;
-      const literasiCount = roleTasks.filter(t => t.category === 'layanan_literasi' || t.title.toLowerCase().includes('literasi') || t.title.toLowerCase().includes('baca')).length;
-      const rawatCount = roleTasks.filter(t => t.category === 'perawatan_buku' || t.title.toLowerCase().includes('jilid') || t.title.toLowerCase().includes('rawat')).length;
-      const stockCount = roleTasks.filter(t => t.category === 'stock_opname' || t.title.toLowerCase().includes('stock') || t.title.toLowerCase().includes('inventaris')).length;
-
-      // Extract specific completed task titles for Pokok & Tambahan
+      const sirkulasiCount = roleTasks.filter(t => t.category === 'sirkulasi_peminjaman' || t.title.toLowerCase().includes('pinjam')).length;
+      const katalogCount = roleTasks.filter(t => t.category === 'katalogisasi_buku' || t.title.toLowerCase().includes('katalog')).length;
+      const literasiCount = roleTasks.filter(t => t.category === 'layanan_literasi' || t.title.toLowerCase().includes('literasi')).length;
       const pokokDoneTitles = tupoksiCompleted.map(t => t.title);
       const tambahanDoneTitles = tambahanCompleted.map(t => t.title);
 
-      if (tupoksiCompleted.length > 0) {
-        achievementsList.push(`Pelaksanaan Tugas Pokok (Tupoksi) Perpustakaan: Menyelesaikan ${tupoksiCompleted.length} dari ${tupoksiTasks.length} kegiatan pokok tuntas (${pokokDoneTitles.slice(0, 3).join(', ')})`);
-      } else {
-        achievementsList.push(`Pelayanan sirkulasi peminjaman dan pengembalian bahan pustaka bagi pemustaka (${sirkulasiCount > 0 ? sirkulasiCount : 24} transaksi layanan tercatat tertib)`);
-      }
-
-      if (tambahanCompleted.length > 0) {
-        achievementsList.push(`Pelaksanaan Tugas Tambahan Kedinasan: Menuntaskan ${tambahanCompleted.length} dari ${tambahanTasks.length} kegiatan tugas tambahan (${tambahanDoneTitles.slice(0, 3).join(', ')})`);
-      } else {
-        achievementsList.push(`Pendampingan kegiatan literasi 15 menit membaca rutin dan pembinaan pojok baca kelas (${literasiCount > 0 ? literasiCount : 20} sesi aktif)`);
-      }
-
+      achievementsList.push(
+        tupoksiCompleted.length > 0
+          ? `Pelaksanaan Tugas Pokok (Tupoksi) Perpustakaan: Menyelesaikan ${tupoksiCompleted.length} dari ${tupoksiTasks.length} kegiatan pokok tuntas (${pokokDoneTitles.slice(0, 3).join(', ')})`
+          : `Pelayanan sirkulasi peminjaman dan pengembalian bahan pustaka bagi pemustaka (${sirkulasiCount > 0 ? sirkulasiCount : 24} transaksi layanan tercatat tertib)`
+      );
+      achievementsList.push(
+        tambahanCompleted.length > 0
+          ? `Pelaksanaan Tugas Tambahan Kedinasan: Menuntaskan ${tambahanCompleted.length} dari ${tambahanTasks.length} kegiatan tugas tambahan (${tambahanDoneTitles.slice(0, 3).join(', ')})`
+          : `Pendampingan kegiatan literasi 15 menit membaca rutin dan pembinaan pojok baca kelas (${literasiCount > 0 ? literasiCount : 20} sesi aktif)`
+      );
       if (katalogCount > 0) {
         achievementsList.push(`Pengolahan katalogisasi DDC, input buku induk & pelabelan barcode koleksi baru (${katalogCount} kegiatan pengolahan tuntas)`);
       }
-      if (rawatCount > 0) {
-        achievementsList.push(`Restorasi, pengeleman, dan perbaikan jilid buku yang mengalami kerusakan fisik (${rawatCount} eksemplar buku tertangani)`);
-      }
-      if (stockCount > 0) {
-        achievementsList.push(`Pelaksanaan stock opname dan verifikasi fisik koleksi bahan pustaka (${stockCount} sesi inventarisasi)`);
-      }
     } else if (role === 'LAB_IPA') {
-      const prepCount = roleTasks.filter(t => t.category === 'persiapan_praktikum' || t.title.toLowerCase().includes('praktikum') || t.title.toLowerCase().includes('reagen')).length;
-      const alatCount = roleTasks.filter(t => t.category === 'pemeliharaan_alat' || t.title.toLowerCase().includes('mikroskop') || t.title.toLowerCase().includes('alat gelas')).length;
-      const k3Count = roleTasks.filter(t => t.category === 'k3_laboratorium' || t.title.toLowerCase().includes('apar') || t.title.toLowerCase().includes('p3k') || t.title.toLowerCase().includes('keselamatan')).length;
-      const invCount = roleTasks.filter(t => t.category === 'inventaris_bahan' || t.title.toLowerCase().includes('stok') || t.title.toLowerCase().includes('bahan kimia')).length;
-
-      achievementsList.push(`Fasilitasi penyiapan set alat peraga dan bahan praktikum fisika, kimia, biologi seluruh rombel tepat waktu (${prepCount > 0 ? prepCount : 22} sesi praktikum terlaksana)`);
-      achievementsList.push(`Pencucian, sterilisasi alat gelas kimia, dan kalibrasi rutin mikroskop serta neraca Ohaus (${alatCount > 0 ? alatCount : 18} sesi pemeliharaan bebas residu)`);
-      achievementsList.push(`Pemeriksaan kesiapsiagaan K3 laboratorium (indikator tabung APAR, kotak emergency P3K, dan netralisasi limbah) tercatat Zero Incident`);
-      achievementsList.push(`Realisasi tugas pokok (Tupoksi) laboratorium: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
-      achievementsList.push(`Realisasi tugas tambahan praktikum/penataan: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
-      if (invCount > 0) {
-        achievementsList.push(`Pencatatan kartu kendali stok bahan kimia habis pakai dan logbook pemakaian lab terarsip valid (${invCount} berkas)`);
-      }
+      achievementsList.push(`Fasilitasi penyiapan set alat peraga dan bahan praktikum IPA tepat waktu (${roleTasks.length || 22} sesi)`);
+      achievementsList.push(`Realisasi tugas pokok laboratorium: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tuntas`);
+      achievementsList.push(`Realisasi tugas tambahan praktikum: ${tambahanCompleted.length} dari ${tambahanTasks.length} selesai`);
     } else if (role === 'PENJAGA') {
-      const gateCount = roleTasks.filter(t => t.title.toLowerCase().includes('pintu') || t.title.toLowerCase().includes('gerbang')).length;
-      const patrolCount = roleTasks.filter(t => t.category === 'keamanan' || t.category === 'inspeksi_malam').length;
-      const repairCount = roleTasks.filter(t => t.category === 'perbaikan_sapras').length;
-      const watchCount = roleTasks.filter(t => t.category === 'pengawasan_anak').length;
-      const mailCount = roleTasks.filter(t => t.category === 'antar_surat').length;
-
-      if (gateCount > 0) {
-        achievementsList.push(`Pelaksanaan SOP harian buka-tutup pintu gerbang utama & gedung sekolah (${gateCount} kegiatan tercatat)`);
-      }
-      achievementsList.push(`Pelaksanaan patroli keamanan berkala gedung & pos penjagaan (${patrolCount > 0 ? patrolCount : 24} kali kegiatan terverifikasi Zero Incident)`);
-      achievementsList.push(`Realisasi tugas pokok (Tupoksi) pengamanan: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok terlaksana`);
-      achievementsList.push(`Realisasi tugas tambahan insidental: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
-      if (repairCount > 0) {
-        achievementsList.push(`Penyelesaian perbaikan sarana & prasarana ringan swakelola (${repairCount} unit sapras tertangani)`);
-      }
-      if (watchCount > 0) {
-        achievementsList.push(`Pengawasan ketertiban dan keselamatan siswa di jam masuk & pulang sekolah (${watchCount} hari efektif)`);
-      }
-      if (mailCount > 0) {
-        achievementsList.push(`Ekspedisi pengantaran surat dinas ke dinas dan instansi mitra (${mailCount} berkas dinas tepat waktu)`);
-      }
+      achievementsList.push(`Pelaksanaan patroli keamanan berkala gedung & pos penjagaan (${roleTasks.length || 24} kegiatan Zero Incident)`);
+      achievementsList.push(`Realisasi tugas pokok pengamanan: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok terlaksana`);
+      achievementsList.push(`Realisasi tugas tambahan insidental: ${tambahanCompleted.length} dari ${tambahanTasks.length} selesai`);
     } else if (role === 'TU') {
-      const pnsCount = roleTasks.filter(t => t.category === 'kepegawaian').length;
-      const siswaCount = roleTasks.filter(t => t.category === 'siswa').length;
-      const saprasCount = roleTasks.filter(t => t.category === 'sapras').length;
-      const suratIn = roleTasks.filter(t => t.category === 'surat_masuk').length;
-      const suratOut = roleTasks.filter(t => t.category === 'surat_keluar').length;
-      achievementsList.push(`Pengelolaan administrasi kepegawaian GTK dan verifikasi berkas ASN/PPPK (${pnsCount > 0 ? pnsCount : 6} agenda kegiatan)`);
-      achievementsList.push(`Pencatatan Buku Induk, mutasi siswa dan penerbitan surat keterangan (${siswaCount > 0 ? siswaCount : 15} permohonan tuntas)`);
-      achievementsList.push(`Registrasi agenda surat dinas masuk (${suratIn > 0 ? suratIn : 28} surat) dan surat dinas keluar (${suratOut > 0 ? suratOut : 18} surat)`);
-      achievementsList.push(`Realisasi tugas pokok (Tupoksi) administrasi: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
-      achievementsList.push(`Realisasi tugas tambahan/layanan umum: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
-      if (saprasCount > 0) {
-        achievementsList.push(`Rekonsiliasi dan verifikasi fisik inventaris barang KIB A s.d. E (${saprasCount} sesi audit tercatat)`);
-      }
+      achievementsList.push(`Pengelolaan administrasi kepegawaian, kesiswaan & persuratan dinas TU`);
+      achievementsList.push(`Realisasi tugas pokok administrasi: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
+      achievementsList.push(`Realisasi tugas tambahan/layanan umum: ${tambahanCompleted.length} dari ${tambahanTasks.length} selesai`);
     } else {
-      // SERVICE
-      const wcCount = roleTasks.filter(t => t.category === 'kebersihan_wc').length;
-      const officeCount = roleTasks.filter(t => t.category === 'kebersihan_kantor').length;
-      const wasteCount = roleTasks.filter(t => t.category === 'kebersihan_sampah').length;
-      const tamanCount = roleTasks.filter(t => t.category === 'perawatan_taman' || t.category === 'kebersihan_halaman').length;
-      achievementsList.push(`Sanitasi dan sterilisasi seluruh toilet guru & toilet siswa bebas bau dan jentik (${wcCount > 0 ? wcCount : 30} hari terlaksana)`);
-      achievementsList.push(`Pembersihan menyeluruh ruang kantor pimpinan, ruang guru, ruang TU & perpustakaan (${officeCount > 0 ? officeCount : 24} hari kerja 2 kali sehari)`);
-      achievementsList.push(`Pengangkutan harian dan pemilahan sampah organik serta anorganik ke TPS (${wasteCount > 0 ? wasteCount : 24} kali pengangkutan)`);
-      achievementsList.push(`Realisasi tugas pokok (Tupoksi) kebersihan: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tugas pokok tuntas`);
-      achievementsList.push(`Realisasi tugas tambahan sanitasi: ${tambahanCompleted.length} dari ${tambahanTasks.length} tugas tambahan selesai`);
-      if (tamanCount > 0) {
-        achievementsList.push(`Pemeliharaan keasrian taman depan, penyiraman tanaman, dan kebersihan halaman (${tamanCount} kegiatan terlaksana)`);
-      }
+      achievementsList.push(`Sanitasi harian ruang pimpinan, kantor guru, kelas & toilet sekolah (${roleTasks.length || 25} kegiatan)`);
+      achievementsList.push(`Realisasi tugas pokok kebersihan: ${tupoksiCompleted.length} dari ${tupoksiTasks.length} tuntas`);
+      achievementsList.push(`Realisasi tugas tambahan sanitasi: ${tambahanCompleted.length} dari ${tambahanTasks.length} selesai`);
     }
 
     const summaryTemplates: Record<RoleType, string> = {
-      PERPUS: (() => {
-        if (roleTasks.length > 0) {
-          const pokokNames = tupoksiCompleted.map(t => t.title).slice(0, 2);
-          const pokokDesc = pokokNames.length > 0 
-            ? `pelaksanaan tugas pokok berupa ${pokokNames.join(' dan ')}`
-            : 'pelaksanaan tugas pokok sirkulasi peminjaman dan katalogisasi DDC koleksi';
-          
-          const tambahanNames = tambahanCompleted.map(t => t.title).slice(0, 2);
-          const tambahanDesc = tambahanNames.length > 0
-            ? `serta pelaksanaan tugas tambahan seperti ${tambahanNames.join(' dan ')}`
-            : 'serta pelaksanaan tugas tambahan pembinaan literasi dan pojok baca kelas';
-
-          return `Sepanjang bulan ${monthName} ${year}, Pengelola Layanan Perpustakaan Sekolah telah menyelesaikan ${completed.length} dari ${roleTasks.length} agenda kegiatan kedinasan yang terlaksana (${completionRate}% tuntas), terdiri dari ${tupoksiCompleted.length} tugas pokok (Tupoksi) dan ${tambahanCompleted.length} tugas tambahan operasional. Rincian kegiatan yang telah dilaksanakan mencakup ${pokokDesc}, ${tambahanDesc}. Seluruh pelayanan pemustaka, sirkulasi bahan pustaka, dan pemeliharaan koleksi fisik buku terselenggara secara tertib, akuntabel, dan berorientasi pada kepuasan pemustaka sekolah.`;
-        }
-        return `Sepanjang bulan ${monthName} ${year}, Layanan Operasional Perpustakaan Sekolah telah menyelesaikan agenda kegiatan kedinasan secara terencana, terdiri dari tugas pokok pelayanan sirkulasi pemustaka, katalogisasi DDC, pemutakhiran buku induk, serta tugas tambahan pendampingan Gerakan Literasi Sekolah (GLS) dan perawatan fisik buku koleksi sesuai standar tata naskah dinas perpustakaan sekolah.`;
-      })(),
-      LAB_IPA: `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional Laboratorium IPA telah menuntaskan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 22} pekerjaan (${completionRate}%). Penyiapan alat dan bahan praktikum fisika, kimia, dan biologi berjalan lancar, sterilisasi alat gelas dan kalibrasi mikroskop tuntas, serta standar keselamatan kerja (Zero Incident K3) dan pengelolaan limbah ramah lingkungan terjaga optimal.`,
-      TU: `Sepanjang bulan ${monthName} ${year}, Layanan Operasional Administrasi Tata Usaha telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 28} agenda kedinasan (${completionRate}%). Tata kelola persuratan dinas masuk dan keluar, pelayanan administrasi kesiswaan (buku induk, mutasi, dan legalisasi), pemutakhiran data Dapodik kepegawaian, serta rekonsiliasi berkala buku inventaris barang (KIR) terselenggara sesuai SOP standar pelayanan minimal (SPM).`,
-      PENJAGA: `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional Penjaga Sekolah telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 26} tugas pengamanan (${completionRate}%). Seluruh pos penjagaan dan titik rawan terpantau aman dan kondusif dengan status Zero Incident (nihil pencurian, kebakaran, dan gangguan kamtibmas), pengawasan keselamatan penyeberangan jalan peserta didik terlaksana tertib, serta kesiapsiagaan operasional sarana gedung terpelihara prima.`,
-      SERVICE: `Kinerja Layanan Operasional Kebersihan (Service) pada bulan ${monthName} ${year} telah menuntaskan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 25} kegiatan sanitasi (${completionRate}%). Higienitas seluruh bilik toilet guru dan siswa senantiasa bersih dan bebas bau, pembersihan ruang pimpinan, kantor guru, ruang kelas, dan selasar terlaksana 2 kali sehari, serta pengelolaan pemilahan sampah organik dan anorganik ke TPS berjalan lancar.`
-    };
-
-    const summaryText = summaryTemplates[role] || summaryTemplates.TU;
-
-    const roleObstacles: Record<RoleType, string[]> = {
-      PERPUS: [
-        'Keterlambatan pengembalian buku pinjaman oleh sebagian peserta didik saat mendekati pekan ujian/asesmen',
-        'Kapasitas rak display buku baru perlu ditambah untuk menampung hibah koleksi pengayaan dan literasi',
-        'Beberapa eksemplar buku ensiklopedia dan kamus referensi tebal mengalami kelonggaran jilid akibat frekuensi pemakaian tinggi'
-      ],
-      LAB_IPA: [
-        'Ketersediaan stok larutan reagen indikator asam-basa dan bahan habis pakai menipis pada akhir periode praktikum',
-        'Sumbatan kotoran halus pada salah satu kran wastafel ruang preparasi laboratorium',
-        'Keterbatasan set lensa mikroskop cadangan untuk mengantisipasi rombongan belajar berjumlah besar'
-      ],
-      TU: [
-        'Volume dokumen warkat fisik tahun lampau membutuhkan proses pemindaian digital (e-Arsip) secara berkelanjutan',
-        'Koordinasi konfirmasi surat undangan kedinasan dari instansi eksternal yang mendekati tenggat waktu acara',
-        'Beban server pusat Dapodik dan SIASN BKN yang mengalami lonjakan akses menjelang batas akhir sinkronisasi'
-      ],
-      PENJAGA: [
-        'Kondisi cuaca hujan dengan intensitas lebat yang memerlukan pengawasan ekstra terhadap saluran air dan talang atap',
-        'Kebutuhan peremajaan lampu senter patroli malam baterai lithium dan penambahan gembok master-key cadangan',
-        'Kepadatan lalu lintas kendaraan di depan gerbang utama pada saat jam masuk dan kepulangan serentak peserta didik'
-      ],
-      SERVICE: [
-        'Ketersediaan stok bahan habis pakai pembersih lantai, sabun cair cuci tangan, dan kantong sampah sempat menipis di akhir bulan',
-        'Endapan kerak lumut dan air sumur bor pada lantai selasar luar dan wastafel toilet akibat curah hujan tinggi',
-        'Peningkatan volume timbulan sampah dedaunan pada saat musim kemarau berangin kencang di area lapangan terbuka'
-      ]
-    };
-
-    const roleSolutions: Record<RoleType, string[]> = {
-      PERPUS: [
-        'Menerbitkan surat pemberitahuan pengembalian dan berkoordinasi aktif dengan wali kelas masing-masing rombel',
-        'Mengajukan usulan penambahan rak display buku akrilik dan karpet area baca lesehan pada perencanaan anggaran sekolah',
-        'Melakukan pengeleman ulang dengan perekat jilid khusus serta pelapisan sampul plastik mika untuk memperpanjang usia pakai buku'
-      ],
-      LAB_IPA: [
-        'Membuat usulan amprah bahan kimia habis pakai lebih awal ke bagian tata usaha dan bendahara operasional sekolah',
-        'Pembersihan saringan kran wastafel serta pemeliharaan saluran pipa bersama tim sarana prasarana sekolah',
-        'Mengatur jadwal giliran pemakaian mikroskop antarkelompok secara terstruktur sehingga praktikum berjalan lancar'
-      ],
-      TU: [
-        'Menetapkan jadwal pemindaian digital berkas arsip secara terstruktur setiap akhir pekan menggunakan scanner berkecepatan tinggi',
-        'Mengoptimalkan saluran komunikasi cepat dinas melalui narahubung WhatsApp grup kedinasan',
-        'Melakukan sinkronisasi data Dapodik pada jam kerja pagi hari atau malam hari saat beban server rendah'
-      ],
-      PENJAGA: [
-        'Pembersihan berkala endapan sampah pada saluran drainase bersama petugas kebersihan untuk mencegah genangan',
-        'Pengajuan inventarisasi pengadaan senter patroli LED baterai lithium dan gembok master-key ke bagian TU',
-        'Penataan pembagian zona antrean penjemputan dan kerja sama pengamanan marka jalan bersama juru parkir sekolah'
-      ],
-      SERVICE: [
-        'Pemberian jadwal pengajuan amprah bahan pembersih secara teratur 7 hari sebelum stok persediaan di gudang menipis',
-        'Pembersihan intensif permukaan lantai luar menggunakan sikat kawat dan cairan pembersih kerak anti-licin',
-        'Pengomposan sampah daun secara mandiri di bak komposter sekolah untuk mengurangi residu sampah ke TPS'
-      ]
+      PERPUS:
+        roleTasks.length > 0
+          ? `Sepanjang bulan ${monthName} ${year}, Pengelola Layanan Perpustakaan Sekolah telah menyelesaikan ${completed.length} dari ${roleTasks.length} agenda kegiatan kedinasan yang terlaksana (${completionRate}% tuntas), terdiri dari ${tupoksiCompleted.length} tugas pokok (Tupoksi) dan ${tambahanCompleted.length} tugas tambahan operasional.`
+          : `Sepanjang bulan ${monthName} ${year}, Layanan Operasional Perpustakaan Sekolah telah menyelesaikan agenda kegiatan kedinasan sesuai standar tata naskah dinas.`,
+      LAB_IPA: `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional Laboratorium IPA telah menuntaskan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 22} pekerjaan (${completionRate}%).`,
+      TU: `Sepanjang bulan ${monthName} ${year}, Layanan Operasional Administrasi Tata Usaha telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 28} agenda kedinasan (${completionRate}%).`,
+      PENJAGA: `Berdasarkan rekapitulasi data harian bulan ${monthName} ${year}, Operator Layanan Operasional Penjaga Sekolah telah menyelesaikan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 26} tugas pengamanan (${completionRate}%).`,
+      SERVICE: `Kinerja Layanan Operasional Kebersihan (Service) pada bulan ${monthName} ${year} telah menuntaskan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 25} kegiatan sanitasi (${completionRate}%).`
     };
 
     const existing = existingList.find(r => r.role === role && r.month === month && r.year === year);
-    const isOldGenericObstacle = existing?.obstacles?.some(obs => 
-      obs.includes('Kebutuhan penggantian beberapa suku cadang') || 
-      obs.includes('Faktor cuaca hujan lebat yang memerlukan penanganan ekstra di lapangan')
-    );
-
-    const finalObstacles = (!existing?.obstacles || existing.obstacles.length === 0 || isOldGenericObstacle || forceFresh)
-      ? (roleObstacles[role] || roleObstacles.TU)
-      : existing.obstacles;
-
-    const finalSolutions = (!existing?.solutions || existing.solutions.length === 0 || isOldGenericObstacle || forceFresh)
-      ? (roleSolutions[role] || roleSolutions.TU)
-      : existing.solutions;
-
-    const finalSummary = (!existing?.summary || forceFresh || existing.summary.includes('Operator Layanan Operasional undefined'))
-      ? summaryText
-      : existing.summary;
-
     const defaultKPIs = (ROLE_OPERATIONAL_SPECS[role]?.operationalKPIs || []).map(k => ({ ...k }));
-    const finalKPIs = existing?.customKPIs && existing.customKPIs.length > 0 ? existing.customKPIs : defaultKPIs;
 
     return {
       id: existing?.id || `m-rep-${role.toLowerCase()}-${month}-${year}`,
@@ -1512,11 +1036,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       month,
       year,
       manualDocDate: existing?.manualDocDate || formattedManualDate,
-      summary: finalSummary,
+      summary: !existing?.summary || forceFresh ? summaryTemplates[role] : existing.summary,
       achievements: achievementsList,
-      obstacles: finalObstacles,
-      solutions: finalSolutions,
-      customKPIs: finalKPIs,
+      obstacles:
+        existing?.obstacles && !forceFresh
+          ? existing.obstacles
+          : ['Penyesuaian jadwal layanan dengan agenda kegiatan sekolah berjalan tertib.'],
+      solutions:
+        existing?.solutions && !forceFresh
+          ? existing.solutions
+          : ['Koordinasi berkala bersama pimpinan sekolah dan wali kelas/guru terkait.'],
+      customKPIs: existing?.customKPIs && existing.customKPIs.length > 0 ? existing.customKPIs : defaultKPIs,
       approvalStatus: existing?.approvalStatus || 'diajukan'
     };
   };
@@ -1526,7 +1056,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const parsed = parseTaskMonthYear(task.date);
     const month = parsed ? parsed.month : 9;
     const year = parsed ? parsed.year : 2026;
-
     setLastAddedTaskMonthYear({ month, year });
 
     setMonthlyReports(prev => {
@@ -1541,472 +1070,526 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  // =========================================================================
+  // CRUD OPERATIONS (SINGLE-DOOR ADMIN DB OR STAFF PROPOSAL QUEUE)
+  // =========================================================================
+
   const addTask = (newTask: Omit<TaskLog, 'id'>) => {
-    const id = `tsk-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    const created: TaskLog = { ...newTask, id };
-    setTasks(prev => {
-      const next = [ created, ...prev ];
-      setTimeout(() => {
-        autoSyncMonthlyReport(created, next);
-      }, 0);
-      return next;
+    const created: TaskLog = { ...newTask, id: `tsk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
+    persistAdminOrStaffRecord('tasks', 'CREATE', created, 'Jurnal Tugas').then(ok => {
+      if (ok) {
+        setTasks(prev => {
+          const next = [created, ...prev];
+          setTimeout(() => autoSyncMonthlyReport(created, next), 0);
+          return next;
+        });
+      }
     });
   };
 
   const importTasks = (newTasks: Omit<TaskLog, 'id'>[]) => {
     const withIds: TaskLog[] = newTasks.map((t, idx) => ({
       ...t,
-      id: `tsk-imp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`
+      id: `tsk-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`
     }));
-    setTasks(prev => {
-      const next = [ ...withIds, ...prev ];
-      if (withIds.length > 0) {
-        setTimeout(() => {
-          autoSyncMonthlyReport(withIds[0], next);
-        }, 0);
-      }
-      return next;
-    });
+    if (storageService.getAdminToken()) {
+      const next = [...withIds, ...tasks];
+      persistDirectAdminState({ tasks: next }, 'Impor Tugas').then(ok => {
+        if (ok) setTasks(next);
+      });
+    } else {
+      withIds.forEach(item => {
+        persistAdminOrStaffRecord('tasks', 'CREATE', item, 'Impor Tugas');
+      });
+      setTasks(prev => [...withIds, ...prev]);
+    }
   };
 
   const updateTask = (id: string, updated: Partial<TaskLog>) => {
-    setTasks(prev => {
-      const next = prev.map(t => t.id === id ? { ...t, ...updated } : t);
-      const target = next.find(t => t.id === id);
-      if (target) {
-        setTimeout(() => {
-          autoSyncMonthlyReport(target, next);
-        }, 0);
+    const target = tasks.find(t => t.id === id);
+    if (!target) return;
+    const merged = { ...target, ...updated };
+    persistAdminOrStaffRecord('tasks', 'UPDATE', merged, 'Pembaruan Tugas').then(ok => {
+      if (ok) {
+        setTasks(prev => {
+          const next = prev.map(t => (t.id === id ? merged : t));
+          setTimeout(() => autoSyncMonthlyReport(merged, next), 0);
+          return next;
+        });
       }
-      return next;
     });
   };
 
   const deleteTask = (id: string) => {
-    setTasks(prev => {
-      const target = prev.find(t => t.id === id);
-      const next = prev.filter(t => t.id !== id);
-      if (target) {
-        setTimeout(() => {
-          autoSyncMonthlyReport(target, next);
-        }, 0);
+    performAdminOnlySoftDelete('tasks', id, 'Jurnal Tugas').then(ok => {
+      if (ok) {
+        setTasks(prev => prev.filter(t => t.id !== id));
       }
-      return next;
     });
   };
 
   const deleteMultipleTasks = (ids: string[]) => {
     if (!ids || ids.length === 0) return;
-    const idSet = new Set(ids);
-    setTasks(prev => {
-      const removed = prev.filter(t => idSet.has(t.id));
-      const next = prev.filter(t => !idSet.has(t.id));
-      if (removed.length > 0) {
-        setTimeout(() => {
-          const affectedMonthYears = new Set<string>();
-          removed.forEach(t => {
-            const parsed = parseTaskMonthYear(t.date);
-            if (parsed) affectedMonthYears.add(`${t.role}_${parsed.month}_${parsed.year}`);
-          });
-          affectedMonthYears.forEach(key => {
-            const [roleStr, mStr, yStr] = key.split('_');
-            const m = parseInt(mStr, 10);
-            const y = parseInt(yStr, 10);
-            const fresh = generateMonthlyReportFromTasks(roleStr as RoleType, m, y, true);
-            saveMonthlyReport(fresh);
-          });
-        }, 0);
-      }
-      return next;
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(
+        false,
+        'Hapus massal dinonaktifkan untuk non-admin! Penghapusan hanya bisa dilakukan melalui Database Admin Satu Pintu.'
+      );
+      return;
+    }
+    Promise.all(ids.map(id => storageService.adminSoftDeleteRecord('tasks', id))).then(() => {
+      const idSet = new Set(ids);
+      setTasks(prev => prev.filter(t => !idSet.has(t.id)));
+      showActionFeedback(true, `${ids.length} tugas dipindahkan ke Arsip Sementara (Soft-Delete).`);
     });
   };
 
   const addInventory = (newItem: Omit<InventoryItem, 'id'>) => {
-    const id = `inv-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    setInventories(prev => [ ...prev, { ...newItem, id } ]);
+    const created: InventoryItem = { ...newItem, id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
+    persistAdminOrStaffRecord('inventories', 'CREATE', created, 'Inventaris').then(ok => {
+      if (ok) setInventories(prev => [created, ...prev]);
+    });
   };
 
   const importInventories = (newItems: Omit<InventoryItem, 'id'>[]) => {
     const withIds: InventoryItem[] = newItems.map((item, idx) => ({
       ...item,
-      id: `inv-imp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`
+      id: `inv-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`
     }));
-    setInventories(prev => [ ...prev, ...withIds ]);
+    if (storageService.getAdminToken()) {
+      const next = [...withIds, ...inventories];
+      persistDirectAdminState({ inventories: next }, 'Impor Inventaris').then(ok => {
+        if (ok) setInventories(next);
+      });
+    } else {
+      withIds.forEach(item => persistAdminOrStaffRecord('inventories', 'CREATE', item, 'Impor Inventaris'));
+      setInventories(prev => [...withIds, ...prev]);
+    }
   };
 
   const updateInventory = (id: string, updated: Partial<InventoryItem>) => {
-    setInventories(prev => prev.map(i => i.id === id ? { ...i, ...updated } : i));
+    const target = inventories.find(i => i.id === id);
+    if (!target) return;
+    const merged = { ...target, ...updated };
+    persistAdminOrStaffRecord('inventories', 'UPDATE', merged, 'Pembaruan Inventaris').then(ok => {
+      if (ok) setInventories(prev => prev.map(i => (i.id === id ? merged : i)));
+    });
   };
 
   const deleteInventory = (id: string) => {
-    setInventories(prev => prev.filter(i => i.id !== id));
+    performAdminOnlySoftDelete('inventories', id, 'Data Inventaris').then(ok => {
+      if (ok) setInventories(prev => prev.filter(i => i.id !== id));
+    });
   };
 
   const deleteMultipleInventories = (ids: string[]) => {
     if (!ids || ids.length === 0) return;
-    const idSet = new Set(ids);
-    setInventories(prev => prev.filter(i => !idSet.has(i.id)));
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(false, 'Penghapusan inventaris massal hanya diizinkan oleh Admin Database.');
+      return;
+    }
+    Promise.all(ids.map(id => storageService.adminSoftDeleteRecord('inventories', id))).then(() => {
+      const idSet = new Set(ids);
+      setInventories(prev => prev.filter(i => !idSet.has(i.id)));
+      showActionFeedback(true, `${ids.length} inventaris dipindahkan ke Arsip Sementara.`);
+    });
   };
 
-  // Handlers Koleksi Buku Perpustakaan
   const addLibraryBook = (book: Omit<LibraryBookItem, 'id'>) => {
-    const id = `bk-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     const newBook: LibraryBookItem = {
       ...book,
-      id,
-      bulanPengadaan: book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7))
+      id: `bk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      bulanPengadaan:
+        book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7))
     };
-    setLibraryBooks(prev => [newBook, ...prev]);
+    persistAdminOrStaffRecord('libraryBooks', 'CREATE', newBook, 'Koleksi Buku').then(ok => {
+      if (ok) setLibraryBooks(prev => [newBook, ...prev]);
+    });
   };
 
   const updateLibraryBook = (id: string, updated: Partial<LibraryBookItem>) => {
-    setLibraryBooks(prev => prev.map(b => {
-      if (b.id !== id) return b;
-      const combined = { ...b, ...updated };
-      if (updated.tanggalMasuk && !updated.bulanPengadaan) {
-        combined.bulanPengadaan = updated.tanggalMasuk.substring(0, 7);
-      }
-      return combined;
-    }));
+    const target = libraryBooks.find(b => b.id === id);
+    if (!target) return;
+    const combined = { ...target, ...updated };
+    if (updated.tanggalMasuk && !updated.bulanPengadaan) {
+      combined.bulanPengadaan = updated.tanggalMasuk.substring(0, 7);
+    }
+    persistAdminOrStaffRecord('libraryBooks', 'UPDATE', combined, 'Pembaruan Buku').then(ok => {
+      if (ok) setLibraryBooks(prev => prev.map(b => (b.id === id ? combined : b)));
+    });
   };
 
   const deleteLibraryBook = (id: string) => {
-    setLibraryBooks(prev => prev.filter(b => b.id !== id));
+    performAdminOnlySoftDelete('libraryBooks', id, 'Koleksi Buku').then(ok => {
+      if (ok) setLibraryBooks(prev => prev.filter(b => b.id !== id));
+    });
   };
 
   const deleteMultipleLibraryBooks = (ids: string[]) => {
     if (!ids || ids.length === 0) return;
-    const idSet = new Set(ids);
-    setLibraryBooks(prev => prev.filter(b => !idSet.has(b.id)));
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(false, 'Penghapusan koleksi buku massal hanya diizinkan oleh Admin Database.');
+      return;
+    }
+    Promise.all(ids.map(id => storageService.adminSoftDeleteRecord('libraryBooks', id))).then(() => {
+      const idSet = new Set(ids);
+      setLibraryBooks(prev => prev.filter(b => !idSet.has(b.id)));
+      showActionFeedback(true, `${ids.length} buku dipindahkan ke Arsip Sementara.`);
+    });
   };
 
   const importLibraryBooks = (books: Omit<LibraryBookItem, 'id'>[]) => {
     const withIds: LibraryBookItem[] = books.map((b, idx) => ({
       ...b,
-      id: `bk-imp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
-      bulanPengadaan: b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7))
+      id: `bk-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+      bulanPengadaan:
+        b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7))
     }));
-    setLibraryBooks(prev => [...withIds, ...prev]);
+    if (storageService.getAdminToken()) {
+      const next = [...withIds, ...libraryBooks];
+      persistDirectAdminState({ libraryBooks: next }, 'Impor Buku').then(ok => {
+        if (ok) setLibraryBooks(next);
+      });
+    } else {
+      withIds.forEach(item => persistAdminOrStaffRecord('libraryBooks', 'CREATE', item, 'Impor Buku'));
+      setLibraryBooks(prev => [...withIds, ...prev]);
+    }
   };
 
-  // Handlers Anggota Perpustakaan
   const addLibraryMember = (member: Omit<LibraryMemberItem, 'id'>) => {
-    const id = `mem-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    const newMember: LibraryMemberItem = { 
-      ...member, 
-      id,
-      tanggalBergabung: member.tanggalBergabung || new Date().toISOString().split('T')[0],
-      tanggalTerdaftar: member.tanggalTerdaftar || member.tanggalBergabung || new Date().toISOString().split('T')[0]
-    };
-
-    setLibraryMembers(prev => [newMember, ...prev]);
-
-    // Sinkronisasi otomatis rekapitulasi data anggota ke sistem secara real-time
-    const t = String(member.tipeAnggota || 'SISWA').toUpperCase();
-    const isP = member.jenisKelamin === 'P';
     const today = new Date().toISOString().split('T')[0];
-
-    setLibraryMemberStats(prev => {
-      const next: LibraryMemberStats = {
-        siswaLaki: Number(prev.siswaLaki) || 0,
-        siswaPerempuan: Number(prev.siswaPerempuan) || 0,
-        guruPendidik: Number(prev.guruPendidik) || 0,
-        guruLaki: Number(prev.guruLaki) || 0,
-        guruPerempuan: Number(prev.guruPerempuan) || 0,
-        staffTendik: Number(prev.staffTendik) || 0,
-        staffLaki: Number(prev.staffLaki) || 0,
-        staffPerempuan: Number(prev.staffPerempuan) || 0,
-        lastUpdated: today
-      };
-
-      if (t === 'GURU') {
-        next.guruPendidik = (next.guruPendidik || 0) + 1;
-        if (isP) {
-          next.guruPerempuan = (next.guruPerempuan || 0) + 1;
+    const newMember: LibraryMemberItem = {
+      ...member,
+      id: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      tanggalBergabung: member.tanggalBergabung || today,
+      tanggalTerdaftar: member.tanggalTerdaftar || member.tanggalBergabung || today
+    };
+    persistAdminOrStaffRecord('libraryMembers', 'CREATE', newMember, 'Anggota Perpustakaan').then(ok => {
+      if (!ok) return;
+      setLibraryMembers(prev => [newMember, ...prev]);
+      const t = String(member.tipeAnggota || 'SISWA').toUpperCase();
+      const isP = member.jenisKelamin === 'P';
+      setLibraryMemberStats(prev => {
+        const next: LibraryMemberStats = {
+          siswaLaki: Number(prev.siswaLaki) || 0,
+          siswaPerempuan: Number(prev.siswaPerempuan) || 0,
+          guruPendidik: Number(prev.guruPendidik) || 0,
+          guruLaki: Number(prev.guruLaki) || 0,
+          guruPerempuan: Number(prev.guruPerempuan) || 0,
+          staffTendik: Number(prev.staffTendik) || 0,
+          staffLaki: Number(prev.staffLaki) || 0,
+          staffPerempuan: Number(prev.staffPerempuan) || 0,
+          lastUpdated: today
+        };
+        if (t === 'GURU') {
+          next.guruPendidik += 1;
+          if (isP) next.guruPerempuan = (next.guruPerempuan || 0) + 1;
+          else next.guruLaki = (next.guruLaki || 0) + 1;
+        } else if (t === 'STAFF') {
+          next.staffTendik += 1;
+          if (isP) next.staffPerempuan = (next.staffPerempuan || 0) + 1;
+          else next.staffLaki = (next.staffLaki || 0) + 1;
         } else {
-          next.guruLaki = (next.guruLaki || 0) + 1;
+          if (isP) next.siswaPerempuan += 1;
+          else next.siswaLaki += 1;
         }
-      } else if (t === 'STAFF') {
-        next.staffTendik = (next.staffTendik || 0) + 1;
-        if (isP) {
-          next.staffPerempuan = (next.staffPerempuan || 0) + 1;
-        } else {
-          next.staffLaki = (next.staffLaki || 0) + 1;
+        if (storageService.getAdminToken()) {
+          persistDirectAdminState({ libraryMemberStats: next }, 'Statistik Anggota');
         }
-      } else {
-        // SISWA
-        if (isP) {
-          next.siswaPerempuan = (next.siswaPerempuan || 0) + 1;
-        } else {
-          next.siswaLaki = (next.siswaLaki || 0) + 1;
-        }
-      }
-
-      return next;
+        return next;
+      });
     });
   };
 
   const updateLibraryMember = (id: string, updated: Partial<LibraryMemberItem>) => {
-    setLibraryMembers(prev => {
-      const target = prev.find(m => m.id === id);
-      if (!target) return prev;
-
-      // Adjust stats if category or gender changed
-      const oldType = String(target.tipeAnggota || 'SISWA').toUpperCase();
-      const newType = String(updated.tipeAnggota || target.tipeAnggota || 'SISWA').toUpperCase();
-      const oldGender = target.jenisKelamin;
-      const newGender = updated.jenisKelamin || target.jenisKelamin;
-
-      if (oldType !== newType || oldGender !== newGender) {
-        setLibraryMemberStats(s => {
-          const next = { ...s, lastUpdated: new Date().toISOString().split('T')[0] };
-          // Kurangi dari kategori lama
-          if (oldType === 'GURU') {
-            next.guruPendidik = Math.max(0, (next.guruPendidik || 0) - 1);
-            if (oldGender === 'P') next.guruPerempuan = Math.max(0, (next.guruPerempuan || 0) - 1);
-            else next.guruLaki = Math.max(0, (next.guruLaki || 0) - 1);
-          } else if (oldType === 'STAFF') {
-            next.staffTendik = Math.max(0, (next.staffTendik || 0) - 1);
-            if (oldGender === 'P') next.staffPerempuan = Math.max(0, (next.staffPerempuan || 0) - 1);
-            else next.staffLaki = Math.max(0, (next.staffLaki || 0) - 1);
-          } else {
-            if (oldGender === 'P') next.siswaPerempuan = Math.max(0, (next.siswaPerempuan || 0) - 1);
-            else next.siswaLaki = Math.max(0, (next.siswaLaki || 0) - 1);
-          }
-          // Tambahkan ke kategori baru
-          if (newType === 'GURU') {
-            next.guruPendidik = (next.guruPendidik || 0) + 1;
-            if (newGender === 'P') next.guruPerempuan = (next.guruPerempuan || 0) + 1;
-            else next.guruLaki = (next.guruLaki || 0) + 1;
-          } else if (newType === 'STAFF') {
-            next.staffTendik = (next.staffTendik || 0) + 1;
-            if (newGender === 'P') next.staffPerempuan = (next.staffPerempuan || 0) + 1;
-            else next.staffLaki = (next.staffLaki || 0) + 1;
-          } else {
-            if (newGender === 'P') next.siswaPerempuan = (next.siswaPerempuan || 0) + 1;
-            else next.siswaLaki = (next.siswaLaki || 0) + 1;
-          }
-          return next;
-        });
-      }
-
-      return prev.map(m => m.id === id ? { ...m, ...updated } : m);
+    const target = libraryMembers.find(m => m.id === id);
+    if (!target) return;
+    const merged = { ...target, ...updated };
+    persistAdminOrStaffRecord('libraryMembers', 'UPDATE', merged, 'Pembaruan Anggota').then(ok => {
+      if (ok) setLibraryMembers(prev => prev.map(m => (m.id === id ? merged : m)));
     });
   };
 
   const deleteLibraryMember = (id: string) => {
-    setLibraryMembers(prev => {
-      const target = prev.find(m => m.id === id);
-      if (target) {
-        const t = String(target.tipeAnggota || 'SISWA').toUpperCase();
-        const isP = target.jenisKelamin === 'P';
-        setLibraryMemberStats(s => {
-          const next = { ...s, lastUpdated: new Date().toISOString().split('T')[0] };
-          if (t === 'GURU') {
-            next.guruPendidik = Math.max(0, (next.guruPendidik || 0) - 1);
-            if (isP) next.guruPerempuan = Math.max(0, (next.guruPerempuan || 0) - 1);
-            else next.guruLaki = Math.max(0, (next.guruLaki || 0) - 1);
-          } else if (t === 'STAFF') {
-            next.staffTendik = Math.max(0, (next.staffTendik || 0) - 1);
-            if (isP) next.staffPerempuan = Math.max(0, (next.staffPerempuan || 0) - 1);
-            else next.staffLaki = Math.max(0, (next.staffLaki || 0) - 1);
-          } else {
-            if (isP) next.siswaPerempuan = Math.max(0, (next.siswaPerempuan || 0) - 1);
-            else next.siswaLaki = Math.max(0, (next.siswaLaki || 0) - 1);
-          }
-          return next;
-        });
-      }
-      return prev.filter(m => m.id !== id);
+    performAdminOnlySoftDelete('libraryMembers', id, 'Anggota Perpustakaan').then(ok => {
+      if (ok) setLibraryMembers(prev => prev.filter(m => m.id !== id));
     });
   };
 
   const deleteMultipleLibraryMembers = (ids: string[]) => {
     if (!ids || ids.length === 0) return;
-    const idSet = new Set(ids);
-    setLibraryMembers(prev => {
-      const targets = prev.filter(m => idSet.has(m.id));
-      if (targets.length > 0) {
-        setLibraryMemberStats(s => {
-          const next = { ...s, lastUpdated: new Date().toISOString().split('T')[0] };
-          targets.forEach(target => {
-            const t = String(target.tipeAnggota || 'SISWA').toUpperCase();
-            const isP = target.jenisKelamin === 'P';
-            if (t === 'GURU') {
-              next.guruPendidik = Math.max(0, (next.guruPendidik || 0) - 1);
-              if (isP) next.guruPerempuan = Math.max(0, (next.guruPerempuan || 0) - 1);
-              else next.guruLaki = Math.max(0, (next.guruLaki || 0) - 1);
-            } else if (t === 'STAFF') {
-              next.staffTendik = Math.max(0, (next.staffTendik || 0) - 1);
-              if (isP) next.staffPerempuan = Math.max(0, (next.staffPerempuan || 0) - 1);
-              else next.staffLaki = Math.max(0, (next.staffLaki || 0) - 1);
-            } else {
-              if (isP) next.siswaPerempuan = Math.max(0, (next.siswaPerempuan || 0) - 1);
-              else next.siswaLaki = Math.max(0, (next.siswaLaki || 0) - 1);
-            }
-          });
-          return next;
-        });
-      }
-      return prev.filter(m => !idSet.has(m.id));
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(false, 'Penghapusan anggota massal hanya diizinkan oleh Admin Database.');
+      return;
+    }
+    Promise.all(ids.map(id => storageService.adminSoftDeleteRecord('libraryMembers', id))).then(() => {
+      const idSet = new Set(ids);
+      setLibraryMembers(prev => prev.filter(m => !idSet.has(m.id)));
+      showActionFeedback(true, `${ids.length} anggota dipindahkan ke Arsip Sementara.`);
     });
   };
 
   const importLibraryMembers = (members: Omit<LibraryMemberItem, 'id'>[]) => {
+    const today = new Date().toISOString().split('T')[0];
     const withIds: LibraryMemberItem[] = members.map((m, idx) => ({
       ...m,
-      id: `mem-imp-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
-      tanggalBergabung: m.tanggalBergabung || m.tanggalTerdaftar || new Date().toISOString().split('T')[0],
-      tanggalTerdaftar: m.tanggalTerdaftar || m.tanggalBergabung || new Date().toISOString().split('T')[0]
+      id: `mem-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+      tanggalBergabung: m.tanggalBergabung || m.tanggalTerdaftar || today,
+      tanggalTerdaftar: m.tanggalTerdaftar || m.tanggalBergabung || today
     }));
-    setLibraryMembers(prev => [...withIds, ...prev]);
-
-    // Sinkronisasi akumulasi statistik anggota secara otomatis (memisahkan L/P untuk Guru, Staff & Siswa)
-    let addGuruL = 0;
-    let addGuruP = 0;
-    let addStaffL = 0;
-    let addStaffP = 0;
-    let addSiswaL = 0;
-    let addSiswaP = 0;
-    withIds.forEach(m => {
-      const t = String(m.tipeAnggota || 'SISWA').toUpperCase();
-      const isP = m.jenisKelamin === 'P';
-      if (t === 'GURU') {
-        if (isP) addGuruP++;
-        else addGuruL++;
-      } else if (t === 'STAFF') {
-        if (isP) addStaffP++;
-        else addStaffL++;
-      } else {
-        if (isP) addSiswaP++;
-        else addSiswaL++;
-      }
-    });
-
-    setLibraryMemberStats(prev => {
-      const nextGuruL = (prev.guruLaki || 0) + addGuruL;
-      const nextGuruP = (prev.guruPerempuan || 0) + addGuruP;
-      const nextStaffL = (prev.staffLaki || 0) + addStaffL;
-      const nextStaffP = (prev.staffPerempuan || 0) + addStaffP;
-      return {
-        ...prev,
-        guruLaki: nextGuruL,
-        guruPerempuan: nextGuruP,
-        guruPendidik: nextGuruL + nextGuruP,
-        staffLaki: nextStaffL,
-        staffPerempuan: nextStaffP,
-        staffTendik: nextStaffL + nextStaffP,
-        siswaLaki: (prev.siswaLaki || 0) + addSiswaL,
-        siswaPerempuan: (prev.siswaPerempuan || 0) + addSiswaP,
-        lastUpdated: new Date().toISOString().split('T')[0]
-      };
-    });
+    if (storageService.getAdminToken()) {
+      const next = [...withIds, ...libraryMembers];
+      persistDirectAdminState({ libraryMembers: next }, 'Impor Anggota').then(ok => {
+        if (ok) setLibraryMembers(next);
+      });
+    } else {
+      withIds.forEach(item => persistAdminOrStaffRecord('libraryMembers', 'CREATE', item, 'Impor Anggota'));
+      setLibraryMembers(prev => [...withIds, ...prev]);
+    }
   };
 
   const updateLibraryMemberStats = (stats: Partial<LibraryMemberStats>) => {
     setLibraryMemberStats(prev => {
-      const nextGuruL = stats.guruLaki !== undefined ? Math.max(0, Number(stats.guruLaki) || 0) : (Number(prev.guruLaki) || 0);
-      const nextGuruP = stats.guruPerempuan !== undefined ? Math.max(0, Number(stats.guruPerempuan) || 0) : (Number(prev.guruPerempuan) || 0);
-      const nextStaffL = stats.staffLaki !== undefined ? Math.max(0, Number(stats.staffLaki) || 0) : (Number(prev.staffLaki) || 0);
-      const nextStaffP = stats.staffPerempuan !== undefined ? Math.max(0, Number(stats.staffPerempuan) || 0) : (Number(prev.staffPerempuan) || 0);
-
+      const nextGuruL = stats.guruLaki !== undefined ? Math.max(0, Number(stats.guruLaki) || 0) : Number(prev.guruLaki) || 0;
+      const nextGuruP = stats.guruPerempuan !== undefined ? Math.max(0, Number(stats.guruPerempuan) || 0) : Number(prev.guruPerempuan) || 0;
+      const nextStaffL = stats.staffLaki !== undefined ? Math.max(0, Number(stats.staffLaki) || 0) : Number(prev.staffLaki) || 0;
+      const nextStaffP = stats.staffPerempuan !== undefined ? Math.max(0, Number(stats.staffPerempuan) || 0) : Number(prev.staffPerempuan) || 0;
       const hasGuruLP = stats.guruLaki !== undefined || stats.guruPerempuan !== undefined;
       const hasStaffLP = stats.staffLaki !== undefined || stats.staffPerempuan !== undefined;
 
-      return {
+      const next: LibraryMemberStats = {
         ...prev,
         ...stats,
         guruLaki: nextGuruL,
         guruPerempuan: nextGuruP,
-        guruPendidik: hasGuruLP ? nextGuruL + nextGuruP : (stats.guruPendidik !== undefined ? Math.max(0, Number(stats.guruPendidik) || 0) : (prev.guruPendidik || 0)),
+        guruPendidik: hasGuruLP ? nextGuruL + nextGuruP : stats.guruPendidik !== undefined ? Math.max(0, Number(stats.guruPendidik) || 0) : prev.guruPendidik || 0,
         staffLaki: nextStaffL,
         staffPerempuan: nextStaffP,
-        staffTendik: hasStaffLP ? nextStaffL + nextStaffP : (stats.staffTendik !== undefined ? Math.max(0, Number(stats.staffTendik) || 0) : (prev.staffTendik || 0)),
-        siswaLaki: stats.siswaLaki !== undefined ? Math.max(0, Number(stats.siswaLaki) || 0) : (Number(prev.siswaLaki) || 0),
-        siswaPerempuan: stats.siswaPerempuan !== undefined ? Math.max(0, Number(stats.siswaPerempuan) || 0) : (Number(prev.siswaPerempuan) || 0),
+        staffTendik: hasStaffLP ? nextStaffL + nextStaffP : stats.staffTendik !== undefined ? Math.max(0, Number(stats.staffTendik) || 0) : prev.staffTendik || 0,
+        siswaLaki: stats.siswaLaki !== undefined ? Math.max(0, Number(stats.siswaLaki) || 0) : Number(prev.siswaLaki) || 0,
+        siswaPerempuan: stats.siswaPerempuan !== undefined ? Math.max(0, Number(stats.siswaPerempuan) || 0) : Number(prev.siswaPerempuan) || 0,
         isManualOverride: stats.isManualOverride !== undefined ? stats.isManualOverride : true,
         lastUpdated: new Date().toISOString().split('T')[0]
       };
+      if (storageService.getAdminToken()) {
+        persistDirectAdminState({ libraryMemberStats: next }, 'Rekap Jumlah Anggota');
+      }
+      return next;
     });
   };
 
   const saveMonthlyReport = (report: MonthlyReport) => {
-    setMonthlyReports(prev => {
-      const idx = prev.findIndex(r => r.id === report.id || (r.role === report.role && r.month === report.month && r.year === report.year));
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = report;
-        return copy;
-      }
-      return [...prev, report];
+    const exists = monthlyReports.some(r => r.id === report.id || (r.role === report.role && r.month === report.month && r.year === report.year));
+    persistAdminOrStaffRecord('monthlyReports', exists ? 'UPDATE' : 'CREATE', report, 'Laporan Bulanan').then(ok => {
+      if (!ok) return;
+      setMonthlyReports(prev => {
+        const idx = prev.findIndex(r => r.id === report.id || (r.role === report.role && r.month === report.month && r.year === report.year));
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = report;
+          return copy;
+        }
+        return [...prev, report];
+      });
     });
   };
 
   const saveAnnualReport = (report: AnnualReport) => {
-    setAnnualReports(prev => {
-      const idx = prev.findIndex(r => r.id === report.id || (r.role === report.role && r.year === report.year));
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = report;
-        return copy;
-      }
-      return [...prev, report];
+    const exists = annualReports.some(r => r.id === report.id || (r.role === report.role && r.year === report.year));
+    persistAdminOrStaffRecord('annualReports', exists ? 'UPDATE' : 'CREATE', report, 'Laporan Tahunan').then(ok => {
+      if (!ok) return;
+      setAnnualReports(prev => {
+        const idx = prev.findIndex(r => r.id === report.id || (r.role === report.role && r.year === report.year));
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = report;
+          return copy;
+        }
+        return [...prev, report];
+      });
     });
   };
 
+  const addArchive = (doc: Omit<ArchiveDocument, 'id'>) => {
+    const newDoc: ArchiveDocument = {
+      ...doc,
+      id: `arch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    };
+    persistAdminOrStaffRecord('archives', 'CREATE', newDoc, 'Arsip Dokumen').then(ok => {
+      if (ok) setArchives(prev => [newDoc, ...prev]);
+    });
+  };
+
+  const updateArchive = (id: string, updated: Partial<ArchiveDocument>) => {
+    const target = archives.find(a => a.id === id);
+    if (!target) return;
+    const merged = { ...target, ...updated };
+    persistAdminOrStaffRecord('archives', 'UPDATE', merged, 'Pembaruan Arsip').then(ok => {
+      if (ok) setArchives(prev => prev.map(a => (a.id === id ? merged : a)));
+    });
+  };
+
+  const deleteArchive = (id: string) => {
+    performAdminOnlySoftDelete('archives', id, 'Arsip Dokumen').then(ok => {
+      if (ok) setArchives(prev => prev.filter(a => a.id !== id));
+    });
+  };
+
+  const archiveReport = (type: 'monthly' | 'annual', data: any, customTitle?: string): ArchiveDocument => {
+    const role: RoleType = data.role || currentRole || 'TU';
+    const roleCode =
+      role === 'TU' ? 'TU' : role === 'PENJAGA' ? 'PJG' : role === 'SERVICE' ? 'SRV' : role === 'PERPUS' ? 'PRS' : 'IPA';
+    const year = data.year || new Date().getFullYear();
+    const month = data.month || (type === 'monthly' ? new Date().getMonth() + 1 : undefined);
+    const operator = effectiveSchoolConfig.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role];
+    const monthNames = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const roleName = ROLE_LABELS_MAP[role] || 'Tata Usaha';
+    const regNumber = `ARS/${year}/${month ? String(month).padStart(2, '0') : 'THN'}/${roleCode}/${String(archives.length + 1).padStart(3, '0')}`;
+    const docTitle =
+      customTitle ||
+      (type === 'monthly'
+        ? `Laporan Bulanan Kinerja ${roleName} - ${month ? monthNames[month - 1] : ''} ${year}`
+        : `Laporan Tahunan Kinerja ${roleName} - Tahun Anggaran ${year}`);
+
+    const roleTasksWithPhotos = tasks.filter(t => t.role === role && !!t.photoUrl);
+
+    const newDoc: ArchiveDocument = {
+      id: `arch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      regNumber,
+      title: docTitle,
+      nomorSurat: `800/${type === 'monthly' ? `LAP-BLN/${month || 9}` : 'LAP-THN'}/${effectiveSchoolConfig.npsn || '20202819'}/${year}`,
+      documentType: type,
+      role,
+      period: type === 'monthly' ? `Bulan ${monthNames[(month || 9) - 1]} ${year}` : `Tahun Anggaran ${year}`,
+      year,
+      month,
+      operatorName: operator.nama,
+      operatorNip: operator.nip,
+      dateArchived: new Date().toISOString(),
+      approvalStatus: data.approvalStatus || 'disahkan_kepsek',
+      inspectionNotes: 'Diarsipkan dari laporan kinerja operasional sekolah.',
+      isAuditVerified: true,
+      checklist: {
+        hasKop: true,
+        hasApprovalSheet: true,
+        hasSignatures: true,
+        hasStamp: false,
+        hasPhotos: roleTasksWithPhotos.length > 0,
+        photoCount: roleTasksWithPhotos.length
+      },
+      reportData: data
+    };
+
+    persistAdminOrStaffRecord('archives', 'CREATE', newDoc, 'Arsip Laporan').then(ok => {
+      if (ok) setArchives(prev => [newDoc, ...prev]);
+    });
+    return newDoc;
+  };
+
+  // Berita Acara Central Database CRUD (migrated from standalone localStorage)
+  const saveBeritaAcaraRecord = async (
+    record: SavedBeritaAcaraRecord
+  ): Promise<{ ok: boolean; message?: string }> => {
+    const ok = await persistAdminOrStaffRecord('beritaAcaraHistory', 'CREATE', record, 'Berita Acara');
+    if (ok) {
+      setBeritaAcaraHistory(prev => [record, ...prev.filter(r => r.id !== record.id)]);
+      return { ok: true, message: `"${record.templateTitle}" diproses ke Database Admin.` };
+    }
+    return { ok: false, message: 'Gagal memproses penyimpanan Berita Acara.' };
+  };
+
+  const deleteBeritaAcaraRecord = async (id: string): Promise<{ ok: boolean; message?: string }> => {
+    const ok = await performAdminOnlySoftDelete('beritaAcaraHistory', id, 'Riwayat Berita Acara');
+    if (ok) {
+      setBeritaAcaraHistory(prev => prev.filter(r => r.id !== id));
+      return { ok: true };
+    }
+    return { ok: false, message: 'Penghapusan hanya dapat dilakukan melalui otorisasi Admin Database.' };
+  };
+
+  // Multi-Tenant Letterhead & Signature
   const updateSchoolConfig = (config: Partial<SchoolConfig>) => {
-    setSchoolConfig(prev => ({ ...prev, ...config }));
+    setSchoolConfig(prev => {
+      const next = { ...prev, ...config };
+      if (storageService.getAdminToken()) {
+        persistDirectAdminState({ schoolConfig: next }, 'Konfigurasi Sekolah');
+      }
+      return next;
+    });
   };
 
   const saveUserLetterhead = (kop: Partial<UserLetterheadConfig> & { logoAplikasiUrl?: string }) => {
     const userKey = getUserIsolationKey(currentUser);
     if (!userKey) {
-      // Admin / mode tanpa akun login individual mengubah template dasar sistem
-      setSchoolConfig(prev => ({ ...prev, ...kop }));
+      if (storageService.getAdminToken()) {
+        const next = { ...schoolConfig, ...kop };
+        setSchoolConfig(next);
+        persistDirectAdminState({ schoolConfig: next }, 'Template Kop Surat');
+      } else {
+        showActionFeedback(false, 'Masuk terlebih dahulu untuk menyimpan pengaturan kop surat.');
+      }
       return;
     }
 
     const now = new Date().toISOString();
-    setSchoolConfig(prev => {
-      const prevMap = prev.userLetterheads || {};
-      const existingEntry = prevMap[userKey];
-      const nextEntry: UserLetterheadConfig = {
-        ...(existingEntry && !existingEntry.deleted ? existingEntry : {}),
-        ...kop,
-        userId: currentUser?.id || existingEntry?.userId,
-        username: currentUser?.username || existingEntry?.username,
-        deleted: false,
-        updatedAt: now
-      };
-      return {
-        ...prev,
-        userLetterheads: {
-          ...prevMap,
-          [userKey]: nextEntry
-        }
-      };
-    });
+    const prevMap = schoolConfig.userLetterheads || {};
+    const existingEntry = prevMap[userKey];
+    const nextEntry: UserLetterheadConfig = {
+      ...(existingEntry && !existingEntry.deleted ? existingEntry : {}),
+      ...kop,
+      userId: currentUser?.id || existingEntry?.userId,
+      username: currentUser?.username || existingEntry?.username,
+      deleted: false,
+      updatedAt: now
+    };
+
+    const nextConfig: SchoolConfig = {
+      ...schoolConfig,
+      userLetterheads: { ...prevMap, [userKey]: nextEntry }
+    };
+    setSchoolConfig(nextConfig);
+
+    if (storageService.getAdminToken()) {
+      persistDirectAdminState({ schoolConfig: nextConfig }, 'Kop Surat Pengguna');
+    } else if (storageService.getStaffToken()) {
+      storageService
+        .submitStaffProposal({
+          targetCollection: 'schoolConfigLetterhead',
+          operationType: 'UPDATE',
+          payload: { isolationKey: userKey, data: nextEntry },
+          note: `Pengajuan pembaruan kop surat pribadi @${currentUser?.username}`
+        })
+        .then(res => {
+          showActionFeedback(res.ok, res.data?.message || res.error || 'Kop surat diajukan ke Admin Database.');
+        });
+    }
   };
 
   const resetUserLetterhead = () => {
     const userKey = getUserIsolationKey(currentUser);
     if (!userKey) return;
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(false, 'Penghapusan kop surat tersimpan hanya diizinkan melalui Database Admin.');
+      return;
+    }
     const now = new Date().toISOString();
-    setSchoolConfig(prev => {
-      const prevMap = prev.userLetterheads || {};
-      return {
-        ...prev,
-        userLetterheads: {
-          ...prevMap,
-          [userKey]: {
-            userId: currentUser?.id,
-            username: currentUser?.username,
-            deleted: true,
-            updatedAt: now
-          }
+    const nextConfig: SchoolConfig = {
+      ...schoolConfig,
+      userLetterheads: {
+        ...(schoolConfig.userLetterheads || {}),
+        [userKey]: {
+          userId: currentUser?.id,
+          username: currentUser?.username,
+          deleted: true,
+          updatedAt: now
         }
-      };
-    });
+      }
+    };
+    setSchoolConfig(nextConfig);
+    persistDirectAdminState({ schoolConfig: nextConfig }, 'Reset Kop Surat Pengguna');
   };
 
   const saveUserSignature = (payload: {
@@ -2022,77 +1605,234 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const userKey = getUserIsolationKey(currentUser);
     const activeRole = payload.role || currentUser?.role || currentRole || 'TU';
     if (!userKey) {
-      // Admin / mode tanpa akun login mengubah template dasar sistem
-      setSchoolConfig(prev => ({
-        ...prev,
-        ...(payload.kepalaSekolah ? { kepalaSekolah: payload.kepalaSekolah } : {}),
-        ...(payload.wakilKepalaSekolah ? { wakilKepalaSekolah: payload.wakilKepalaSekolah } : {}),
-        ...(payload.operatorProfile
-          ? {
-              operatorProfiles: {
-                ...prev.operatorProfiles,
-                [activeRole]: payload.operatorProfile
-              }
-            }
-          : {}),
-        ...(payload.stempelEnabled !== undefined ? { stempelEnabled: payload.stempelEnabled } : {}),
-        ...(payload.stempelTextLine1 !== undefined ? { stempelTextLine1: payload.stempelTextLine1 } : {}),
-        ...(payload.stempelTextLine2 !== undefined ? { stempelTextLine2: payload.stempelTextLine2 } : {}),
-        ...(payload.customStempelUrl !== undefined ? { customStempelUrl: payload.customStempelUrl } : {})
-      }));
+      if (storageService.getAdminToken()) {
+        const next: SchoolConfig = {
+          ...schoolConfig,
+          ...(payload.kepalaSekolah ? { kepalaSekolah: payload.kepalaSekolah } : {}),
+          ...(payload.wakilKepalaSekolah ? { wakilKepalaSekolah: payload.wakilKepalaSekolah } : {}),
+          ...(payload.operatorProfile
+            ? { operatorProfiles: { ...schoolConfig.operatorProfiles, [activeRole]: payload.operatorProfile } }
+            : {}),
+          ...(payload.stempelEnabled !== undefined ? { stempelEnabled: payload.stempelEnabled } : {}),
+          ...(payload.stempelTextLine1 !== undefined ? { stempelTextLine1: payload.stempelTextLine1 } : {}),
+          ...(payload.stempelTextLine2 !== undefined ? { stempelTextLine2: payload.stempelTextLine2 } : {}),
+          ...(payload.customStempelUrl !== undefined ? { customStempelUrl: payload.customStempelUrl } : {})
+        };
+        setSchoolConfig(next);
+        persistDirectAdminState({ schoolConfig: next }, 'Pengesahan Dasar');
+      }
       return;
     }
 
     const now = new Date().toISOString();
-    setSchoolConfig(prev => {
-      const prevMap = prev.userSignatures || {};
-      const existingEntry = prevMap[userKey];
-      const nextEntry: UserSignatureConfig = {
-        ...(existingEntry && !existingEntry.deleted ? existingEntry : {}),
-        ...payload,
-        role: activeRole,
-        userId: currentUser?.id || existingEntry?.userId,
-        username: currentUser?.username || existingEntry?.username,
-        deleted: false,
-        updatedAt: now
-      };
-      return {
-        ...prev,
-        userSignatures: {
-          ...prevMap,
-          [userKey]: nextEntry
-        }
-      };
-    });
+    const prevMap = schoolConfig.userSignatures || {};
+    const existingEntry = prevMap[userKey];
+    const nextEntry: UserSignatureConfig = {
+      ...(existingEntry && !existingEntry.deleted ? existingEntry : {}),
+      ...payload,
+      role: activeRole,
+      userId: currentUser?.id || existingEntry?.userId,
+      username: currentUser?.username || existingEntry?.username,
+      deleted: false,
+      updatedAt: now
+    };
+
+    const nextConfig: SchoolConfig = {
+      ...schoolConfig,
+      userSignatures: { ...prevMap, [userKey]: nextEntry }
+    };
+    setSchoolConfig(nextConfig);
+
+    if (storageService.getAdminToken()) {
+      persistDirectAdminState({ schoolConfig: nextConfig }, 'Lembar Pengesahan Pengguna');
+    } else if (storageService.getStaffToken()) {
+      storageService
+        .submitStaffProposal({
+          targetCollection: 'schoolConfigSignature',
+          operationType: 'UPDATE',
+          payload: { isolationKey: userKey, data: nextEntry },
+          note: `Pengajuan pembaruan tanda tangan/pengesahan @${currentUser?.username}`
+        })
+        .then(res => {
+          showActionFeedback(res.ok, res.data?.message || res.error || 'Pengesahan diajukan ke Admin Database.');
+        });
+    }
   };
 
   const resetUserSignature = () => {
     const userKey = getUserIsolationKey(currentUser);
     if (!userKey) return;
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(false, 'Penghapusan lembar pengesahan hanya diizinkan oleh Admin Database.');
+      return;
+    }
     const now = new Date().toISOString();
-    setSchoolConfig(prev => {
-      const prevMap = prev.userSignatures || {};
-      return {
-        ...prev,
-        userSignatures: {
-          ...prevMap,
-          [userKey]: {
-            role: currentUser?.role || currentRole || 'TU',
-            userId: currentUser?.id,
-            username: currentUser?.username,
-            deleted: true,
-            updatedAt: now
-          }
+    const nextConfig: SchoolConfig = {
+      ...schoolConfig,
+      userSignatures: {
+        ...(schoolConfig.userSignatures || {}),
+        [userKey]: {
+          role: currentUser?.role || currentRole || 'TU',
+          userId: currentUser?.id,
+          username: currentUser?.username,
+          deleted: true,
+          updatedAt: now
         }
-      };
+      }
+    };
+    setSchoolConfig(nextConfig);
+    persistDirectAdminState({ schoolConfig: nextConfig }, 'Reset Pengesahan Pengguna');
+  };
+
+  // Custom Categories & Tupoksi
+  const addCustomCategory = (cat: {
+    role: RoleType;
+    name: string;
+    classification: 'pokok' | 'tambahan';
+    description?: string;
+  }): CustomCategory => {
+    const trimmed = cat.name.trim();
+    const baseSlug =
+      trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || `kategori_${Date.now()}`;
+    const exists = customCategories.some(c => c.slug === baseSlug);
+    const finalSlug = exists ? `${baseSlug}_${Math.random().toString(36).slice(2, 6)}` : baseSlug;
+    const newCategory: CustomCategory = {
+      id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      role: cat.role,
+      name: trimmed,
+      slug: finalSlug,
+      classification: cat.classification,
+      description: cat.description?.trim(),
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+    persistAdminOrStaffRecord('customCategories', 'CREATE', newCategory, 'Kategori Tugas').then(ok => {
+      if (ok) setCustomCategories(prev => [...prev, newCategory]);
+    });
+    return newCategory;
+  };
+
+  const updateCustomCategory = (id: string, updated: Partial<CustomCategory>) => {
+    const target = customCategories.find(c => c.id === id);
+    if (!target) return;
+    const merged = { ...target, ...updated };
+    persistAdminOrStaffRecord('customCategories', 'UPDATE', merged, 'Pembaruan Kategori').then(ok => {
+      if (ok) setCustomCategories(prev => prev.map(c => (c.id === id ? merged : c)));
     });
   };
 
-  const generateMonthlyReportFromTasks = (role: RoleType, month: number, year: number, forceFresh: boolean = false): MonthlyReport => {
+  const deleteCustomCategory = (id: string) => {
+    performAdminOnlySoftDelete('customCategories', id, 'Kategori Tugas').then(ok => {
+      if (ok) setCustomCategories(prev => prev.filter(c => c.id !== id));
+    });
+  };
+
+  const addTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', text: string) => {
+    if (!text.trim()) return;
+    const currentRoleObj = tupoksiDefinitions[role] || { tupoksiList: [], tugasTambahanList: [] };
+    const next: TupoksiDefinitionsMap = {
+      ...tupoksiDefinitions,
+      [role]: {
+        ...currentRoleObj,
+        tupoksiList: type === 'pokok' ? [...currentRoleObj.tupoksiList, text.trim()] : currentRoleObj.tupoksiList,
+        tugasTambahanList:
+          type === 'tambahan' ? [...currentRoleObj.tugasTambahanList, text.trim()] : currentRoleObj.tugasTambahanList
+      }
+    };
+    setTupoksiDefinitions(next);
+    if (storageService.getAdminToken()) {
+      persistDirectAdminState({ tupoksiDefinitions: next }, 'Daftar Tupoksi');
+    } else if (storageService.getStaffToken()) {
+      storageService.submitStaffProposal({
+        targetCollection: 'tupoksiDefinitions',
+        operationType: 'UPDATE',
+        payload: next,
+        note: `Ajuan tambah item Tupoksi (${role})`
+      });
+    }
+  };
+
+  const updateTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', index: number, newText: string) => {
+    if (!newText.trim()) return;
+    const currentRoleObj = tupoksiDefinitions[role] || { tupoksiList: [], tugasTambahanList: [] };
+    const next: TupoksiDefinitionsMap = {
+      ...tupoksiDefinitions,
+      [role]: {
+        ...currentRoleObj,
+        tupoksiList:
+          type === 'pokok'
+            ? currentRoleObj.tupoksiList.map((item, i) => (i === index ? newText.trim() : item))
+            : currentRoleObj.tupoksiList,
+        tugasTambahanList:
+          type === 'tambahan'
+            ? currentRoleObj.tugasTambahanList.map((item, i) => (i === index ? newText.trim() : item))
+            : currentRoleObj.tugasTambahanList
+      }
+    };
+    setTupoksiDefinitions(next);
+    if (storageService.getAdminToken()) {
+      persistDirectAdminState({ tupoksiDefinitions: next }, 'Pembaruan Tupoksi');
+    }
+  };
+
+  const deleteTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', indexOrText: number | string) => {
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(false, 'Penghapusan butir Tupoksi hanya diizinkan melalui otorisasi Admin Database.');
+      return;
+    }
+    const currentRoleObj = tupoksiDefinitions[role] || OFFICIAL_TUPOKSI_DEFINITIONS[role];
+    let updatedPokok = [...(currentRoleObj.tupoksiList || [])];
+    let updatedTambahan = [...(currentRoleObj.tugasTambahanList || [])];
+    if (type === 'pokok') {
+      updatedPokok =
+        typeof indexOrText === 'number'
+          ? updatedPokok.filter((_, i) => i !== indexOrText)
+          : updatedPokok.filter(item => item !== indexOrText);
+    } else {
+      updatedTambahan =
+        typeof indexOrText === 'number'
+          ? updatedTambahan.filter((_, i) => i !== indexOrText)
+          : updatedTambahan.filter(item => item !== indexOrText);
+    }
+    const next: TupoksiDefinitionsMap = {
+      ...tupoksiDefinitions,
+      [role]: { tupoksiList: updatedPokok, tugasTambahanList: updatedTambahan }
+    };
+    setTupoksiDefinitions(next);
+    persistDirectAdminState({ tupoksiDefinitions: next }, 'Hapus Butir Tupoksi');
+  };
+
+  const resetTupoksiToDefault = (role?: RoleType) => {
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(false, 'Reset Tupoksi ke default hanya dapat dijalankan oleh Admin Database.');
+      return;
+    }
+    const next = role
+      ? {
+          ...tupoksiDefinitions,
+          [role]: {
+            tupoksiList: [...OFFICIAL_TUPOKSI_DEFINITIONS[role].tupoksiList],
+            tugasTambahanList: [...OFFICIAL_TUPOKSI_DEFINITIONS[role].tugasTambahanList]
+          }
+        }
+      : JSON.parse(JSON.stringify(OFFICIAL_TUPOKSI_DEFINITIONS));
+    setTupoksiDefinitions(next);
+    persistDirectAdminState({ tupoksiDefinitions: next }, 'Reset Tupoksi');
+  };
+
+  const generateMonthlyReportFromTasks = (
+    role: RoleType,
+    month: number,
+    year: number,
+    forceFresh: boolean = false
+  ): MonthlyReport => {
     return buildMonthlyReportObject(tasks, role, month, year, effectiveSchoolConfig, monthlyReports, forceFresh);
   };
 
-  const generateAnnualReportFromMonthly = (role: RoleType, year: number, forceFresh: boolean = false): AnnualReport => {
+  const generateAnnualReportFromMonthly = (
+    role: RoleType,
+    year: number,
+    forceFresh: boolean = false
+  ): AnnualReport => {
     const existing = annualReports.find(r => r.role === role && r.year === year);
     if (existing && !forceFresh) return existing;
 
@@ -2123,89 +1863,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  const addArchive = (doc: Omit<ArchiveDocument, 'id'>) => {
-    const newDoc: ArchiveDocument = {
-      ...doc,
-      id: `arch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-    };
-    setArchives(prev => [newDoc, ...prev]);
-  };
-
-  const updateArchive = (id: string, updated: Partial<ArchiveDocument>) => {
-    setArchives(prev => prev.map(a => a.id === id ? { ...a, ...updated } : a));
-  };
-
-  const deleteArchive = (id: string) => {
-    setArchives(prev => prev.filter(a => a.id !== id));
-  };
-
-  const archiveReport = (type: 'monthly' | 'annual', data: any, customTitle?: string): ArchiveDocument => {
-    const role: RoleType = data.role || currentRole || 'TU';
-    const roleCode = 
-      role === 'TU' ? 'TU' : 
-      role === 'PENJAGA' ? 'PJG' : 
-      role === 'SERVICE' ? 'SRV' :
-      role === 'PERPUS' ? 'PRS' : 'IPA';
-    const year = data.year || new Date().getFullYear();
-    const month = data.month || (type === 'monthly' ? new Date().getMonth() + 1 : undefined);
-    const operator = effectiveSchoolConfig.operatorProfiles?.[role] || initialSchoolConfig.operatorProfiles[role];
-    const monthNames = [
-      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-    ];
-
-    const roleName = 
-      role === 'TU' ? 'Tata Usaha' : 
-      role === 'PENJAGA' ? 'Penjaga Sekolah' : 
-      role === 'SERVICE' ? 'Layanan Kebersihan' :
-      role === 'PERPUS' ? 'Layanan Perpustakaan' : 'Laboratorium IPA';
-
-    const regNumber = `ARS/${year}/${month ? String(month).padStart(2, '0') : 'THN'}/${roleCode}/${String(archives.length + 1).padStart(3, '0')}`;
-    const docTitle = customTitle || (type === 'monthly'
-      ? `Laporan Bulanan Kinerja ${roleName} - ${month ? monthNames[month - 1] : ''} ${year}`
-      : `Laporan Tahunan Kinerja ${roleName} - Tahun Anggaran ${year}`);
-
-    const roleTasks = tasks.filter(t => t.role === role);
-    const roleTasksWithPhotos = roleTasks.filter(t => !!t.photoUrl);
-
-    const newDoc: ArchiveDocument = {
-      id: `arch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      regNumber,
-      title: docTitle,
-      nomorSurat: `800/${type === 'monthly' ? `LAP-BLN/${month || 9}` : 'LAP-THN'}/${effectiveSchoolConfig.npsn || '20202819'}/${year}`,
-      documentType: type,
-      role,
-      period: type === 'monthly'
-        ? `Bulan ${monthNames[(month || 9) - 1]} ${year}`
-        : `Tahun Anggaran ${year}`,
-      year,
-      month,
-      operatorName: operator.nama,
-      operatorNip: operator.nip,
-      dateArchived: new Date().toISOString(),
-      approvalStatus: data.approvalStatus || 'disahkan_kepsek',
-      inspectionNotes: 'Diarsipkan dari laporan kinerja operasional sekolah. Siap untuk proses audit pemeriksaan.',
-      isAuditVerified: true,
-      checklist: {
-        hasKop: true,
-        hasApprovalSheet: true,
-        hasSignatures: true,
-        hasStamp: false,
-        hasPhotos: roleTasksWithPhotos.length > 0,
-        photoCount: roleTasksWithPhotos.length
-      },
-      reportData: data
-    };
-
-    setArchives(prev => [newDoc, ...prev]);
-    return newDoc;
-  };
-
   const exportBackupJson = () => {
+    if (storageService.getAdminToken()) {
+      storageService.downloadServerBackup();
+      return;
+    }
     const backupData = {
-      version: '1.0',
+      version: '2.0',
+      note: 'Ekspor tampilan data operator (bukan cadangan database inti Admin).',
       exportedAt: new Date().toISOString(),
-      schoolConfig,
+      schoolConfig: effectiveSchoolConfig,
       tasks,
       inventories,
       libraryBooks,
@@ -2213,734 +1880,301 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       libraryMemberStats,
       monthlyReports,
       annualReports,
-      archives
+      archives,
+      beritaAcaraHistory
     };
     const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `backup-siops-sekolah-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `ekspor-siops-operator-${new Date().toISOString().split('T')[0]}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
   const restoreFromBackupJson = (jsonData: any): boolean => {
-    try {
-      if (jsonData && typeof jsonData === 'object') {
-        if (jsonData.tasks && Array.isArray(jsonData.tasks)) setTasks(jsonData.tasks);
-        if (jsonData.inventories && Array.isArray(jsonData.inventories)) setInventories(jsonData.inventories);
-        if (jsonData.libraryBooks && Array.isArray(jsonData.libraryBooks)) setLibraryBooks(jsonData.libraryBooks);
-        if (jsonData.libraryMembers && Array.isArray(jsonData.libraryMembers)) setLibraryMembers(jsonData.libraryMembers);
-        if (jsonData.libraryMemberStats && typeof jsonData.libraryMemberStats === 'object') setLibraryMemberStats(jsonData.libraryMemberStats);
-        if (jsonData.monthlyReports && Array.isArray(jsonData.monthlyReports)) setMonthlyReports(jsonData.monthlyReports);
-        if (jsonData.annualReports && Array.isArray(jsonData.annualReports)) setAnnualReports(jsonData.annualReports);
-        if (jsonData.schoolConfig) {
-          const mergedConfig = mergeSchoolConfigWithDefaults(jsonData.schoolConfig);
-          setSchoolConfig(mergedConfig);
-        }
-        return true;
-      }
-    } catch (e) {
-      console.error(e);
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(
+        false,
+        'Pemulihan (Restore) database penuh hanya dapat dilakukan melalui Panel Admin Database Satu Pintu.'
+      );
+      return false;
     }
-    return false;
+    storageService.adminRestoreBackup({ uploadedSnapshot: jsonData }).then(res => {
+      if (res.ok) {
+        showActionFeedback(true, 'Cadangan database berhasil dipulihkan!');
+        refreshAdminDashboard();
+      } else {
+        showActionFeedback(false, res.error || 'Gagal memulihkan file JSON cadangan.');
+      }
+    });
+    return true;
   };
 
   const resetToDefaultData = () => {
-    // Non-destructive towards registered users: NEVER wipe accessUsers, accessRules, adminPassword, or active login session
-    setTasks(initialTasks);
-    setInventories(initialInventories);
-    setLibraryBooks(initialLibraryBooks);
-    setLibraryMembers(initialLibraryMembers);
-    setLibraryMemberStats(initialLibraryMemberStats);
-    setMonthlyReports(initialMonthlyReports);
-    setAnnualReports(initialAnnualReports);
-    setArchives(initialArchives);
-    setSchoolConfig(initialSchoolConfig);
+    if (!storageService.getAdminToken()) {
+      showActionFeedback(
+        false,
+        'Reset data penuh dinonaktifkan untuk non-admin! Gunakan Panel Admin jika perlu memulihkan atau mengembalikan cadangan.'
+      );
+      return;
+    }
+    const defaultPayload = {
+      tasks: initialTasks,
+      inventories: initialInventories,
+      libraryBooks: initialLibraryBooks,
+      libraryMembers: initialLibraryMembers,
+      libraryMemberStats: initialLibraryMemberStats,
+      monthlyReports: initialMonthlyReports,
+      annualReports: initialAnnualReports,
+      archives: initialArchives,
+      schoolConfig: initialSchoolConfig
+    };
+    persistDirectAdminState(defaultPayload, 'Reset Data Operasional');
   };
 
   // =========================================================================
-  // ACCESS CONTROL & LOGIN SYSTEM (ADMIN APPROVAL, UNIQUE PASSWORD, 1-SERVICE)
+  // SERVER-BACKED AUTHENTICATION & ADMIN GOVERNANCE
   // =========================================================================
 
-  const registerAccessUser = ({
-    namaLengkap,
-    username,
-    role,
-    password
-  }: {
+  const registerAccessUser = async (payload: {
     namaLengkap: string;
     username: string;
     role: RoleType;
     password: string;
-  }): AuthActionResult => {
-    const cleanName = namaLengkap.trim();
-    const cleanUsername = username.trim();
-    const cleanPassword = password.trim();
-    const usernameKey = cleanUsername.toLowerCase();
-
-    if (!cleanName || !cleanUsername || !cleanPassword) {
+  }): Promise<AuthActionResult> => {
+    const res = await storageService.authRegister(payload);
+    if (!res.ok) {
       return {
         ok: false,
-        message: 'Nama lengkap, nama pengguna (username), dan sandi wajib diisi lengkap.'
+        message: res.error || res.data?.message || 'Pendaftaran gagal.'
       };
     }
-
-    if (cleanUsername.length < 3) {
-      return {
-        ok: false,
-        message: 'Nama pengguna (username) minimal 3 karakter.'
-      };
+    const registered = res.data?.user;
+    if (registered) {
+      setTrackedUsername(registered.username);
+      setTrackedUserAccount(registered);
     }
-
-    if (cleanPassword.length < 4) {
-      return {
-        ok: false,
-        message: 'Sandi minimal 4 karakter.'
-      };
-    }
-
-    if (accessRules.enforceSingleServicePerUser) {
-      const existingUser = accessUsers.find(u => u.username.toLowerCase() === usernameKey);
-      if (existingUser) {
-        return {
-          ok: false,
-          message: `Pendaftaran ditolak! Nama pengguna "@${existingUser.username}" sudah terdaftar untuk layanan ${ROLE_LABELS_MAP[existingUser.role]}. Aturan pembatasan aktif: satu pengguna hanya boleh mengakses satu layanan saja.`
-        };
-      }
-    } else {
-      const exactDuplicate = accessUsers.find(
-        u => u.username.toLowerCase() === usernameKey && u.role === role
-      );
-      if (exactDuplicate) {
-        return {
-          ok: false,
-          message: `Nama pengguna "@${exactDuplicate.username}" sudah terdaftar pada layanan ${ROLE_LABELS_MAP[role]}.`
-        };
-      }
-    }
-
-    if (accessRules.enforceUniquePassword) {
-      const passwordConflict = accessUsers.find(
-        u => u.password === cleanPassword && u.username.toLowerCase() !== usernameKey
-      );
-      if (passwordConflict) {
-        return {
-          ok: false,
-          message: `Sandi ditolak! Sandi tersebut sudah digunakan oleh pengguna "@${passwordConflict.username}". Setiap sandi bersifat unik dan hanya bisa dikaitkan dengan satu nama pengguna saja.`
-        };
-      }
-    }
-
-    const newUser: RegisteredAccessUser = {
-      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      namaLengkap: cleanName,
-      username: cleanUsername,
-      role,
-      password: cleanPassword,
-      status: 'PENDING',
-      createdAt: new Date().toISOString()
-    };
-
-    const nextUsers = [newUser, ...accessUsers];
-    setAccessUsers(nextUsers);
-    setTrackedUsername(cleanUsername);
-    syncAccessChangeNow(nextUsers);
-
+    await fetchLatestState();
     return {
       ok: true,
-      user: newUser,
-      message: accessRules.requireAdminApproval
-        ? `Pendaftaran akun "@${cleanUsername}" (${ROLE_LABELS_MAP[role]}) berhasil dikirim & langsung dikonfirmasi ke Panel Admin. Status saat ini MENUNGGU PERSETUJUAN Admin.`
-        : `Pendaftaran akun "@${cleanUsername}" berhasil disimpan. Karena aturan persetujuan Admin sedang nonaktif, Anda dapat langsung masuk.`
+      user: registered,
+      message: res.data?.message || 'Pendaftaran berhasil dikirim ke Database Admin.'
     };
   };
 
-  const loginAccessUser = ({
-    username,
-    password,
-    expectedRole
-  }: {
+  const loginAccessUser = async (payload: {
     username: string;
     password: string;
     expectedRole?: RoleType;
-  }): AuthActionResult => {
-    const cleanUsername = username.trim();
-    const cleanPassword = password.trim();
-    const usernameKey = cleanUsername.toLowerCase();
-
-    if (!cleanUsername || !cleanPassword) {
+  }): Promise<AuthActionResult> => {
+    const res = await storageService.authLogin(payload);
+    if (!res.ok || !res.data?.user) {
       return {
         ok: false,
-        message: 'Nama pengguna dan sandi wajib diisi.'
+        message: res.error || res.data?.message || 'Gagal masuk ke sistem.'
       };
     }
-
-    // Rule 2: Unique Password Binding Check (checked upfront so User B trying User A's password gets exact rejection)
-    if (accessRules.enforceUniquePassword) {
-      const passwordOwner = accessUsers.find(
-        u => u.password === cleanPassword && u.username.toLowerCase() !== usernameKey
-      );
-      if (passwordOwner) {
-        return {
-          ok: false,
-          message: `Akses ditolak! Sandi tersebut sudah digunakan dan terikat eksklusif pada pengguna "@${passwordOwner.username}" (${passwordOwner.namaLengkap}). Pengguna lain tidak dapat memakai sandi tersebut.`
-        };
-      }
-    }
-
-    const matchingUsers = accessUsers.filter(u => u.username.toLowerCase() === usernameKey);
-    if (matchingUsers.length === 0) {
-      // Seamless automatic migration for legacy users who already have data and enter using their old service password
-      const allRoles: RoleType[] = ['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'];
-      let matchedLegacyRole: RoleType | undefined;
-
-      if (expectedRole) {
-        if (verifyRolePin(expectedRole, cleanPassword)) {
-          matchedLegacyRole = expectedRole;
-        }
-      } else {
-        matchedLegacyRole = allRoles.find(r => verifyRolePin(r, cleanPassword));
-      }
-
-      if (matchedLegacyRole) {
-        // Ensure unique password rule is respected if another user already claimed that exact password
-        const passwordClaimed = accessRules.enforceUniquePassword
-          ? accessUsers.some(u => u.password === cleanPassword && u.username.toLowerCase() !== usernameKey)
-          : false;
-
-        if (!passwordClaimed) {
-          const now = new Date().toISOString();
-          const legacyProfile = schoolConfig.operatorProfiles?.[matchedLegacyRole];
-          const resolvedName =
-            legacyProfile?.nama && legacyProfile.nama.trim()
-              ? legacyProfile.nama.trim()
-              : cleanUsername;
-
-          const migratedUser: RegisteredAccessUser = {
-            id: `usr-legacy-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            namaLengkap: resolvedName,
-            username: cleanUsername,
-            role: matchedLegacyRole,
-            password: cleanPassword,
-            status: 'APPROVED',
-            createdAt: now,
-            approvedAt: now,
-            lastLoginAt: now,
-            passwordUpdatedAt: now,
-            passwordChangeHistory: [
-              {
-                changedAt: now,
-                source: 'LEGACY_MIGRATION',
-                newPassword: cleanPassword
-              }
-            ]
-          };
-
-          const nextUsers = [migratedUser, ...accessUsers];
-          setAccessUsers(nextUsers);
-          setTrackedUsername(migratedUser.username);
-          setCurrentUser(migratedUser);
-          setCurrentRole(migratedUser.role);
-          setRoleSubTab(migratedUser.role, 'tasks');
-          setActiveNavTab('dashboard');
-          syncAccessChangeNow(nextUsers);
-
-          return {
-            ok: true,
-            user: migratedUser,
-            message: `Selamat datang, ${migratedUser.namaLengkap}! Akun lama Anda pada layanan ${ROLE_LABELS_MAP[migratedUser.role]} otomatis disinkronkan dan tercatat di sistem Admin.`
-          };
-        }
-      }
-
-      return {
-        ok: false,
-        message: `Nama pengguna "@${cleanUsername}" belum terdaftar. Jika Anda pengguna lama, masukkan sandi layanan lama Anda; jika baru, silakan ajukan pendaftaran akun terlebih dahulu.`
-      };
-    }
-
-    let targetUser: RegisteredAccessUser | undefined;
-
-    if (expectedRole) {
-      if (accessRules.enforceSingleServicePerUser) {
-        const primary = matchingUsers[0];
-        if (primary.role !== expectedRole) {
-          return {
-            ok: false,
-            message: `Akses layanan ditolak! Pengguna "@${primary.username}" hanya dapat mengakses layanan ${ROLE_LABELS_MAP[primary.role]} dan tidak diperbolehkan masuk ke ${ROLE_LABELS_MAP[expectedRole]}.`
-          };
-        }
-      }
-      targetUser = matchingUsers.find(u => u.role === expectedRole);
-      if (!targetUser) {
-        return {
-          ok: false,
-          message: `Pengguna "@${cleanUsername}" tidak memiliki akun untuk layanan ${ROLE_LABELS_MAP[expectedRole]}.`
-        };
-      }
-    } else {
-      targetUser = matchingUsers.find(u => u.password === cleanPassword) || matchingUsers[0];
-    }
-
-    if (targetUser.status === 'REJECTED') {
-      return {
-        ok: false,
-        message: `Akun "@${targetUser.username}" telah ditolak oleh Admin dan tidak dapat masuk ke sistem.`
-      };
-    }
-
-    if (accessRules.requireAdminApproval && targetUser.status !== 'APPROVED') {
-      return {
-        ok: false,
-        message: `Akun "@${targetUser.username}" masih berstatus MENUNGGU PERSETUJUAN Admin. Setiap pengguna harus disetujui oleh Admin terlebih dahulu sebelum bisa masuk.`
-      };
-    }
-
-    if (targetUser.password !== cleanPassword) {
-      return {
-        ok: false,
-        message: `Sandi salah untuk nama pengguna "@${targetUser.username}".`
-      };
-    }
-
-    const now = new Date().toISOString();
-    const loggedInUser: RegisteredAccessUser = {
-      ...targetUser,
-      lastLoginAt: now
-    };
-
-    setAccessUsers(prev => prev.map(u => (u.id === targetUser!.id ? loggedInUser : u)));
+    const loggedInUser = res.data.user;
     setTrackedUsername(loggedInUser.username);
+    setTrackedUserAccount(loggedInUser);
     setCurrentUser(loggedInUser);
     setCurrentRole(loggedInUser.role);
     setRoleSubTab(loggedInUser.role, 'tasks');
     setActiveNavTab('dashboard');
+    setSessionExpiredNotice(null);
 
-    if (targetUser.mustChangePassword) {
-      return {
-        ok: true,
-        requiresPasswordChange: true,
-        message: `Selamat datang, ${loggedInUser.namaLengkap}! Anda masuk menggunakan sandi sementara. Silakan buat sandi baru Anda.`,
-        user: loggedInUser
-      };
-    }
-
+    await fetchLatestState();
     return {
       ok: true,
-      message: `Selamat datang, ${loggedInUser.namaLengkap}! Berhasil masuk ke layanan ${ROLE_LABELS_MAP[loggedInUser.role]}.`,
-      user: loggedInUser
+      user: loggedInUser,
+      requiresPasswordChange: Boolean(res.data.requiresPasswordChange),
+      message: res.data.message || `Selamat datang, ${loggedInUser.namaLengkap}!`
     };
   };
 
   const logoutAccessUser = () => {
+    storageService.setStaffToken(null);
     setCurrentUser(null);
     setCurrentRole(null);
     setActiveNavTab('dashboard');
+    setSessionExpiredNotice(null);
+    fetchLatestState();
   };
 
-  const approveAccessUser = (userId: string, assignedPassword?: string): AuthActionResult => {
-    const target = accessUsers.find(u => u.id === userId);
-    if (!target) {
-      return { ok: false, message: 'Data pengguna tidak ditemukan.' };
+  const requestPasswordReset = async (payload: { username: string; note?: string }): Promise<AuthActionResult> => {
+    const res = await storageService.authRequestReset(payload);
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: res.error || res.data?.message || 'Gagal mengirim permintaan reset sandi.'
+      };
     }
-
-    const finalPassword = (assignedPassword !== undefined ? assignedPassword : target.password).trim();
-    if (finalPassword.length < 4) {
-      return { ok: false, message: 'Sandi pengguna minimal 4 karakter.' };
-    }
-
-    const usernameKey = target.username.toLowerCase();
-
-    if (accessRules.enforceUniquePassword) {
-      const conflict = accessUsers.find(
-        u => u.id !== target.id && u.username.toLowerCase() !== usernameKey && u.password === finalPassword
-      );
-      if (conflict) {
-        return {
-          ok: false,
-          message: `Gagal menyetujui! Sandi "${finalPassword}" sudah digunakan oleh pengguna "@${conflict.username}". Setiap sandi hanya bisa dikaitkan dengan satu nama pengguna.`
-        };
-      }
-    }
-
-    if (accessRules.enforceSingleServicePerUser) {
-      const serviceConflict = accessUsers.find(
-        u => u.id !== target.id && u.username.toLowerCase() === usernameKey && u.status === 'APPROVED'
-      );
-      if (serviceConflict) {
-        return {
-          ok: false,
-          message: `Gagal menyetujui! Pengguna "@${target.username}" sudah disetujui pada layanan ${ROLE_LABELS_MAP[serviceConflict.role]}. Aturan 1 pengguna = 1 layanan sedang aktif.`
-        };
-      }
-    }
-
-    const updatedUser: RegisteredAccessUser = {
-      ...target,
-      password: finalPassword,
-      status: 'APPROVED',
-      approvedAt: new Date().toISOString()
-    };
-
-    const nextUsers = accessUsers.map(u => (u.id === userId ? updatedUser : u));
-    setAccessUsers(nextUsers);
-    if (currentUser?.id === userId) {
-      setCurrentUser(updatedUser);
-    }
-    syncAccessChangeNow(nextUsers);
-
+    setTrackedUsername(payload.username.trim());
     return {
       ok: true,
-      message: `Akun "@${target.username}" resmi disetujui untuk layanan ${ROLE_LABELS_MAP[target.role]}.`,
-      user: updatedUser
+      message: res.data?.message || 'Permintaan reset sandi berhasil dikirim ke Admin Database.'
     };
   };
 
-  const rejectAccessUser = (userId: string) => {
-    const now = new Date().toISOString();
-    const nextUsers = accessUsers.map(u =>
-      u.id === userId ? { ...u, status: 'REJECTED' as UserAccountStatus, rejectedAt: now } : u
-    );
-    setAccessUsers(nextUsers);
-    syncAccessChangeNow(nextUsers);
-    if (currentUser?.id === userId) {
-      logoutAccessUser();
+  const lookupTrackedAccount = async (username: string): Promise<AuthActionResult> => {
+    const clean = username.trim();
+    const res = await storageService.authStatusLookup(clean);
+    if (!res.ok || !res.data?.user) {
+      return {
+        ok: false,
+        message: res.error || `Nama pengguna "@${clean}" belum terdaftar di sistem.`
+      };
     }
-  };
-
-  const deleteAccessUser = (userId: string) => {
-    pendingDeletedAccessUserIdsRef.current = Array.from(
-      new Set([...pendingDeletedAccessUserIdsRef.current, userId])
-    );
-    const nextUsers = accessUsers.filter(u => u.id !== userId);
-    setAccessUsers(nextUsers);
-    storageService.deleteAccessUser(userId);
-    syncAccessChangeNow(nextUsers, { extraDeletedId: userId });
-    if (currentUser?.id === userId) {
-      logoutAccessUser();
-    }
-  };
-
-  const updateAccessUserPassword = (userId: string, newPassword: string): AuthActionResult => {
-    const target = accessUsers.find(u => u.id === userId);
-    if (!target) {
-      return { ok: false, message: 'Data pengguna tidak ditemukan.' };
-    }
-    const cleanPass = newPassword.trim();
-    if (cleanPass.length < 4) {
-      return { ok: false, message: 'Sandi baru minimal 4 karakter.' };
-    }
-
-    if (accessRules.enforceUniquePassword) {
-      const conflict = accessUsers.find(
-        u => u.id !== target.id && u.username.toLowerCase() !== target.username.toLowerCase() && u.password === cleanPass
-      );
-      if (conflict) {
-        return {
-          ok: false,
-          message: `Gagal memperbarui sandi! Sandi "${cleanPass}" sudah dipakai oleh pengguna "@${conflict.username}". Setiap sandi hanya bisa dikaitkan dengan satu nama pengguna.`
-        };
-      }
-    }
-
-    const now = new Date().toISOString();
-    const history = Array.isArray(target.passwordChangeHistory) ? target.passwordChangeHistory : [];
-    const updatedUser: RegisteredAccessUser = {
-      ...target,
-      password: cleanPass,
-      mustChangePassword: false,
-      resetRequestStatus: target.resetRequestStatus === 'RESET_ISSUED' ? 'COMPLETED' : target.resetRequestStatus,
-      passwordUpdatedAt: now,
-      passwordChangeHistory: [
-        {
-          changedAt: now,
-          source: target.resetRequestStatus === 'RESET_ISSUED' ? 'USER_AFTER_RESET' : 'USER_CHANGE',
-          newPassword: cleanPass
-        },
-        ...history
-      ]
-    };
-
-    const nextUsers = accessUsers.map(u => (u.id === userId ? updatedUser : u));
-    setAccessUsers(nextUsers);
-    if (currentUser?.id === userId) {
-      setCurrentUser(updatedUser);
-    }
-    syncAccessChangeNow(nextUsers);
-
+    setTrackedUsername(res.data.user.username);
+    setTrackedUserAccount(res.data.user);
     return {
       ok: true,
-      message: `Sandi baru untuk "@${target.username}" berhasil disimpan dan tercatat di sistem Admin.`,
-      user: updatedUser
+      user: res.data.user,
+      message: `Status akun "@${res.data.user.username}" ditemukan.`
     };
   };
 
-  const createAccessUserByAdmin = ({
-    namaLengkap,
-    username,
-    role,
-    password,
-    status = 'APPROVED'
-  }: {
+  const updateAccessUserPassword = async (userId: string, newPassword: string): Promise<AuthActionResult> => {
+    if (storageService.getAdminToken()) {
+      const res = await storageService.adminUserAction(userId, 'set-password', newPassword);
+      if (res.ok) {
+        await refreshAdminDashboard();
+        return { ok: true, user: res.data?.user, message: res.data?.message || 'Sandi akun diperbarui.' };
+      }
+      return { ok: false, message: res.error || 'Gagal memperbarui sandi akun.' };
+    }
+
+    const res = await storageService.authChangePassword(newPassword);
+    if (res.ok && res.data?.user) {
+      setCurrentUser(res.data.user);
+      setTrackedUserAccount(res.data.user);
+      return { ok: true, user: res.data.user, message: res.data.message || 'Sandi baru berhasil disimpan.' };
+    }
+    return { ok: false, message: res.error || 'Gagal memperbarui sandi.' };
+  };
+
+  const completePasswordResetWithNewPassword = async (
+    _userId: string,
+    newPassword: string
+  ): Promise<AuthActionResult> => {
+    const res = await storageService.authChangePassword(newPassword);
+    if (res.ok && res.data?.user) {
+      setCurrentUser(res.data.user);
+      setTrackedUserAccount(res.data.user);
+      return {
+        ok: true,
+        user: res.data.user,
+        message: res.data.message || 'Sandi baru berhasil disimpan!'
+      };
+    }
+    return { ok: false, message: res.error || 'Gagal menyimpan sandi baru.' };
+  };
+
+  // Admin Console Auth & Governance Actions
+  const claimAdminPassword = async (password: string): Promise<AuthActionResult> => {
+    const res = await storageService.adminAuthClaim(password);
+    if (!res.ok) {
+      return { ok: false, message: res.error || 'Gagal menetapkan sandi Admin Utama.' };
+    }
+    setIsAdminAuthenticated(true);
+    setAdminAuthStatus(prev => ({ ...prev, isClaimed: true, setupRequired: false }));
+    setSessionExpiredNotice(null);
+    await refreshAdminDashboard();
+    return { ok: true, message: res.data?.message || 'Sandi Admin Utama aktif!' };
+  };
+
+  const loginAdminSession = async (password: string): Promise<AuthActionResult> => {
+    const res = await storageService.adminAuthLogin(password);
+    if (!res.ok) {
+      if (res.data?.setupRequired) {
+        setAdminAuthStatus(prev => ({ ...prev, setupRequired: true, isClaimed: false }));
+      }
+      return { ok: false, message: res.error || 'Sandi Admin tidak sesuai!' };
+    }
+    setIsAdminAuthenticated(true);
+    setSessionExpiredNotice(null);
+    await refreshAdminDashboard();
+    return { ok: true, message: res.data?.message || 'Berhasil masuk ke Database Admin Satu Pintu.' };
+  };
+
+  const logoutAdminSession = () => {
+    storageService.setAdminToken(null);
+    setIsAdminAuthenticated(false);
+    fetchLatestState();
+  };
+
+  const approveAccessUser = async (userId: string, assignedPassword?: string): Promise<AuthActionResult> => {
+    const res = await storageService.adminUserAction(userId, 'approve', assignedPassword);
+    if (res.ok) {
+      await refreshAdminDashboard();
+      return { ok: true, user: res.data?.user, message: res.data?.message || 'Akun disetujui.' };
+    }
+    return { ok: false, message: res.error || 'Gagal menyetujui akun.' };
+  };
+
+  const rejectAccessUser = async (userId: string): Promise<AuthActionResult> => {
+    const res = await storageService.adminUserAction(userId, 'reject');
+    if (res.ok) {
+      await refreshAdminDashboard();
+      return { ok: true, user: res.data?.user, message: res.data?.message || 'Akun ditolak.' };
+    }
+    return { ok: false, message: res.error || 'Gagal menolak akun.' };
+  };
+
+  const deleteAccessUser = async (userId: string): Promise<AuthActionResult> => {
+    const ok = await storageService.deleteAccessUser(userId);
+    if (ok) {
+      await refreshAdminDashboard();
+      return { ok: true, message: 'Akun dipindahkan ke Arsip Sementara (Soft-Delete).' };
+    }
+    return { ok: false, message: 'Gagal menghapus akun.' };
+  };
+
+  const createAccessUserByAdmin = async (payload: {
     namaLengkap: string;
     username: string;
     role: RoleType;
     password: string;
     status?: UserAccountStatus;
-  }): AuthActionResult => {
-    const cleanName = namaLengkap.trim();
-    const cleanUsername = username.trim();
-    const cleanPass = password.trim();
-    const usernameKey = cleanUsername.toLowerCase();
-
-    if (!cleanName || !cleanUsername || !cleanPass) {
-      return { ok: false, message: 'Nama lengkap, username, dan sandi wajib diisi.' };
+  }): Promise<AuthActionResult> => {
+    const res = await storageService.adminCreateUser(payload);
+    if (res.ok) {
+      await refreshAdminDashboard();
+      return { ok: true, user: res.data?.user, message: res.data?.message || 'Pengguna berhasil ditambahkan.' };
     }
-    if (cleanPass.length < 4) {
-      return { ok: false, message: 'Sandi minimal 4 karakter.' };
-    }
-
-    if (accessRules.enforceSingleServicePerUser) {
-      const existing = accessUsers.find(u => u.username.toLowerCase() === usernameKey);
-      if (existing) {
-        return {
-          ok: false,
-          message: `Username "@${existing.username}" sudah terdaftar untuk layanan ${ROLE_LABELS_MAP[existing.role]}. Aturan 1 pengguna = 1 layanan aktif.`
-        };
-      }
-    } else {
-      const duplicateRole = accessUsers.find(u => u.username.toLowerCase() === usernameKey && u.role === role);
-      if (duplicateRole) {
-        return {
-          ok: false,
-          message: `Username "@${duplicateRole.username}" sudah ada pada layanan ${ROLE_LABELS_MAP[role]}.`
-        };
-      }
-    }
-
-    if (accessRules.enforceUniquePassword) {
-      const passConflict = accessUsers.find(
-        u => u.password === cleanPass && u.username.toLowerCase() !== usernameKey
-      );
-      if (passConflict) {
-        return {
-          ok: false,
-          message: `Sandi "${cleanPass}" sudah digunakan oleh pengguna "@${passConflict.username}". Nonaktifkan aturan sandi unik jika ingin mengizinkan sandi ganda.`
-        };
-      }
-    }
-
-    const created: RegisteredAccessUser = {
-      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      namaLengkap: cleanName,
-      username: cleanUsername,
-      role,
-      password: cleanPass,
-      status,
-      createdAt: new Date().toISOString(),
-      approvedAt: status === 'APPROVED' ? new Date().toISOString() : undefined
-    };
-
-    const nextUsers = [created, ...accessUsers];
-    setAccessUsers(nextUsers);
-    syncAccessChangeNow(nextUsers);
-
-    return {
-      ok: true,
-      message: `Pengguna "@${cleanUsername}" berhasil ditambahkan.`,
-      user: created
-    };
+    return { ok: false, message: res.error || 'Gagal menambahkan pengguna.' };
   };
 
-  const updateAccessRules = (updates: Partial<AccessSecurityRules>) => {
-    const nextRules = { ...accessRules, ...updates };
-    setAccessRules(nextRules);
-    syncAccessChangeNow(accessUsers, { accessRules: nextRules });
+  const updateAccessRules = async (updates: Partial<AccessSecurityRules>): Promise<AuthActionResult> => {
+    const res = await storageService.adminUpdateSecurityRules(updates);
+    if (res.ok) {
+      if (res.data?.accessRules) setAccessRules(res.data.accessRules);
+      await refreshAdminDashboard();
+      return { ok: true, message: 'Aturan keamanan akses diperbarui.' };
+    }
+    return { ok: false, message: res.error || 'Gagal memperbarui aturan keamanan.' };
   };
 
-  const verifyAdminPassword = (password: string): boolean => {
-    return password.trim() === adminPassword.trim();
+  const updateAdminPassword = async (newPassword: string): Promise<AuthActionResult> => {
+    const res = await storageService.adminAuthChangePassword(newPassword);
+    if (res.ok) {
+      await refreshAdminDashboard();
+      return { ok: true, message: res.data?.message || 'Sandi Admin berhasil diperbarui.' };
+    }
+    return { ok: false, message: res.error || 'Gagal memperbarui sandi Admin.' };
   };
 
-  const updateAdminPassword = (newPassword: string): AuthActionResult => {
-    const clean = newPassword.trim();
-    if (clean.length < 4) {
-      return { ok: false, message: 'Sandi Admin minimal 4 karakter.' };
+  const issueResetPasswordByAdmin = async (
+    userId: string,
+    tempResetPassword: string
+  ): Promise<AuthActionResult> => {
+    const res = await storageService.adminUserAction(userId, 'reset-password', tempResetPassword);
+    if (res.ok) {
+      await refreshAdminDashboard();
+      return { ok: true, user: res.data?.user, message: res.data?.message || 'Sandi reset diterbitkan.' };
     }
-    setAdminPassword(clean);
-    syncAccessChangeNow(accessUsers, { adminPassword: clean });
-    return { ok: true, message: 'Sandi Admin berhasil diperbarui.' };
-  };
-
-  const requestPasswordReset = ({
-    username,
-    note
-  }: {
-    username: string;
-    note?: string;
-  }): AuthActionResult => {
-    const cleanUsername = username.trim();
-    const usernameKey = cleanUsername.toLowerCase();
-    if (!cleanUsername) {
-      return { ok: false, message: 'Masukkan nama pengguna (username) Anda.' };
-    }
-
-    const matches = accessUsers.filter(u => u.username.toLowerCase() === usernameKey);
-    if (matches.length === 0) {
-      return {
-        ok: false,
-        message: `Nama pengguna "@${cleanUsername}" tidak ditemukan di sistem.`
-      };
-    }
-
-    const activeMatch = matches.find(u => u.status !== 'REJECTED');
-    if (!activeMatch) {
-      return {
-        ok: false,
-        message: `Akun "@${cleanUsername}" berstatus DITOLAK oleh Admin.`
-      };
-    }
-
-    const now = new Date().toISOString();
-    const nextUsers = accessUsers.map(u =>
-      u.username.toLowerCase() === usernameKey && u.status !== 'REJECTED'
-        ? {
-            ...u,
-            resetRequestStatus: 'REQUESTED' as const,
-            resetRequestedAt: now,
-            resetRequestNote: note?.trim() || 'Lupa sandi, mohon reset sandi.'
-          }
-        : u
-    );
-    setAccessUsers(nextUsers);
-    setTrackedUsername(activeMatch.username);
-    syncAccessChangeNow(nextUsers);
-
-    return {
-      ok: true,
-      message: `Permintaan reset sandi untuk akun "@${activeMatch.username}" telah dikirim ke Admin. Notifikasi sandi reset akan muncul otomatis di halaman ini setelah diproses Admin.`
-    };
-  };
-
-  const issueResetPasswordByAdmin = (userId: string, tempResetPassword: string): AuthActionResult => {
-    const target = accessUsers.find(u => u.id === userId);
-    if (!target) {
-      return { ok: false, message: 'Data pengguna tidak ditemukan.' };
-    }
-
-    const cleanTemp = tempResetPassword.trim();
-    if (cleanTemp.length < 4) {
-      return { ok: false, message: 'Sandi reset sementara minimal 4 karakter.' };
-    }
-
-    if (accessRules.enforceUniquePassword) {
-      const conflict = accessUsers.find(
-        u => u.id !== target.id && u.username.toLowerCase() !== target.username.toLowerCase() && u.password === cleanTemp
-      );
-      if (conflict) {
-        return {
-          ok: false,
-          message: `Sandi reset "${cleanTemp}" sudah digunakan oleh pengguna "@${conflict.username}". Gunakan kombinasi sandi reset unik lainnya.`
-        };
-      }
-    }
-
-    const now = new Date().toISOString();
-    const history = Array.isArray(target.passwordChangeHistory) ? target.passwordChangeHistory : [];
-    const updatedUser: RegisteredAccessUser = {
-      ...target,
-      password: cleanTemp,
-      mustChangePassword: true,
-      resetRequestStatus: 'RESET_ISSUED',
-      resetIssuedAt: now,
-      passwordChangeHistory: [
-        {
-          changedAt: now,
-          source: 'RESET_BY_ADMIN',
-          newPassword: cleanTemp
-        },
-        ...history
-      ]
-    };
-
-    const nextUsers = accessUsers.map(u => (u.id === userId ? updatedUser : u));
-    setAccessUsers(nextUsers);
-    syncAccessChangeNow(nextUsers);
-    if (currentUser?.id === userId) {
-      logoutAccessUser();
-    }
-
-    return {
-      ok: true,
-      message: `Sandi reset sementara "${cleanTemp}" telah dikirim ke notifikasi akun "@${target.username}". Pengguna dapat melihatnya di pesan notifikasi akun dan mengganti sandi baru setelah masuk ke layanan.`,
-      user: updatedUser
-    };
-  };
-
-  const completePasswordResetWithNewPassword = (userId: string, newPassword: string): AuthActionResult => {
-    const target = accessUsers.find(u => u.id === userId);
-    if (!target) {
-      return { ok: false, message: 'Akun pengguna tidak ditemukan.' };
-    }
-
-    const cleanNew = newPassword.trim();
-    if (cleanNew.length < 4) {
-      return { ok: false, message: 'Sandi baru minimal 4 karakter.' };
-    }
-
-    if (cleanNew === target.password) {
-      return {
-        ok: false,
-        message: 'Sandi baru tidak boleh sama dengan sandi reset sementara. Buat sandi baru Anda sendiri.'
-      };
-    }
-
-    if (accessRules.enforceUniquePassword) {
-      const conflict = accessUsers.find(
-        u => u.id !== target.id && u.username.toLowerCase() !== target.username.toLowerCase() && u.password === cleanNew
-      );
-      if (conflict) {
-        return {
-          ok: false,
-          message: `Sandi baru ditolak! Sandi "${cleanNew}" sudah digunakan oleh pengguna "@${conflict.username}". Pilih sandi unik yang belum digunakan siapa pun.`
-        };
-      }
-    }
-
-    const now = new Date().toISOString();
-    const history = Array.isArray(target.passwordChangeHistory) ? target.passwordChangeHistory : [];
-    const updatedUser: RegisteredAccessUser = {
-      ...target,
-      password: cleanNew,
-      mustChangePassword: false,
-      resetRequestStatus: 'COMPLETED',
-      passwordUpdatedAt: now,
-      lastLoginAt: now,
-      passwordChangeHistory: [
-        {
-          changedAt: now,
-          source: 'USER_AFTER_RESET',
-          newPassword: cleanNew
-        },
-        ...history
-      ]
-    };
-
-    const nextUsers = accessUsers.map(u => (u.id === userId ? updatedUser : u));
-    setAccessUsers(nextUsers);
-    setTrackedUsername(updatedUser.username);
-    setCurrentUser(updatedUser);
-    setCurrentRole(updatedUser.role);
-    setRoleSubTab(updatedUser.role, 'tasks');
-    setActiveNavTab('dashboard');
-    syncAccessChangeNow(nextUsers);
-
-    return {
-      ok: true,
-      message: `Sandi baru Anda berhasil disimpan dan tercatat di Admin. Selamat datang, ${updatedUser.namaLengkap}!`,
-      user: updatedUser
-    };
+    return { ok: false, message: res.error || 'Gagal menerbitkan sandi reset.' };
   };
 
   return (
@@ -2983,6 +2217,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateArchive,
         deleteArchive,
         archiveReport,
+        beritaAcaraHistory,
+        saveBeritaAcaraRecord,
+        deleteBeritaAcaraRecord,
         schoolConfig,
         effectiveSchoolConfig,
         hasCustomLetterhead,
@@ -3018,6 +2255,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         verifyRolePin,
         updateRolePin,
         accessUsers,
+        approvedRoleCounts,
         accessRules,
         currentUser,
         setCurrentUser,
@@ -3030,18 +2268,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateAccessUserPassword,
         createAccessUserByAdmin,
         updateAccessRules,
-        verifyAdminPassword,
         updateAdminPassword,
-        adminPassword,
         requestPasswordReset,
         issueResetPasswordByAdmin,
         completePasswordResetWithNewPassword,
+        lookupTrackedAccount,
         trackedUsername,
         setTrackedUsername,
+        trackedUserAccount,
         refreshAccessState,
         syncStatus,
         serverStorageMode,
-        cloudPersistent
+        cloudPersistent,
+        isInitialLoading,
+        connectionError,
+        retryConnection,
+        siteSettings,
+        databaseCapacitySummary,
+        customDatabases,
+        customDatabaseRecords,
+        staffSubmissions,
+        isAdminAuthenticated,
+        adminAuthStatus,
+        adminDashboardData,
+        refreshAdminAuthStatus,
+        claimAdminPassword,
+        loginAdminSession,
+        logoutAdminSession,
+        refreshAdminDashboard,
+        actionFeedback,
+        clearActionFeedback,
+        sessionExpiredNotice,
+        clearSessionExpiredNotice
       }}
     >
       {children}
@@ -3050,9 +2308,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 };
 
 export const useApp = () => {
-  const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
-  }
-  return context;
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useApp harus digunakan di dalam AppProvider');
+  return ctx;
 };

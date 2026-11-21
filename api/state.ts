@@ -1,36 +1,22 @@
-import { applyCorsHeaders, applyStateUpdate, getStorageInfo, readDb } from '../src/server/cloudDb.mjs';
-
-function parseBody(raw: any): any {
-  if (!raw) return {};
-  if (typeof raw === 'string') {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return {};
-    }
-  }
-  return raw;
-}
+import {
+  applyCorsHeaders,
+  applyStateUpdate,
+  buildAdminStateResponse,
+  getStorageInfo,
+  readDb
+} from '../src/server/cloudDb.mjs';
+import { handleGetState, parseJsonBody, requireAdminOrReject } from '../src/server/adminApiHandlers.mjs';
+import { sanitizeAndInspectPayload } from '../src/server/dbValidator.mjs';
 
 export default async function handler(req: any, res: any) {
-  applyCorsHeaders(res);
+  applyCorsHeaders(req, res);
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
 
-  const storageInfo = getStorageInfo();
-
   if (req.method === 'GET') {
     try {
-      const data = await readDb();
-      if (!data) {
-        return res.status(200).json({ initialized: false, ...storageInfo });
-      }
-      return res.status(200).json({
-        initialized: true,
-        data,
-        ...storageInfo
-      });
+      return await handleGetState(req, res);
     } catch (err) {
       console.error('GET /api/state error:', err);
       return res.status(500).json({ error: 'Gagal membaca basis data cloud' });
@@ -39,13 +25,22 @@ export default async function handler(req: any, res: any) {
 
   if (req.method === 'POST') {
     try {
-      const body = parseBody(req.body);
-      const result = await applyStateUpdate(body);
+      const db = await readDb();
+      const adminCtx = await requireAdminOrReject(req, res, db, 'state');
+      if (!adminCtx) return;
+
+      const safeCheck = sanitizeAndInspectPayload(parseJsonBody(req.body));
+      if (!safeCheck.valid) {
+        return res.status(400).json({ error: safeCheck.error });
+      }
+
+      const storageInfo = getStorageInfo();
+      const result = await applyStateUpdate(safeCheck.value, 'ADMIN_UTAMA');
       if (result.ok) {
         return res.status(200).json({
           success: true,
           lastUpdated: result.updated.lastUpdated,
-          data: result.updated,
+          data: buildAdminStateResponse(result.updated),
           ...storageInfo
         });
       }

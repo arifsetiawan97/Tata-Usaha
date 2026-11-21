@@ -447,7 +447,8 @@ export interface AccessSecurityRules {
 export interface PasswordChangeLogEntry {
   changedAt: string;
   source: 'USER_CHANGE' | 'RESET_BY_ADMIN' | 'USER_AFTER_RESET' | 'ADMIN_CREATE' | 'LEGACY_MIGRATION';
-  newPassword: string;
+  newPassword?: string;
+  maskedPreview?: string;
 }
 
 export interface RegisteredAccessUser {
@@ -455,7 +456,9 @@ export interface RegisteredAccessUser {
   namaLengkap: string;
   username: string;
   role: RoleType;
-  password: string;
+  password?: string;
+  tempResetCode?: string;
+  hasPassword?: boolean;
   status: UserAccountStatus;
   createdAt: string;
   approvedAt?: string;
@@ -476,3 +479,134 @@ export interface AuthActionResult {
   user?: RegisteredAccessUser;
   requiresPasswordChange?: boolean;
 }
+
+export interface SiteSettings {
+  welcomeHeadline: string;
+  welcomeSubheadline?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export type DatabaseStatus = 'ACTIVE' | 'ARCHIVED' | 'LOCKED';
+export type DatabaseAlertLevel = 'NORMAL' | 'WARNING' | 'CRITICAL' | 'FULL';
+
+export interface DatabaseFieldDef {
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'date' | 'boolean' | 'select';
+  required: boolean;
+}
+
+export interface DatabaseModuleMetrics {
+  code: string;
+  name: string;
+  module: string;
+  description: string;
+  isBuiltin: boolean;
+  status: DatabaseStatus;
+  recordCount: number;
+  maxRecords: number;
+  remainingRecords: number;
+  usedBytes: number;
+  limitBytes: number;
+  remainingBytes: number;
+  percentUsed: number;
+  alertLevel: DatabaseAlertLevel;
+  fields?: DatabaseFieldDef[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DatabaseMetricsSummary {
+  totalUsedBytes: number;
+  totalQuotaBytes: number;
+  totalRemainingBytes: number;
+  totalPercentUsed: number;
+  totalRecords: number;
+  globalAlertLevel: DatabaseAlertLevel;
+  effectiveAlertLevel: DatabaseAlertLevel;
+  databases: DatabaseModuleMetrics[];
+}
+
+export interface DatabaseCapacityQuickSummary {
+  totalUsedBytes: number;
+  totalQuotaBytes: number;
+  totalPercentUsed: number;
+  effectiveAlertLevel: DatabaseAlertLevel;
+}
+
+export interface SoftDeletedItem {
+  trashId: string;
+  sourceCollection: string;
+  isCustomDb?: boolean;
+  originalId: string;
+  itemTitle: string;
+  itemSnapshot: any;
+  deletedAt: string;
+  deletedBy: string;
+  reason?: string;
+}
+
+export interface DatabaseBackupMeta {
+  id: string;
+  label: string;
+  type: 'MANUAL' | 'SCHEDULED' | 'PRE_MIGRATION' | 'PRE_RESTORE';
+  createdAt: string;
+  createdBy: string;
+  sizeBytes: number;
+  totalRecords: number;
+  checksum: string;
+}
+
+export interface BackupScheduleConfig {
+  enabled: boolean;
+  intervalHours: number;
+  lastBackupAt?: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  actor: string;
+  actorRole: string;
+  action: string;
+  targetDatabase: string;
+  targetId?: string;
+  status: 'SUCCESS' | 'DENIED' | 'FAILED';
+  detail: string;
+}
+
+export interface StaffSubmissionItem {
+  id: string;
+  submittedBy: string;
+  submittedByName?: string;
+  role: RoleType;
+  targetCollection: string;
+  operationType: 'CREATE' | 'UPDATE';
+  payload: any;
+  note?: string;
+  status: 'PENDING_ADMIN_REVIEW' | 'APPROVED_APPLIED' | 'REJECTED';
+  rejectReason?: string;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+}
+
+export interface MigrationReport {
+  id: string;
+  sourceName: string;
+  targetCollection: string;
+  duplicateStrategy: 'SKIP' | 'OVERWRITE' | 'RENAME_ID';
+  totalInput: number;
+  migratedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  errors: string[];
+  migratedIds: string[];
+  preMigrationSnapshotId: string;
+  rolledBack: boolean;
+  rolledBackAt?: string;
+  executedAt: string;
+  executedBy: string;
+}
+

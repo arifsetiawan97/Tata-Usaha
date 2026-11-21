@@ -1644,7 +1644,7 @@
       "createdAt": "2026-09-01"
     }
   ],
-  "lastUpdated": "2026-11-19T01:58:00.581Z",
+  "lastUpdated": "2026-11-21T15:54:15.010Z",
   "libraryBooks": [
     {
       "id": "bk-2026-07-01",
@@ -1914,11 +1914,33 @@
   },
   "accessUsers": [
     {
+      "id": "usr-legacy-1795134200714-abukf",
+      "namaLengkap": "KHODIJAH, A.Ma.",
+      "username": "khodijah",
+      "role": "TU",
+      "passwordHash": "scrypt$4b98534022842f7149d33fdf32133763$c2c26057a791053bd4a85c759ff77fdf9ba68a6d28714783855b1387434830ba2b82dafb997276730e6e5883080e61c2aaa6934d036e5ea451abbd946741d609",
+      "passwordFingerprint": "4f43cf38ac5d3f8efb61cd7ec1022ddbb4ddbd3c027bfda51a1f38f7081db240",
+      "status": "APPROVED",
+      "createdAt": "2026-11-20T00:23:20.714Z",
+      "approvedAt": "2026-11-20T00:23:20.714Z",
+      "lastLoginAt": "2026-11-20T00:23:20.714Z",
+      "mustChangePassword": false,
+      "passwordUpdatedAt": "2026-11-20T00:23:20.714Z",
+      "passwordChangeHistory": [
+        {
+          "changedAt": "2026-11-20T00:23:20.714Z",
+          "source": "LEGACY_MIGRATION",
+          "maskedPreview": "••••••"
+        }
+      ]
+    },
+    {
       "id": "usr-legacy-1794964826881-nlsu3",
       "namaLengkap": "ARIF SETIAWAN, SE",
       "username": "arif setiawan",
       "role": "PERPUS",
-      "password": "2104",
+      "passwordHash": "scrypt$85900efd8693e4ec2c503609fc278646$5b792cb7130437d075444ba6833dc5b94edb5beafec783de88862da2c2d1ed086cf96ab131399d8be180ab2e3180549464d5167799f05a41d28b5e29f9d01e14",
+      "passwordFingerprint": "8738aeefe738af103e36641a39a6e7a456926e201a803e8206e9def280723e2e",
       "status": "APPROVED",
       "createdAt": "2026-11-18T01:20:26.877Z",
       "approvedAt": "2026-11-18T01:20:26.877Z",
@@ -1929,7 +1951,7 @@
         {
           "changedAt": "2026-11-18T01:20:26.877Z",
           "source": "LEGACY_MIGRATION",
-          "newPassword": "2104"
+          "maskedPreview": "••••••"
         }
       ]
     }
@@ -1939,6 +1961,280 @@
     "enforceUniquePassword": true,
     "enforceSingleServicePerUser": true
   },
-  "adminPassword": "admin123",
-  "deletedAccessUserIds": []
+  "deletedAccessUserIds": [],
+  "serverSecurityPepper": "ccf853d4bdae8bb062dc419bb09426faf84fd06d4e461171892b3e9135d7a627",
+  "adminCredentialHash": "",
+  "beritaAcaraHistory": [],
+  "customDatabaseRecords": {},
+  "databaseRegistry": [
+    {
+      "code": "tasks",
+      "name": "Jurnal Tugas Harian",
+      "module": "Semua Layanan Operasional",
+      "description": "Log tugas pokok & tambahan seluruh operator (TU, Penjaga, Service, Perpus, Lab IPA).",
+      "capacityLimitBytes": 1048576,
+      "maxRecords": 5000,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    },
+    {
+      "code": "inventories",
+      "name": "Inventaris Sarpras",
+      "module": "Sarana & Prasarana",
+      "description": "Daftar inventaris barang, kondisi, lokasi penyimpanan, dan tahun pengadaan.",
+      "capacityLimitBytes": 524288,
+      "maxRecords": 3000,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    },
+    {
+      "code": "monthlyReports",
+      "name": "Laporan Bulanan",
+      "module": "Pelaporan Bulanan",
+      "description": "Rekapitulasi kinerja bulanan, capaian, kendala, dan solusi tiap layanan.",
+      "capacityLimitBytes": 524288,
+      "maxRecords": 1000,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    },
+    {
+      "code": "annualReports",
+      "name": "Laporan Tahunan",
+      "module": "Pelaporan Tahunan",
+      "description": "Ringkasan eksekutif tahunan, milestone, dan rekomendasi strategis.",
+      "capacityLimitBytes": 262144,
+      "maxRecords": 300,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    },
+    {
+      "code": "archives",
+      "name": "Arsip Dokumen Resmi",
+      "module": "Kearsipan & Pengesahan",
+      "description": "Snapshot dokumen resmi yang telah disahkan beserta nomor registrasi.",
+      "capacityLimitBytes": 1048576,
+      "maxRecords": 1500,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    },
+    {
+      "code": "libraryBooks",
+      "name": "Koleksi Buku Perpustakaan",
+      "module": "Layanan Perpustakaan",
+      "description": "Katalog buku induk, klasifikasi DDC, stok eksemplar, dan kondisi.",
+      "capacityLimitBytes": 524288,
+      "maxRecords": 5000,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    },
+    {
+      "code": "libraryMembers",
+      "name": "Anggota Perpustakaan",
+      "module": "Layanan Perpustakaan",
+      "description": "Daftar anggota aktif (siswa, pendidik, tendik) beserta jenis kelamin.",
+      "capacityLimitBytes": 262144,
+      "maxRecords": 3000,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    },
+    {
+      "code": "beritaAcaraHistory",
+      "name": "Riwayat Berita Acara & Surat TU",
+      "module": "Tata Usaha (Migrasi Terpusat)",
+      "description": "Arsip terpusat seluruh Berita Acara & Surat Pengantar Resmi (sebelumnya tersimpan lokal).",
+      "capacityLimitBytes": 524288,
+      "maxRecords": 1500,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    },
+    {
+      "code": "customCategories",
+      "name": "Kategori Tugas Kustom",
+      "module": "Pengaturan Tupoksi",
+      "description": "Kategori tugas pokok & tambahan khusus per satuan pendidikan.",
+      "capacityLimitBytes": 131072,
+      "maxRecords": 500,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    },
+    {
+      "code": "accessUsers",
+      "name": "Akun & Hak Akses Pengguna",
+      "module": "Keamanan & RBAC Admin",
+      "description": "Data akun terdaftar, status persetujuan, peran layanan, dan riwayat sandi terenkripsi.",
+      "capacityLimitBytes": 262144,
+      "maxRecords": 1000,
+      "isBuiltin": true,
+      "status": "ACTIVE",
+      "fields": [],
+      "createdAt": "2026-11-21T15:54:06.803Z",
+      "updatedAt": "2026-11-21T15:54:06.803Z"
+    }
+  ],
+  "databaseQuotaBytes": 5242880,
+  "siteSettings": {
+    "welcomeHeadline": "SELAMAT DATANG OPERATOR LAYANAN OPERASIONAL",
+    "welcomeSubheadline": "Masuk ke layanan sesuai bidang tugas Anda, pantau status akun, dan kirim laporan operasional terpusat satu pintu.",
+    "updatedAt": "2026-11-21T15:54:06.803Z",
+    "updatedBy": "Sistem"
+  },
+  "softDeletedItems": [],
+  "backups": [],
+  "backupSchedule": {
+    "enabled": true,
+    "intervalHours": 24,
+    "lastBackupAt": ""
+  },
+  "auditLogs": [
+    {
+      "id": "aud-1795276455010-2p4qd",
+      "timestamp": "2026-11-21T15:54:15.010Z",
+      "actor": "114.10.104.114",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "state",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (POST /api/state)."
+    },
+    {
+      "id": "aud-1795276454884-ugx3c",
+      "timestamp": "2026-11-21T15:54:14.884Z",
+      "actor": "114.10.104.114",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "state",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (POST /api/state)."
+    },
+    {
+      "id": "aud-1795276454361-7dx66",
+      "timestamp": "2026-11-21T15:54:14.361Z",
+      "actor": "114.10.104.114",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "state",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (POST /api/state)."
+    },
+    {
+      "id": "aud-1795276453790-4rcod",
+      "timestamp": "2026-11-21T15:54:13.790Z",
+      "actor": "127.0.0.1",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "admin/dashboard",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (GET /api/admin/dashboard)."
+    },
+    {
+      "id": "aud-1795276453772-axko8",
+      "timestamp": "2026-11-21T15:54:13.772Z",
+      "actor": "127.0.0.1",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "crud/tasks",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (DELETE /api/crud/tasks/123)."
+    },
+    {
+      "id": "aud-1795276453755-z69as",
+      "timestamp": "2026-11-21T15:54:13.755Z",
+      "actor": "127.0.0.1",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "crud/tasks",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (POST /api/crud/tasks)."
+    },
+    {
+      "id": "aud-1795276453734-1w27w",
+      "timestamp": "2026-11-21T15:54:13.734Z",
+      "actor": "127.0.0.1",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "state",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (POST /api/state)."
+    },
+    {
+      "id": "aud-1795276450327-lbvcm",
+      "timestamp": "2026-11-21T15:54:10.327Z",
+      "actor": "114.10.104.114",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "state",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (POST /api/state)."
+    },
+    {
+      "id": "aud-1795276449859-pxdjl",
+      "timestamp": "2026-11-21T15:54:09.859Z",
+      "actor": "114.10.104.114",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "state",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (POST /api/state)."
+    },
+    {
+      "id": "aud-1795276449755-tnpti",
+      "timestamp": "2026-11-21T15:54:09.755Z",
+      "actor": "114.10.104.114",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "state",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (POST /api/state)."
+    },
+    {
+      "id": "aud-1795276449285-dh4x7",
+      "timestamp": "2026-11-21T15:54:09.285Z",
+      "actor": "114.10.104.114",
+      "actorRole": "PUBLIC",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "targetDatabase": "state",
+      "targetId": "-",
+      "status": "DENIED",
+      "detail": "Percobaan akses endpoint Admin ditolak (POST /api/state)."
+    }
+  ],
+  "staffSubmissions": [],
+  "migrationLogs": []
 }

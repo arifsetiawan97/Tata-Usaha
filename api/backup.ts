@@ -1,16 +1,17 @@
-import { applyCorsHeaders, readDb } from '../src/server/cloudDb.mjs';
+import { applyCorsHeaders } from '../src/server/cloudDb.mjs';
+import { handleProtectedBackupDownload } from '../src/server/adminApiHandlers.mjs';
 
 export default async function handler(req: any, res: any) {
-  applyCorsHeaders(res);
+  applyCorsHeaders(req, res);
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   try {
-    const data = await readDb();
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', 'attachment; filename="backup-siops-sekolah.json"');
-    return res.status(200).send(JSON.stringify(data || {}, null, 2));
+    return await handleProtectedBackupDownload(req, res);
   } catch (err) {
     console.error('GET /api/backup error:', err);
     return res.status(500).json({ error: 'Gagal membuat file backup' });

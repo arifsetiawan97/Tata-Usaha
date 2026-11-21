@@ -11,6 +11,7 @@ import { InventoryTable } from './components/common/InventoryTable';
 import { DocumentArchiveView } from './components/archive/DocumentArchiveView';
 import { AiAssistantModal } from './components/common/AiAssistantModal';
 import { AdminAccessPanelModal } from './components/common/AdminAccessPanelModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Bot, Sparkles } from 'lucide-react';
 
 function MainLayout() {
@@ -128,7 +129,7 @@ function MainLayout() {
       >
         <Bot className="w-5 h-5 text-amber-300" />
         <span className="text-xs tracking-wide">Asisten AI SI-OPS</span>
-        <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
       </button>
 
       {/* Global AI Assistant Modal */}
@@ -149,10 +150,21 @@ function MainLayout() {
   );
 }
 
+function SafeAppShell() {
+  const { setCurrentRole } = useApp();
+  return (
+    <ErrorBoundary onResetHome={() => setCurrentRole(null)}>
+      <MainLayout />
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
-    <AppProvider>
-      <MainLayout />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <SafeAppShell />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

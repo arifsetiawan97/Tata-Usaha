@@ -12,8 +12,6 @@ export const DEFAULT_ACCESS_RULES: AccessSecurityRules = {
   enforceSingleServicePerUser: true
 };
 
-export const DEFAULT_ADMIN_PASSWORD = 'admin123';
-
 const VALID_ROLES: RoleType[] = ['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'];
 const VALID_STATUSES: UserAccountStatus[] = ['PENDING', 'APPROVED', 'REJECTED'];
 
@@ -43,13 +41,13 @@ export function mergePasswordHistory(
   const combined = [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])];
   for (const entry of combined) {
     if (!entry || typeof entry !== 'object') continue;
-    if (!entry.changedAt || !entry.newPassword) continue;
-    const key = `${entry.changedAt}::${entry.source || 'USER_CHANGE'}::${entry.newPassword}`;
+    if (!entry.changedAt) continue;
+    const key = `${entry.changedAt}::${entry.source || 'USER_CHANGE'}`;
     if (!map.has(key)) {
       map.set(key, {
         changedAt: entry.changedAt,
         source: entry.source || 'USER_CHANGE',
-        newPassword: String(entry.newPassword)
+        maskedPreview: entry.maskedPreview || '••••••'
       });
     }
   }
@@ -61,8 +59,7 @@ export function mergePasswordHistory(
 export function normalizeRegisteredUser(raw: any): RegisteredAccessUser | null {
   if (!raw || typeof raw !== 'object') return null;
   const username = typeof raw.username === 'string' ? raw.username.trim() : '';
-  const password = typeof raw.password === 'string' ? raw.password.trim() : '';
-  if (!username || !password) return null;
+  if (!username) return null;
 
   const role: RoleType = VALID_ROLES.includes(raw.role) ? raw.role : 'TU';
   const status: UserAccountStatus = VALID_STATUSES.includes(raw.status) ? raw.status : 'PENDING';
@@ -79,7 +76,10 @@ export function normalizeRegisteredUser(raw: any): RegisteredAccessUser | null {
         : username,
     username,
     role,
-    password,
+    hasPassword: raw.hasPassword !== undefined ? Boolean(raw.hasPassword) : Boolean(raw.password),
+    ...(raw.resetRequestStatus === 'RESET_ISSUED' && raw.tempResetCode
+      ? { tempResetCode: String(raw.tempResetCode) }
+      : {}),
     status,
     createdAt:
       typeof raw.createdAt === 'string' && raw.createdAt
@@ -98,10 +98,6 @@ export function normalizeRegisteredUser(raw: any): RegisteredAccessUser | null {
   };
 }
 
-/**
- * Non-destructive merge of registered access users across server and client states.
- * Never drops existing users unless their exact ID is explicitly listed in deletedIds.
- */
 export function mergeRegisteredUsers(
   primaryUsers: any[] = [],
   secondaryUsers: any[] = [],

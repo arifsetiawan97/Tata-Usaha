@@ -1,5 +1,23 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import {
+  applySecurityHeaders,
+  computePasswordFingerprint,
+  hashSecret,
+  sanitizeAccessUserForClient,
+  verifySecret
+} from './authSecurity.mjs';
+import {
+  BUILTIN_DATABASE_DEFS,
+  DEFAULT_DATABASE_QUOTA_BYTES,
+  checkWriteCapacity,
+  computeDatabaseMetrics,
+  findDuplicateRecordIndex,
+  getByteSize,
+  isValidIdentifier,
+  validateRecordForCollection
+} from './dbValidator.mjs';
 
 export const VALID_COLLECTIONS = [
   'tasks',
@@ -9,7 +27,8 @@ export const VALID_COLLECTIONS = [
   'archives',
   'customCategories',
   'libraryBooks',
-  'libraryMembers'
+  'libraryMembers',
+  'beritaAcaraHistory'
 ];
 
 export const DEFAULT_ACCESS_RULES = {
@@ -18,7 +37,9 @@ export const DEFAULT_ACCESS_RULES = {
   enforceSingleServicePerUser: true
 };
 
-export const DEFAULT_ADMIN_PASSWORD = 'admin123';
+export const DEFAULT_WELCOME_HEADLINE = 'SELAMAT DATANG OPERATOR LAYANAN OPERASIONAL';
+export const DEFAULT_WELCOME_SUBHEADLINE =
+  'Masuk ke layanan sesuai bidang tugas Anda, pantau status akun, dan kirim laporan operasional terpusat satu pintu.';
 
 const VALID_ROLES = ['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'];
 const VALID_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'];
@@ -50,33 +71,45 @@ function mergePasswordHistory(a, b) {
   const combined = [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])];
   for (const entry of combined) {
     if (!entry || typeof entry !== 'object') continue;
-    if (!entry.changedAt || !entry.newPassword) continue;
-    const key = `${entry.changedAt}::${entry.source || 'USER_CHANGE'}::${entry.newPassword}`;
+    if (!entry.changedAt) continue;
+    const key = `${entry.changedAt}::${entry.source || 'USER_CHANGE'}`;
     if (!map.has(key)) {
       map.set(key, {
         changedAt: entry.changedAt,
         source: entry.source || 'USER_CHANGE',
-        newPassword: String(entry.newPassword)
+        maskedPreview: '••••••'
       });
     }
   }
-  return Array.from(map.values()).sort(
-    (x, y) => parseTimestamp(y.changedAt) - parseTimestamp(x.changedAt)
-  );
+  return Array.from(map.values())
+    .sort((x, y) => parseTimestamp(y.changedAt) - parseTimestamp(x.changedAt))
+    .slice(0, 20);
 }
 
-function normalizeRegisteredUser(raw) {
+function normalizeRegisteredUser(raw, securityPepper) {
   if (!raw || typeof raw !== 'object') return null;
   const username = typeof raw.username === 'string' ? raw.username.trim() : '';
-  const password = typeof raw.password === 'string' ? raw.password.trim() : '';
-  if (!username || !password) return null;
+  const rawPlainPassword = typeof raw.password === 'string' ? raw.password.trim() : '';
+  const existingHash = typeof raw.passwordHash === 'string' ? raw.passwordHash.trim() : '';
+  if (!username || (!rawPlainPassword && !existingHash)) return null;
 
   const role = VALID_ROLES.includes(raw.role) ? raw.role : 'TU';
   const status = VALID_STATUSES.includes(raw.status) ? raw.status : 'PENDING';
   const id =
     typeof raw.id === 'string' && raw.id.trim()
       ? raw.id.trim()
-      : `usr-${username.toLowerCase()}-${role.toLowerCase()}`;
+      : `usr-${username.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}-${role.toLowerCase()}`;
+
+  // Upgrade any legacy plaintext user password to salted scrypt hash cleanly
+  let passwordHash = existingHash;
+  let passwordFingerprint =
+    typeof raw.passwordFingerprint === 'string' ? raw.passwordFingerprint : '';
+  if (!passwordHash && rawPlainPassword) {
+    passwordHash = hashSecret(rawPlainPassword);
+    passwordFingerprint = computePasswordFingerprint(rawPlainPassword, securityPepper);
+  } else if (!passwordFingerprint && rawPlainPassword) {
+    passwordFingerprint = computePasswordFingerprint(rawPlainPassword, securityPepper);
+  }
 
   return {
     id,
@@ -86,12 +119,17 @@ function normalizeRegisteredUser(raw) {
         : username,
     username,
     role,
-    password,
+    passwordHash,
+    passwordFingerprint,
+    // Keep tempResetCode ONLY while awaiting user change after admin reset
+    ...(raw.resetRequestStatus === 'RESET_ISSUED' && raw.tempResetCode
+      ? { tempResetCode: String(raw.tempResetCode) }
+      : {}),
     status,
     createdAt:
       typeof raw.createdAt === 'string' && raw.createdAt
         ? raw.createdAt
-        : new Date(0).toISOString(),
+        : new Date().toISOString(),
     approvedAt: typeof raw.approvedAt === 'string' ? raw.approvedAt : undefined,
     rejectedAt: typeof raw.rejectedAt === 'string' ? raw.rejectedAt : undefined,
     lastLoginAt: typeof raw.lastLoginAt === 'string' ? raw.lastLoginAt : undefined,
@@ -108,7 +146,8 @@ function normalizeRegisteredUser(raw) {
 export function mergeRegisteredUsers(
   primaryUsers = [],
   secondaryUsers = [],
-  deletedIds = []
+  deletedIds = [],
+  securityPepper = ''
 ) {
   const deletedSet = new Set(Array.isArray(deletedIds) ? deletedIds.filter(Boolean) : []);
   const byId = new Map();
@@ -116,7 +155,7 @@ export function mergeRegisteredUsers(
   const ingest = (rawList) => {
     if (!Array.isArray(rawList)) return;
     for (const raw of rawList) {
-      const norm = normalizeRegisteredUser(raw);
+      const norm = normalizeRegisteredUser(raw, securityPepper);
       if (!norm) continue;
       if (deletedSet.has(norm.id)) continue;
 
@@ -191,36 +230,46 @@ export function getStorageInfo() {
     return {
       storageMode: 'upstash',
       cloudPersistent: true,
-      label: 'Cloud Upstash Redis / Vercel KV (Satu Pintu)'
+      label: 'Cloud Upstash Redis / Vercel KV (Database Admin Satu Pintu)'
     };
   }
   if (getSupabaseConfig()) {
     return {
       storageMode: 'supabase',
       cloudPersistent: true,
-      label: 'Cloud Supabase Database (Satu Pintu)'
+      label: 'Cloud Supabase Database (Database Admin Satu Pintu)'
     };
   }
   if (isVercelRuntime()) {
     return {
       storageMode: 'vercel-ephemeral',
       cloudPersistent: false,
-      label: 'Vercel Sementara (Perlu Hubungkan Storage Upstash Redis)'
+      label: 'Vercel Sementara (Hubungkan Storage Upstash Redis untuk Persistensi)'
     };
   }
   return {
     storageMode: 'local-file',
     cloudPersistent: true,
-    label: 'Server Database Aktif (Satu Pintu)'
+    label: 'Server Database Admin Aktif (Satu Pintu)'
   };
 }
 
-export function applyCorsHeaders(res) {
-  if (!res || typeof res.setHeader !== 'function') return;
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+export function applyCorsHeaders(resOrReq, maybeRes) {
+  if (maybeRes) {
+    return applySecurityHeaders(resOrReq, maybeRes);
+  }
+  return applySecurityHeaders(null, resOrReq);
+}
+
+function buildDefaultDatabaseRegistry() {
+  const now = new Date().toISOString();
+  return BUILTIN_DATABASE_DEFS.map(def => ({
+    ...def,
+    status: 'ACTIVE',
+    fields: [],
+    createdAt: now,
+    updatedAt: now
+  }));
 }
 
 function buildFallbackSeedData() {
@@ -246,10 +295,31 @@ function buildFallbackSeedData() {
       staffPerempuan: 0,
       lastUpdated: ''
     },
+    beritaAcaraHistory: [],
+    customDatabaseRecords: {},
+    databaseRegistry: buildDefaultDatabaseRegistry(),
+    databaseQuotaBytes: DEFAULT_DATABASE_QUOTA_BYTES,
+    siteSettings: {
+      welcomeHeadline: DEFAULT_WELCOME_HEADLINE,
+      welcomeSubheadline: DEFAULT_WELCOME_SUBHEADLINE,
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'Sistem'
+    },
+    softDeletedItems: [],
+    backups: [],
+    backupSchedule: {
+      enabled: true,
+      intervalHours: 24,
+      lastBackupAt: ''
+    },
+    auditLogs: [],
+    staffSubmissions: [],
+    migrationLogs: [],
     accessUsers: [],
     deletedAccessUserIds: [],
     accessRules: { ...DEFAULT_ACCESS_RULES },
-    adminPassword: DEFAULT_ADMIN_PASSWORD,
+    adminCredentialHash: '',
+    serverSecurityPepper: crypto.randomBytes(32).toString('hex'),
     lastUpdated: new Date().toISOString()
   };
 }
@@ -271,21 +341,123 @@ export function createInitialDbData() {
       }
     }
   }
-
   return buildFallbackSeedData();
 }
 
 function migrateAndNormalizeDb(parsed) {
   let patched = false;
 
+  if (typeof parsed.serverSecurityPepper !== 'string' || !parsed.serverSecurityPepper.trim()) {
+    parsed.serverSecurityPepper = crypto.randomBytes(32).toString('hex');
+    patched = true;
+  }
+
+  // Strip insecure legacy plaintext adminPassword field
+  if (Object.prototype.hasOwnProperty.call(parsed, 'adminPassword')) {
+    delete parsed.adminPassword;
+    patched = true;
+  }
+
+  if (typeof parsed.adminCredentialHash !== 'string') {
+    parsed.adminCredentialHash = '';
+    patched = true;
+  }
+
   if (!Array.isArray(parsed.deletedAccessUserIds)) {
     parsed.deletedAccessUserIds = [];
     patched = true;
   }
 
+  if (!Array.isArray(parsed.beritaAcaraHistory)) {
+    parsed.beritaAcaraHistory = [];
+    patched = true;
+  }
+
+  if (!parsed.customDatabaseRecords || typeof parsed.customDatabaseRecords !== 'object') {
+    parsed.customDatabaseRecords = {};
+    patched = true;
+  }
+
+  if (!Array.isArray(parsed.databaseRegistry) || parsed.databaseRegistry.length === 0) {
+    parsed.databaseRegistry = buildDefaultDatabaseRegistry();
+    patched = true;
+  } else {
+    // Ensure all built-in modules exist in registry while preserving Admin's custom limits & status
+    const existingByCode = new Map(parsed.databaseRegistry.map(item => [item.code, item]));
+    let registryChanged = false;
+    for (const def of BUILTIN_DATABASE_DEFS) {
+      if (!existingByCode.has(def.code)) {
+        existingByCode.set(def.code, {
+          ...def,
+          status: 'ACTIVE',
+          fields: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        registryChanged = true;
+      }
+    }
+    if (registryChanged) {
+      parsed.databaseRegistry = Array.from(existingByCode.values());
+      patched = true;
+    }
+  }
+
+  if (!Number.isFinite(Number(parsed.databaseQuotaBytes)) || Number(parsed.databaseQuotaBytes) < 100 * 1024) {
+    parsed.databaseQuotaBytes = DEFAULT_DATABASE_QUOTA_BYTES;
+    patched = true;
+  }
+
+  if (!parsed.siteSettings || typeof parsed.siteSettings !== 'object') {
+    parsed.siteSettings = {
+      welcomeHeadline: DEFAULT_WELCOME_HEADLINE,
+      welcomeSubheadline: DEFAULT_WELCOME_SUBHEADLINE,
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'Sistem'
+    };
+    patched = true;
+  } else if (
+    typeof parsed.siteSettings.welcomeHeadline !== 'string' ||
+    !parsed.siteSettings.welcomeHeadline.trim()
+  ) {
+    parsed.siteSettings.welcomeHeadline = DEFAULT_WELCOME_HEADLINE;
+    patched = true;
+  }
+
+  if (!Array.isArray(parsed.softDeletedItems)) {
+    parsed.softDeletedItems = [];
+    patched = true;
+  }
+  if (!Array.isArray(parsed.backups)) {
+    parsed.backups = [];
+    patched = true;
+  }
+  if (!parsed.backupSchedule || typeof parsed.backupSchedule !== 'object') {
+    parsed.backupSchedule = { enabled: true, intervalHours: 24, lastBackupAt: '' };
+    patched = true;
+  }
+  if (!Array.isArray(parsed.auditLogs)) {
+    parsed.auditLogs = [];
+    patched = true;
+  }
+  if (!Array.isArray(parsed.staffSubmissions)) {
+    parsed.staffSubmissions = [];
+    patched = true;
+  }
+  if (!Array.isArray(parsed.migrationLogs)) {
+    parsed.migrationLogs = [];
+    patched = true;
+  }
+
   const rawUsers = Array.isArray(parsed.accessUsers) ? parsed.accessUsers : [];
-  const normalizedUsers = mergeRegisteredUsers(rawUsers, [], parsed.deletedAccessUserIds);
-  if (!Array.isArray(parsed.accessUsers) || normalizedUsers.length !== rawUsers.length) {
+  const hadPlainUserPass = rawUsers.some(u => u && typeof u.password === 'string' && !u.passwordHash);
+  const normalizedUsers = mergeRegisteredUsers(
+    rawUsers,
+    [],
+    parsed.deletedAccessUserIds,
+    parsed.serverSecurityPepper
+  );
+  if (!Array.isArray(parsed.accessUsers) || normalizedUsers.length !== rawUsers.length || hadPlainUserPass) {
     parsed.accessUsers = normalizedUsers;
     patched = true;
   } else {
@@ -301,11 +473,6 @@ function migrateAndNormalizeDb(parsed) {
       parsed.accessRules = mergedRules;
       patched = true;
     }
-  }
-
-  if (typeof parsed.adminPassword !== 'string' || !parsed.adminPassword.trim()) {
-    parsed.adminPassword = DEFAULT_ADMIN_PASSWORD;
-    patched = true;
   }
 
   return { data: parsed, patched };
@@ -507,6 +674,7 @@ export async function readDb() {
 }
 
 export async function writeDb(data) {
+  data.lastUpdated = new Date().toISOString();
   const upstash = getUpstashConfig();
   if (upstash) {
     try {
@@ -530,7 +698,539 @@ export async function writeDb(data) {
   return writeToLocalDisk(data);
 }
 
-export async function applyStateUpdate(body) {
+// =====================================================================
+// GOVERNANCE HELPERS: AUDIT TRAIL, BACKUPS, SOFT DELETE, MIGRATION
+// =====================================================================
+
+export function appendAuditLog(db, { actor, actorRole, action, targetDatabase, targetId = '-', status = 'SUCCESS', detail = '' }) {
+  if (!Array.isArray(db.auditLogs)) {
+    db.auditLogs = [];
+  }
+  db.auditLogs.unshift({
+    id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: new Date().toISOString(),
+    actor: String(actor || 'anonim').slice(0, 80),
+    actorRole: String(actorRole || 'PUBLIC').slice(0, 30),
+    action: String(action || 'UNKNOWN').slice(0, 60),
+    targetDatabase: String(targetDatabase || '-').slice(0, 60),
+    targetId: String(targetId || '-').slice(0, 80),
+    status,
+    detail: String(detail || '').slice(0, 500)
+  });
+  db.auditLogs = db.auditLogs.slice(0, 400);
+}
+
+export function createBackupSnapshot(db, { type = 'MANUAL', label = '', actor = 'ADMIN' }) {
+  const { backups: _ignoredBackups, serverSecurityPepper: _ignoredPepper, ...exportableState } = db;
+  const serialized = JSON.stringify(exportableState);
+  const checksum = crypto.createHash('sha256').update(serialized).digest('hex').slice(0, 16);
+  const metrics = computeDatabaseMetrics(db);
+
+  const snapshotRecord = {
+    id: `bkp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    label: label || `Cadangan ${type === 'SCHEDULED' ? 'Berkala Otomatis' : 'Manual'} (${new Date().toLocaleDateString('id-ID')})`,
+    type,
+    createdAt: new Date().toISOString(),
+    createdBy: actor,
+    sizeBytes: Buffer.byteLength(serialized, 'utf8'),
+    totalRecords: metrics.totalRecords,
+    checksum,
+    snapshot: JSON.parse(serialized)
+  };
+
+  if (!Array.isArray(db.backups)) db.backups = [];
+  db.backups.unshift(snapshotRecord);
+  db.backups = db.backups.slice(0, 8);
+  db.backupSchedule = {
+    ...(db.backupSchedule || { enabled: true, intervalHours: 24 }),
+    lastBackupAt: snapshotRecord.createdAt
+  };
+  return snapshotRecord;
+}
+
+export function maybeRunScheduledBackup(db) {
+  const schedule = db.backupSchedule || { enabled: true, intervalHours: 24, lastBackupAt: '' };
+  if (!schedule.enabled) return false;
+  const intervalMs = Math.max(1, Number(schedule.intervalHours) || 24) * 60 * 60 * 1000;
+  const lastMs = parseTimestamp(schedule.lastBackupAt);
+  if (!lastMs || Date.now() - lastMs >= intervalMs) {
+    createBackupSnapshot(db, {
+      type: 'SCHEDULED',
+      label: `Pencadangan Terjadwal Otomatis (Setiap ${schedule.intervalHours || 24} Jam)`,
+      actor: 'SISTEM_TERJADWAL'
+    });
+    appendAuditLog(db, {
+      actor: 'SISTEM_TERJADWAL',
+      actorRole: 'SYSTEM',
+      action: 'SCHEDULED_BACKUP',
+      targetDatabase: 'all',
+      status: 'SUCCESS',
+      detail: 'Pencadangan berkala otomatis berhasil dibuat.'
+    });
+    return true;
+  }
+  return false;
+}
+
+export function softDeleteRecord(db, { collection, id, actor = 'ADMIN', reason = 'Dihapus Admin' }) {
+  const customDb = (db.databaseRegistry || []).find(d => d.code === collection && !d.isBuiltin);
+  const list = customDb
+    ? db.customDatabaseRecords?.[collection]
+    : db[collection];
+
+  if (!Array.isArray(list)) {
+    return { ok: false, status: 404, error: `Koleksi "${collection}" tidak ditemukan.` };
+  }
+  const idx = list.findIndex(item => item && item.id === id);
+  if (idx === -1) {
+    return { ok: false, status: 404, error: `Data dengan ID "${id}" tidak ditemukan di ${collection}.` };
+  }
+
+  const removedItem = list[idx];
+  const filtered = list.filter((_, i) => i !== idx);
+  if (customDb) {
+    db.customDatabaseRecords[collection] = filtered;
+  } else {
+    db[collection] = filtered;
+  }
+
+  if (collection === 'accessUsers') {
+    const delSet = new Set(Array.isArray(db.deletedAccessUserIds) ? db.deletedAccessUserIds : []);
+    delSet.add(id);
+    db.deletedAccessUserIds = Array.from(delSet).slice(-1000);
+  }
+
+  if (!Array.isArray(db.softDeletedItems)) db.softDeletedItems = [];
+  const trashEntry = {
+    trashId: `trsh-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    sourceCollection: collection,
+    isCustomDb: Boolean(customDb),
+    originalId: id,
+    itemTitle:
+      removedItem.title ||
+      removedItem.namaBarang ||
+      removedItem.judul ||
+      removedItem.namaLengkap ||
+      removedItem.nama ||
+      removedItem.templateTitle ||
+      removedItem.name ||
+      id,
+    itemSnapshot: removedItem,
+    deletedAt: new Date().toISOString(),
+    deletedBy: actor,
+    reason
+  };
+  db.softDeletedItems.unshift(trashEntry);
+  db.softDeletedItems = db.softDeletedItems.slice(0, 300);
+
+  appendAuditLog(db, {
+    actor,
+    actorRole: 'ADMIN',
+    action: 'SOFT_DELETE',
+    targetDatabase: collection,
+    targetId: id,
+    status: 'SUCCESS',
+    detail: `Memindahkan "${trashEntry.itemTitle}" ke Arsip Sementara (Soft Delete).`
+  });
+
+  return { ok: true, trashEntry };
+}
+
+export function restoreSoftDeletedRecord(db, { trashId, actor = 'ADMIN' }) {
+  const trashList = Array.isArray(db.softDeletedItems) ? db.softDeletedItems : [];
+  const idx = trashList.findIndex(t => t.trashId === trashId);
+  if (idx === -1) {
+    return { ok: false, status: 404, error: 'Item arsip sementara tidak ditemukan.' };
+  }
+
+  const entry = trashList[idx];
+
+  // Restoring a soft-deleted custom database definition
+  if (entry.sourceCollection === '__CUSTOM_DATABASE__') {
+    const dbDef = entry.itemSnapshot?.definition;
+    const dbRows = Array.isArray(entry.itemSnapshot?.records) ? entry.itemSnapshot.records : [];
+    if (!dbDef || !dbDef.code) {
+      return { ok: false, status: 400, error: 'Struktur database arsip tidak valid.' };
+    }
+    if ((db.databaseRegistry || []).some(d => d.code === dbDef.code)) {
+      return { ok: false, status: 409, error: `Kode database "${dbDef.code}" sudah aktif kembali.` };
+    }
+    db.databaseRegistry.push({ ...dbDef, status: 'ACTIVE', updatedAt: new Date().toISOString() });
+    db.customDatabaseRecords[dbDef.code] = dbRows;
+    db.softDeletedItems = trashList.filter(t => t.trashId !== trashId);
+    appendAuditLog(db, {
+      actor,
+      actorRole: 'ADMIN',
+      action: 'RESTORE_DATABASE',
+      targetDatabase: dbDef.code,
+      targetId: trashId,
+      status: 'SUCCESS',
+      detail: `Database "${dbDef.name}" dipulihkan beserta ${dbRows.length} baris data.`
+    });
+    return { ok: true, restored: dbDef };
+  }
+
+  const targetCol = entry.sourceCollection;
+  const capCheck = checkWriteCapacity(db, targetCol, getByteSize(entry.itemSnapshot));
+  if (!capCheck.allowed) {
+    return { ok: false, status: capCheck.status, error: capCheck.error };
+  }
+
+  const customDb = (db.databaseRegistry || []).find(d => d.code === targetCol && !d.isBuiltin);
+  const targetArr = customDb
+    ? (db.customDatabaseRecords[targetCol] = Array.isArray(db.customDatabaseRecords[targetCol])
+        ? db.customDatabaseRecords[targetCol]
+        : [])
+    : (db[targetCol] = Array.isArray(db[targetCol]) ? db[targetCol] : []);
+
+  if (!targetArr.some(r => r && r.id === entry.originalId)) {
+    targetArr.unshift(entry.itemSnapshot);
+  }
+  if (targetCol === 'accessUsers') {
+    db.deletedAccessUserIds = (db.deletedAccessUserIds || []).filter(d => d !== entry.originalId);
+  }
+  db.softDeletedItems = trashList.filter(t => t.trashId !== trashId);
+
+  appendAuditLog(db, {
+    actor,
+    actorRole: 'ADMIN',
+    action: 'RESTORE_SOFT_DELETE',
+    targetDatabase: targetCol,
+    targetId: entry.originalId,
+    status: 'SUCCESS',
+    detail: `Memulihkan "${entry.itemTitle}" ke ${targetCol}.`
+  });
+
+  return { ok: true, restored: entry.itemSnapshot };
+}
+
+export function purgeSoftDeletedRecord(db, { trashId, actor = 'ADMIN' }) {
+  const trashList = Array.isArray(db.softDeletedItems) ? db.softDeletedItems : [];
+  const entry = trashList.find(t => t.trashId === trashId);
+  if (!entry) {
+    return { ok: false, status: 404, error: 'Item tidak ditemukan di Arsip Sementara.' };
+  }
+  db.softDeletedItems = trashList.filter(t => t.trashId !== trashId);
+  appendAuditLog(db, {
+    actor,
+    actorRole: 'ADMIN',
+    action: 'PURGE_PERMANENT',
+    targetDatabase: entry.sourceCollection,
+    targetId: entry.originalId,
+    status: 'SUCCESS',
+    detail: `Penghapusan permanen "${entry.itemTitle}" dari Arsip Sementara.`
+  });
+  return { ok: true, purgedId: trashId };
+}
+
+export function runDataMigration(
+  db,
+  { sourceName, targetCollection, records, duplicateStrategy = 'SKIP', columnMapping = {}, actor = 'ADMIN' }
+) {
+  if (!Array.isArray(records) || records.length === 0) {
+    return { ok: false, status: 400, error: 'Data sumber migrasi kosong atau bukan array valid.' };
+  }
+  const customDb = (db.databaseRegistry || []).find(d => d.code === targetCollection && !d.isBuiltin);
+  if (!VALID_COLLECTIONS.includes(targetCollection) && !customDb) {
+    return { ok: false, status: 400, error: `Target database "${targetCollection}" tidak terdaftar.` };
+  }
+
+  // Automatic pre-migration safety snapshot for instant rollback
+  const preSnap = createBackupSnapshot(db, {
+    type: 'PRE_MIGRATION',
+    label: `Pra-Migrasi "${sourceName || targetCollection}"`,
+    actor
+  });
+
+  const targetArr = customDb
+    ? [...(Array.isArray(db.customDatabaseRecords[targetCollection]) ? db.customDatabaseRecords[targetCollection] : [])]
+    : [...(Array.isArray(db[targetCollection]) ? db[targetCollection] : [])];
+
+  let migratedCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+  const errors = [];
+  const migratedIds = [];
+
+  for (let i = 0; i < records.length; i++) {
+    const raw = records[i];
+    if (!raw || typeof raw !== 'object') {
+      failedCount++;
+      errors.push(`Baris ${i + 1}: Format bukan objek.`);
+      continue;
+    }
+
+    // Apply column mapping from old source schema -> target Admin schema
+    const mapped = { ...raw };
+    if (columnMapping && typeof columnMapping === 'object') {
+      for (const [oldCol, newCol] of Object.entries(columnMapping)) {
+        if (oldCol && newCol && raw[oldCol] !== undefined && mapped[newCol] === undefined) {
+          mapped[newCol] = raw[oldCol];
+        }
+      }
+    }
+
+    const validation = validateRecordForCollection(targetCollection, mapped, customDb || null);
+    if (!validation.valid) {
+      failedCount++;
+      errors.push(`Baris ${i + 1}: ${validation.error}`);
+      continue;
+    }
+
+    const cleanRecord = validation.record;
+    const dupIdx = findDuplicateRecordIndex(targetArr, cleanRecord, targetCollection);
+    if (dupIdx !== -1) {
+      if (duplicateStrategy === 'SKIP') {
+        skippedCount++;
+        continue;
+      } else if (duplicateStrategy === 'OVERWRITE') {
+        targetArr[dupIdx] = { ...targetArr[dupIdx], ...cleanRecord };
+        migratedCount++;
+        migratedIds.push(targetArr[dupIdx].id);
+        continue;
+      } else if (duplicateStrategy === 'RENAME_ID') {
+        cleanRecord.id = `${cleanRecord.id}-mig-${Date.now().toString().slice(-4)}-${i}`;
+      }
+    }
+
+    const capCheck = checkWriteCapacity(
+      {
+        ...db,
+        ...(customDb
+          ? { customDatabaseRecords: { ...db.customDatabaseRecords, [targetCollection]: targetArr } }
+          : { [targetCollection]: targetArr })
+      },
+      targetCollection,
+      getByteSize(cleanRecord)
+    );
+    if (!capCheck.allowed) {
+      failedCount++;
+      errors.push(`Baris ${i + 1}: ${capCheck.error}`);
+      break;
+    }
+
+    targetArr.unshift(cleanRecord);
+    migratedCount++;
+    migratedIds.push(cleanRecord.id);
+  }
+
+  if (customDb) {
+    db.customDatabaseRecords[targetCollection] = targetArr;
+  } else {
+    db[targetCollection] = targetArr;
+  }
+
+  const report = {
+    id: `mig-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    sourceName: String(sourceName || 'Sumber Data Layanan Lama').slice(0, 120),
+    targetCollection,
+    duplicateStrategy,
+    totalInput: records.length,
+    migratedCount,
+    skippedCount,
+    failedCount,
+    errors: errors.slice(0, 25),
+    migratedIds: migratedIds.slice(0, 200),
+    preMigrationSnapshotId: preSnap.id,
+    rolledBack: false,
+    executedAt: new Date().toISOString(),
+    executedBy: actor
+  };
+
+  if (!Array.isArray(db.migrationLogs)) db.migrationLogs = [];
+  db.migrationLogs.unshift(report);
+  db.migrationLogs = db.migrationLogs.slice(0, 50);
+
+  appendAuditLog(db, {
+    actor,
+    actorRole: 'ADMIN',
+    action: 'DATA_MIGRATION',
+    targetDatabase: targetCollection,
+    targetId: report.id,
+    status: failedCount > 0 && migratedCount === 0 ? 'FAILED' : 'SUCCESS',
+    detail: `Migrasi "${report.sourceName}": ${migratedCount} berhasil, ${skippedCount} duplikat dilewati, ${failedCount} gagal.`
+  });
+
+  return { ok: true, report };
+}
+
+export function rollbackMigration(db, { migrationId, actor = 'ADMIN' }) {
+  const logs = Array.isArray(db.migrationLogs) ? db.migrationLogs : [];
+  const log = logs.find(m => m.id === migrationId);
+  if (!log) {
+    return { ok: false, status: 404, error: 'Riwayat migrasi tidak ditemukan.' };
+  }
+  if (log.rolledBack) {
+    return { ok: false, status: 409, error: 'Migrasi ini sudah pernah di-rollback sebelumnya.' };
+  }
+  const snap = (db.backups || []).find(b => b.id === log.preMigrationSnapshotId);
+  if (!snap || !snap.snapshot) {
+    return {
+      ok: false,
+      status: 404,
+      error: 'Snapshot pra-migrasi sudah tidak tersedia di riwayat cadangan.'
+    };
+  }
+
+  // Restore target collection & custom database state cleanly from pre-migration snapshot
+  const preservedBackups = db.backups;
+  const preservedAdminHash = db.adminCredentialHash;
+  const preservedPepper = db.serverSecurityPepper;
+  const restoredBody = snap.snapshot;
+
+  Object.assign(db, restoredBody, {
+    backups: preservedBackups,
+    adminCredentialHash: preservedAdminHash,
+    serverSecurityPepper: preservedPepper,
+    migrationLogs: logs.map(m =>
+      m.id === migrationId ? { ...m, rolledBack: true, rolledBackAt: new Date().toISOString() } : m
+    )
+  });
+
+  appendAuditLog(db, {
+    actor,
+    actorRole: 'ADMIN',
+    action: 'MIGRATION_ROLLBACK',
+    targetDatabase: log.targetCollection,
+    targetId: migrationId,
+    status: 'SUCCESS',
+    detail: `Rollback migrasi "${log.sourceName}" berhasil memulihkan state pra-migrasi.`
+  });
+
+  return { ok: true, migrationId };
+}
+
+// =====================================================================
+// CLIENT RESPONSE SANITIZATION (STRICT ZERO-LEAK RBAC PROJECTION)
+// =====================================================================
+
+export function sanitizeSchoolConfigForPublic(cfg) {
+  if (!cfg || typeof cfg !== 'object') return null;
+  return {
+    pemerintahDaerah: cfg.pemerintahDaerah,
+    dinasPendidikan: cfg.dinasPendidikan,
+    namaSekolah: cfg.namaSekolah,
+    npsn: cfg.npsn,
+    kabupatenKota: cfg.kabupatenKota,
+    provinsi: cfg.provinsi,
+    logoKabupatenUrl: cfg.logoKabupatenUrl,
+    logoSekolahUrl: cfg.logoSekolahUrl,
+    logoAplikasiUrl: cfg.logoAplikasiUrl
+  };
+}
+
+export function buildPublicStateResponse(db) {
+  const metrics = computeDatabaseMetrics(db);
+  const approvedRoleCounts = { TU: 0, PENJAGA: 0, SERVICE: 0, PERPUS: 0, LAB_IPA: 0 };
+  for (const u of db.accessUsers || []) {
+    if (u && u.status === 'APPROVED' && approvedRoleCounts[u.role] !== undefined) {
+      approvedRoleCounts[u.role] += 1;
+    }
+  }
+  return {
+    publicOnly: true,
+    siteSettings: db.siteSettings,
+    schoolConfig: sanitizeSchoolConfigForPublic(db.schoolConfig),
+    accessRules: db.accessRules,
+    approvedRoleCounts,
+    databaseCapacitySummary: {
+      totalUsedBytes: metrics.totalUsedBytes,
+      totalQuotaBytes: metrics.totalQuotaBytes,
+      totalPercentUsed: metrics.totalPercentUsed,
+      effectiveAlertLevel: metrics.effectiveAlertLevel
+    },
+    lastUpdated: db.lastUpdated
+  };
+}
+
+export function buildStaffStateResponse(db, staffSession) {
+  const metrics = computeDatabaseMetrics(db);
+  const approvedRoleCounts = { TU: 0, PENJAGA: 0, SERVICE: 0, PERPUS: 0, LAB_IPA: 0 };
+  for (const u of db.accessUsers || []) {
+    if (u && u.status === 'APPROVED' && approvedRoleCounts[u.role] !== undefined) {
+      approvedRoleCounts[u.role] += 1;
+    }
+  }
+
+  return {
+    publicOnly: false,
+    tasks: db.tasks || [],
+    inventories: db.inventories || [],
+    monthlyReports: db.monthlyReports || [],
+    annualReports: db.annualReports || [],
+    schoolConfig: db.schoolConfig || null,
+    archives: db.archives || [],
+    tupoksiDefinitions: db.tupoksiDefinitions || null,
+    customCategories: db.customCategories || [],
+    libraryBooks: db.libraryBooks || [],
+    libraryMembers: db.libraryMembers || [],
+    libraryMemberStats: db.libraryMemberStats || null,
+    beritaAcaraHistory: db.beritaAcaraHistory || [],
+    customDatabases: (db.databaseRegistry || []).filter(d => !d.isBuiltin),
+    customDatabaseRecords: db.customDatabaseRecords || {},
+    staffSubmissions: (db.staffSubmissions || []).filter(
+      s => s.submittedBy === staffSession.username || s.role === staffSession.role
+    ),
+    accessUsers: (db.accessUsers || []).map(u =>
+      sanitizeAccessUserForClient(u, {
+        isAdmin: false,
+        includeTempResetCode: u.id === staffSession.sub
+      })
+    ),
+    accessRules: db.accessRules,
+    siteSettings: db.siteSettings,
+    approvedRoleCounts,
+    databaseCapacitySummary: {
+      totalUsedBytes: metrics.totalUsedBytes,
+      totalQuotaBytes: metrics.totalQuotaBytes,
+      totalPercentUsed: metrics.totalPercentUsed,
+      effectiveAlertLevel: metrics.effectiveAlertLevel
+    },
+    lastUpdated: db.lastUpdated
+  };
+}
+
+export function buildAdminStateResponse(db) {
+  const metrics = computeDatabaseMetrics(db);
+  const backupsMeta = (db.backups || []).map(({ snapshot: _s, ...meta }) => meta);
+
+  return {
+    publicOnly: false,
+    isAdminView: true,
+    tasks: db.tasks || [],
+    inventories: db.inventories || [],
+    monthlyReports: db.monthlyReports || [],
+    annualReports: db.annualReports || [],
+    schoolConfig: db.schoolConfig || null,
+    archives: db.archives || [],
+    tupoksiDefinitions: db.tupoksiDefinitions || null,
+    customCategories: db.customCategories || [],
+    libraryBooks: db.libraryBooks || [],
+    libraryMembers: db.libraryMembers || [],
+    libraryMemberStats: db.libraryMemberStats || null,
+    beritaAcaraHistory: db.beritaAcaraHistory || [],
+    customDatabases: (db.databaseRegistry || []).filter(d => !d.isBuiltin),
+    customDatabaseRecords: db.customDatabaseRecords || {},
+    databaseRegistry: db.databaseRegistry || [],
+    databaseQuotaBytes: db.databaseQuotaBytes || DEFAULT_DATABASE_QUOTA_BYTES,
+    databaseMetrics: metrics,
+    siteSettings: db.siteSettings,
+    softDeletedItems: db.softDeletedItems || [],
+    backups: backupsMeta,
+    backupSchedule: db.backupSchedule || { enabled: true, intervalHours: 24, lastBackupAt: '' },
+    auditLogs: db.auditLogs || [],
+    staffSubmissions: db.staffSubmissions || [],
+    migrationLogs: db.migrationLogs || [],
+    accessUsers: (db.accessUsers || []).map(u =>
+      sanitizeAccessUserForClient(u, { isAdmin: true })
+    ),
+    deletedAccessUserIds: db.deletedAccessUserIds || [],
+    accessRules: db.accessRules,
+    lastUpdated: db.lastUpdated
+  };
+}
+
+export async function applyStateUpdate(body, actor = 'ADMIN') {
   const {
     tasks,
     inventories,
@@ -543,10 +1243,9 @@ export async function applyStateUpdate(body) {
     libraryBooks,
     libraryMembers,
     libraryMemberStats,
-    accessUsers,
-    deletedAccessUserIds,
+    beritaAcaraHistory,
     accessRules,
-    adminPassword,
+    siteSettings,
     clientHydratedFromServer
   } = body || {};
 
@@ -560,30 +1259,10 @@ export async function applyStateUpdate(body) {
     return incoming;
   };
 
-  const mergedDeletedIds = Array.from(
-    new Set([
-      ...(Array.isArray(current.deletedAccessUserIds) ? current.deletedAccessUserIds : []),
-      ...(Array.isArray(deletedAccessUserIds) ? deletedAccessUserIds : [])
-    ])
-  ).slice(-1000);
-
-  const mergedAccessUsers = mergeRegisteredUsers(
-    Array.isArray(current.accessUsers) ? current.accessUsers : [],
-    Array.isArray(accessUsers) ? accessUsers : [],
-    mergedDeletedIds
-  );
-
   const mergedAccessRules =
     accessRules && typeof accessRules === 'object' && (canReplaceOperational || !current.accessRules)
       ? { ...DEFAULT_ACCESS_RULES, ...current.accessRules, ...accessRules }
       : { ...DEFAULT_ACCESS_RULES, ...(current.accessRules || {}) };
-
-  const nextAdminPassword =
-    typeof adminPassword === 'string' &&
-    adminPassword.trim() &&
-    (canReplaceOperational || !current.adminPassword)
-      ? adminPassword.trim()
-      : current.adminPassword || DEFAULT_ADMIN_PASSWORD;
 
   const mergePerUserIsolationMap = (existingMap, incomingMap) => {
     const merged = { ...(existingMap && typeof existingMap === 'object' ? existingMap : {}) };
@@ -626,7 +1305,6 @@ export async function applyStateUpdate(body) {
       };
     }
 
-    // Even when client has not hydrated base schoolConfig, preserve per-user isolated letterheads/signatures
     return {
       ...existingCfg,
       userLetterheads: mergedLetterheads,
@@ -653,35 +1331,50 @@ export async function applyStateUpdate(body) {
       libraryMemberStats !== undefined && (canReplaceOperational || !current.libraryMemberStats)
         ? libraryMemberStats
         : current.libraryMemberStats,
-    accessUsers: mergedAccessUsers,
-    deletedAccessUserIds: mergedDeletedIds,
+    beritaAcaraHistory: pickCollection(beritaAcaraHistory, current.beritaAcaraHistory),
+    siteSettings:
+      siteSettings && typeof siteSettings === 'object'
+        ? { ...current.siteSettings, ...siteSettings, updatedAt: new Date().toISOString() }
+        : current.siteSettings,
     accessRules: mergedAccessRules,
-    adminPassword: nextAdminPassword,
     lastUpdated: new Date().toISOString()
   };
+
+  appendAuditLog(updated, {
+    actor,
+    actorRole: 'ADMIN',
+    action: 'ADMIN_STATE_SYNC',
+    targetDatabase: 'all',
+    status: 'SUCCESS',
+    detail: 'Sinkronisasi state Database Admin oleh Admin.'
+  });
 
   const ok = await writeDb(updated);
   return ok ? { ok: true, updated } : { ok: false };
 }
 
-export async function deleteAccessUserFromDb(id) {
+export async function deleteAccessUserFromDb(id, actor = 'ADMIN') {
   const current = (await readDb()) || {};
-  const deletedSet = new Set(
-    Array.isArray(current.deletedAccessUserIds) ? current.deletedAccessUserIds : []
-  );
-  deletedSet.add(id);
+  const result = softDeleteRecord(current, {
+    collection: 'accessUsers',
+    id,
+    actor,
+    reason: 'Penghapusan akun melalui Panel Admin'
+  });
+  if (!result.ok) return result;
+  const ok = await writeDb(current);
+  return ok
+    ? { ok: true, lastUpdated: current.lastUpdated, trashEntry: result.trashEntry }
+    : { ok: false, status: 500, error: 'Gagal menyimpan penghapusan sementara pengguna.' };
+}
 
-  const mergedDeletedIds = Array.from(deletedSet).slice(-1000);
-  const existingUsers = Array.isArray(current.accessUsers) ? current.accessUsers : [];
-  const nextUsers = existingUsers.filter((u) => u && u.id !== id);
-
-  const updated = {
-    ...current,
-    accessUsers: nextUsers,
-    deletedAccessUserIds: mergedDeletedIds,
-    lastUpdated: new Date().toISOString()
-  };
-
-  const ok = await writeDb(updated);
-  return ok ? { ok: true, lastUpdated: updated.lastUpdated } : { ok: false };
+export function verifyUserCredentials(user, plainPassword) {
+  if (!user || !plainPassword) return false;
+  if (user.passwordHash) {
+    return verifySecret(plainPassword, user.passwordHash);
+  }
+  if (typeof user.password === 'string') {
+    return user.password === plainPassword;
+  }
+  return false;
 }

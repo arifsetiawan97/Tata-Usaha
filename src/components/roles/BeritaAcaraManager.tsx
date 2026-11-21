@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { KopSurat } from '../common/KopSurat';
 import {
@@ -42,7 +42,7 @@ import {
   Users
 } from 'lucide-react';
 
-const STORAGE_KEY_BA_HISTORY = 'siops_tu_berita_acara_history';
+const LEGACY_BA_STORAGE_KEY = 'siops_tu_berita_acara_history';
 
 type CategoryFilter =
   | 'Semua'
@@ -62,11 +62,19 @@ const CATEGORY_FILTERS: CategoryFilter[] = [
 ];
 
 export const BeritaAcaraManager: React.FC = () => {
-  const { effectiveSchoolConfig: schoolConfig, inventories } = useApp();
+  const {
+    effectiveSchoolConfig: schoolConfig,
+    inventories,
+    beritaAcaraHistory: savedHistory,
+    saveBeritaAcaraRecord,
+    deleteBeritaAcaraRecord,
+    isAdminAuthenticated
+  } = useApp();
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('Semua');
   const [activeTemplateId, setActiveTemplateId] = useState<BeritaAcaraTemplateId>('kelulusan');
   const [viewMode, setViewMode] = useState<'editor' | 'history'>('editor');
+  const [isSavingHistory, setIsSavingHistory] = useState<boolean>(false);
 
   const activeTemplate: BeritaAcaraTemplateDef = useMemo(
     () => BERITA_ACARA_TEMPLATES.find(t => t.id === activeTemplateId) || BERITA_ACARA_TEMPLATES[0],
@@ -90,30 +98,22 @@ export const BeritaAcaraManager: React.FC = () => {
   const [tempDocHeading, setTempDocHeading] = useState<string>('');
   const [tempDocSubHeading, setTempDocSubHeading] = useState<string>('');
 
-  const [savedHistory, setSavedHistory] = useState<SavedBeritaAcaraRecord[]>(() => {
+  const legacyLocalCount = useMemo(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY_BA_HISTORY);
+      const raw = localStorage.getItem(LEGACY_BA_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) return parsed.length;
       }
-    } catch (err) {
-      console.error('Failed loading Berita Acara history:', err);
+    } catch {
+      // ignore
     }
-    return [];
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_BA_HISTORY, JSON.stringify(savedHistory));
-    } catch (err) {
-      console.error('Failed saving Berita Acara history:', err);
-    }
-  }, [savedHistory]);
+    return 0;
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   const currentValues = useMemo(
@@ -325,21 +325,35 @@ export const BeritaAcaraManager: React.FC = () => {
     showToast('Dokumen HTML siap cetak berhasil diunduh.');
   };
 
-  const handleSaveToHistory = () => {
-    const nowIso = new Date().toISOString();
-    const record: SavedBeritaAcaraRecord = {
-      id: `ba-${Date.now()}`,
-      templateId: activeTemplate.id,
-      templateTitle: activeTemplate.shortTitle,
-      nomorSurat: effectiveGeneratedDoc.nomorSurat,
-      tanggalSurat: String(currentValues.tanggal || nowIso.split('T')[0]),
-      ringkasan: effectiveGeneratedDoc.documentSubHeading,
-      formValues: { ...currentValues },
-      createdAt: nowIso,
-      updatedAt: nowIso
-    };
-    setSavedHistory(prev => [record, ...prev]);
-    showToast(`"${activeTemplate.shortTitle}" tersimpan di Riwayat Berita Acara.`);
+  const handleSaveToHistory = async () => {
+    if (isSavingHistory) return;
+    setIsSavingHistory(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const record: SavedBeritaAcaraRecord = {
+        id: `ba-${Date.now()}`,
+        templateId: activeTemplate.id,
+        templateTitle: activeTemplate.shortTitle,
+        nomorSurat: effectiveGeneratedDoc.nomorSurat,
+        tanggalSurat: String(currentValues.tanggal || nowIso.split('T')[0]),
+        ringkasan: effectiveGeneratedDoc.documentSubHeading,
+        formValues: { ...currentValues },
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+      const res = await saveBeritaAcaraRecord(record);
+      if (res.ok) {
+        showToast(
+          isAdminAuthenticated
+            ? `"${activeTemplate.shortTitle}" tersimpan ke Database Admin.`
+            : `"${activeTemplate.shortTitle}" dikirim ke antrean Database Admin untuk persetujuan.`
+        );
+      } else {
+        showToast(res.message || 'Gagal menyimpan Berita Acara.');
+      }
+    } finally {
+      setIsSavingHistory(false);
+    }
   };
 
   const handleLoadFromHistory = (record: SavedBeritaAcaraRecord) => {
@@ -352,9 +366,19 @@ export const BeritaAcaraManager: React.FC = () => {
     showToast(`Memuat ulang "${record.templateTitle}" (${record.nomorSurat}).`);
   };
 
-  const handleDeleteHistory = (id: string) => {
-    setSavedHistory(prev => prev.filter(r => r.id !== id));
-    showToast('Riwayat Berita Acara dihapus.');
+  const handleDeleteHistory = async (id: string) => {
+    if (isSavingHistory) return;
+    setIsSavingHistory(true);
+    try {
+      const res = await deleteBeritaAcaraRecord(id);
+      if (res.ok) {
+        showToast('Riwayat Berita Acara dipindahkan ke Arsip Sementara (Soft-Delete) Database Admin.');
+      } else {
+        showToast(res.message || 'Penghapusan dinonaktifkan untuk non-admin. Hubungi Admin Database.');
+      }
+    } finally {
+      setIsSavingHistory(false);
+    }
   };
 
   const renderPreviewSignatory = (
@@ -499,6 +523,14 @@ export const BeritaAcaraManager: React.FC = () => {
             </span>
           </div>
 
+          {legacyLocalCount > 0 && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Terdapat <strong>{legacyLocalCount}</strong> riwayat lama tersimpan di browser ini. Admin dapat memindahkannya ke Database Admin Satu Pintu melalui menu <strong>Alat Migrasi</strong> di Panel Admin.
+              </span>
+            </div>
+          )}
+
           {savedHistory.length === 0 ? (
             <div className="text-center py-10 border border-dashed border-slate-300 rounded-lg">
               <ScrollText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
@@ -554,9 +586,10 @@ export const BeritaAcaraManager: React.FC = () => {
                           </button>
                           <button
                             type="button"
+                            disabled={!isAdminAuthenticated || isSavingHistory}
                             onClick={() => handleDeleteHistory(rec.id)}
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded-md cursor-pointer"
-                            title="Hapus Riwayat"
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-md cursor-pointer"
+                            title={isAdminAuthenticated ? 'Hapus ke Arsip Sementara (Admin)' : 'Penghapusan hanya melalui Admin Database'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1010,10 +1043,11 @@ export const BeritaAcaraManager: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleSaveToHistory}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                  disabled={isSavingHistory}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 disabled:cursor-not-allowed text-slate-800 text-xs font-semibold rounded-lg flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>Simpan Riwayat</span>
+                  <span>{isSavingHistory ? 'Menyimpan...' : 'Simpan Riwayat'}</span>
                 </button>
                 <button
                   type="button"

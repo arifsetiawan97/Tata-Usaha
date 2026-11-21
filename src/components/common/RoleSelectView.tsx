@@ -26,7 +26,10 @@ import {
   Bell,
   Clock,
   Copy,
-  UserCheck
+  UserCheck,
+  Database,
+  WifiOff,
+  Loader2
 } from 'lucide-react';
 import { LogoKabupatenDefault } from './KopSurat';
 
@@ -50,13 +53,20 @@ export const RoleSelectView: React.FC = () => {
   const {
     schoolConfig,
     accessUsers,
+    approvedRoleCounts,
     accessRules,
     loginAccessUser,
     registerAccessUser,
     requestPasswordReset,
+    lookupTrackedAccount,
     trackedUsername,
     setTrackedUsername,
-    refreshAccessState
+    trackedUserAccount,
+    refreshAccessState,
+    siteSettings,
+    isInitialLoading,
+    connectionError,
+    retryConnection
   } = useApp();
 
   // Modal state: 'login' | 'register' | 'forgot' | 'check_status' | null
@@ -64,6 +74,7 @@ export const RoleSelectView: React.FC = () => {
     'login' | 'register' | 'forgot' | 'check_status' | null
   >(null);
   const [selectedCardRole, setSelectedCardRole] = useState<RoleType | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Silent owner tap detector (5 quick clicks on school logo)
   const logoTapRef = useRef<{ count: number; lastTap: number }>({ count: 0, lastTap: 0 });
@@ -104,24 +115,27 @@ export const RoleSelectView: React.FC = () => {
   const [copiedTempPass, setCopiedTempPass] = useState(false);
   const [isRefreshingNotif, setIsRefreshingNotif] = useState(false);
 
-  // Resolve tracked user account(s) for isolated single-service portal & notifications
-  const trackedAccounts = trackedUsername
-    ? accessUsers.filter(u => u.username.toLowerCase() === trackedUsername.toLowerCase())
-    : [];
-  const primaryTrackedAccount = trackedAccounts[0] || null;
+  // Resolve tracked user account safely via server status lookup
+  const primaryTrackedAccount: RegisteredAccessUser | null =
+    trackedUserAccount ||
+    (trackedUsername
+      ? accessUsers.find(u => u.username.toLowerCase() === trackedUsername.toLowerCase()) || null
+      : null);
 
   // Determine which service cards are visible to this user
   const allowedRolesForView: RoleType[] | null = primaryTrackedAccount
-    ? accessRules.enforceSingleServicePerUser
-      ? [primaryTrackedAccount.role]
-      : Array.from(new Set(trackedAccounts.map(a => a.role)))
+    ? [primaryTrackedAccount.role]
     : null;
 
   const isIsolatedSingleService = allowedRolesForView !== null && allowedRolesForView.length === 1;
   const isolatedRole = isIsolatedSingleService ? allowedRolesForView[0] : null;
 
-  const getApprovedCountByRole = (role: RoleType) =>
-    accessUsers.filter(u => u.role === role && u.status === 'APPROVED').length;
+  const getApprovedCountByRole = (role: RoleType) => {
+    if (approvedRoleCounts && typeof approvedRoleCounts[role] === 'number') {
+      return approvedRoleCounts[role];
+    }
+    return accessUsers.filter(u => u.role === role && u.status === 'APPROVED').length;
+  };
 
   const openLoginModal = (role: RoleType | null) => {
     const targetRole = role || isolatedRole || null;
@@ -163,87 +177,119 @@ export const RoleSelectView: React.FC = () => {
 
   const handleManualRefreshNotif = async () => {
     setIsRefreshingNotif(true);
+    if (trackedUsername) {
+      await lookupTrackedAccount(trackedUsername);
+    }
     await refreshAccessState(true);
     setTimeout(() => setIsRefreshingNotif(false), 350);
   };
 
-  const handleUseIssuedResetPassword = (account: RegisteredAccessUser) => {
-    const res = loginAccessUser({
-      username: account.username,
-      password: account.password,
-      expectedRole: account.role
-    });
-    if (res.ok) {
-      setAuthModalMode(null);
-      setAuthFeedback(null);
-    } else {
-      setSelectedCardRole(account.role);
-      setLoginUsername(account.username);
-      setLoginPassword(account.password);
-      setAuthFeedback({ ok: false, text: res.message });
-      setAuthModalMode('login');
+  const handleUseIssuedResetPassword = async (account: RegisteredAccessUser) => {
+    const tempCode = account.tempResetCode || account.password || '';
+    if (!tempCode || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await loginAccessUser({
+        username: account.username,
+        password: tempCode,
+        expectedRole: account.role
+      });
+      if (res.ok) {
+        setAuthModalMode(null);
+        setAuthFeedback(null);
+      } else {
+        setSelectedCardRole(account.role);
+        setLoginUsername(account.username);
+        setLoginPassword(tempCode);
+        setAuthFeedback({ ok: false, text: res.message });
+        setAuthModalMode('login');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = loginAccessUser({
-      username: loginUsername,
-      password: loginPassword,
-      expectedRole: selectedCardRole || undefined
-    });
-    if (res.ok) {
-      setAuthModalMode(null);
-      setAuthFeedback(null);
-    } else {
-      setAuthFeedback({ ok: false, text: res.message });
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await loginAccessUser({
+        username: loginUsername,
+        password: loginPassword,
+        expectedRole: selectedCardRole || undefined
+      });
+      if (res.ok) {
+        setAuthModalMode(null);
+        setAuthFeedback(null);
+      } else {
+        setAuthFeedback({ ok: false, text: res.message });
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = registerAccessUser({
-      namaLengkap: regNama,
-      username: regUsername,
-      role: regRole,
-      password: regPassword
-    });
-    setAuthFeedback({ ok: res.ok, text: res.message });
-    if (res.ok) {
-      setRegNama('');
-      setRegUsername('');
-      setRegPassword('');
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await registerAccessUser({
+        namaLengkap: regNama,
+        username: regUsername,
+        role: regRole,
+        password: regPassword
+      });
+      setAuthFeedback({ ok: res.ok, text: res.message });
+      if (res.ok) {
+        setRegNama('');
+        setRegUsername('');
+        setRegPassword('');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleForgotSubmit = (e: React.FormEvent) => {
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = requestPasswordReset({
-      username: forgotUsername,
-      note: forgotNote
-    });
-    setAuthFeedback({ ok: res.ok, text: res.message });
-    if (res.ok) {
-      setForgotNote('');
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await requestPasswordReset({
+        username: forgotUsername,
+        note: forgotNote
+      });
+      setAuthFeedback({ ok: res.ok, text: res.message });
+      if (res.ok) {
+        setForgotNote('');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleLookupAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const latestUsers = await refreshAccessState(true);
+    if (isSubmitting) return;
     const clean = lookupUsername.trim();
     if (!clean) return;
-    const found = latestUsers.find(u => u.username.toLowerCase() === clean.toLowerCase());
-    if (!found) {
-      setAuthFeedback({
-        ok: false,
-        text: `Nama pengguna "@${clean}" belum terdaftar di sistem.`
-      });
-      return;
+    setIsSubmitting(true);
+    try {
+      const res = await lookupTrackedAccount(clean);
+      if (!res.ok) {
+        setAuthFeedback({
+          ok: false,
+          text: res.message
+        });
+        return;
+      }
+      setAuthModalMode(null);
+      setAuthFeedback(null);
+    } finally {
+      setIsSubmitting(false);
     }
-    setTrackedUsername(found.username);
-    setAuthModalMode(null);
-    setAuthFeedback(null);
   };
 
   const roleMeta = selectedCardRole
@@ -331,29 +377,55 @@ export const RoleSelectView: React.FC = () => {
           </div>
         </div>
 
-        {/* Hero Section + User Portal Actions */}
-        <div className="text-center max-w-3xl mx-auto my-8 sm:my-10 space-y-5">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            <Lock className="w-3.5 h-3.5 text-blue-400" />
-            {isolatedRole
-              ? `Halaman Khusus Layanan ${ROLE_LABELS_MAP[isolatedRole]}`
-              : 'Portal Pengguna · Akses Layanan Operasional Terproteksi'}
-          </span>
+        {/* Loading / Connection Retry Banner */}
+        {isInitialLoading && (
+          <div className="mt-4 p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-slate-300 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 text-sky-400 animate-spin" />
+            <span>Menghubungkan ke Database Admin Satu Pintu...</span>
+          </div>
+        )}
+
+        {connectionError && !isInitialLoading && (
+          <div className="mt-4 p-4 rounded-xl bg-rose-500/15 border border-rose-500/40 text-xs text-rose-200 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <WifiOff className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{connectionError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => retryConnection()}
+              className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Coba Lagi</span>
+            </button>
+          </div>
+        )}
+
+        {/* Hero Section + Customizable Admin Welcome Headline */}
+        <div className="text-center max-w-4xl mx-auto my-8 sm:my-10 space-y-5">
+          <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-sky-400">
+            <Lock className="w-3.5 h-3.5 text-sky-400" />
+            <span>
+              {isolatedRole
+                ? `Akses Layanan Terisolasi · ${ROLE_LABELS_MAP[isolatedRole]}`
+                : 'Database Admin Satu Pintu · Akses Layanan Operasional Terproteksi'}
+            </span>
+          </div>
 
           <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
-            {isolatedRole
-              ? `Halaman Login ${ROLE_LABELS_MAP[isolatedRole]}`
-              : 'Portal Masuk Layanan Operasional'}
+            {siteSettings.welcomeHeadline || 'SELAMAT DATANG OPERATOR LAYANAN OPERASIONAL'}
           </h2>
 
-          <p className="text-xs sm:text-sm text-slate-400 max-w-2xl mx-auto">
+          <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mx-auto leading-relaxed">
             {isolatedRole
               ? `Akun @${primaryTrackedAccount?.username} terdaftar untuk layanan ${ROLE_LABELS_MAP[isolatedRole]}. Layanan lain tidak ditampilkan sesuai hak akses akun Anda.`
-              : 'Masuk dengan akun dan sandi Anda, ajukan pendaftaran satu layanan, atau cek notifikasi persetujuan dan reset sandi dari Admin.'}
+              : siteSettings.welcomeSubheadline ||
+                'Masuk dengan akun dan sandi Anda, ajukan pendaftaran satu layanan, atau kelola pusat data melalui Panel Database Admin.'}
           </p>
 
           {/* Main User Auth Actions */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 pt-1">
             <button
               type="button"
               onClick={() => openLoginModal(isolatedRole)}
@@ -367,7 +439,7 @@ export const RoleSelectView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => openRegisterModal('TU')}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-600 text-white text-xs sm:text-sm font-bold transition-all cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs sm:text-sm font-bold transition-all cursor-pointer"
               >
                 <UserPlus className="w-4 h-4 text-emerald-400" />
                 <span>Daftar / Ajukan Akun</span>
@@ -377,7 +449,7 @@ export const RoleSelectView: React.FC = () => {
             <button
               type="button"
               onClick={() => openForgotModal('')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/70 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-amber-300 text-xs sm:text-sm font-semibold transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/70 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-amber-300 text-xs sm:text-sm font-semibold transition-all cursor-pointer"
             >
               <RefreshCw className="w-4 h-4 text-amber-400" />
               <span>Lupa Sandi</span>
@@ -386,10 +458,19 @@ export const RoleSelectView: React.FC = () => {
             <button
               type="button"
               onClick={openCheckStatusModal}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/70 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-sky-300 text-xs sm:text-sm font-semibold transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/70 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-sky-300 text-xs sm:text-sm font-semibold transition-all cursor-pointer"
             >
               <Bell className="w-4 h-4 text-sky-400" />
               <span>Cek Notifikasi Akun</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-xs sm:text-sm font-bold transition-all cursor-pointer"
+            >
+              <Database className="w-4 h-4 text-amber-400" />
+              <span>Masuk Database Admin</span>
             </button>
           </div>
         </div>
@@ -435,7 +516,7 @@ export const RoleSelectView: React.FC = () => {
               </div>
 
               {/* Password Reset Notification (RESET_ISSUED by Admin) */}
-              {primaryTrackedAccount.resetRequestStatus === 'RESET_ISSUED' && (
+              {primaryTrackedAccount.resetRequestStatus === 'RESET_ISSUED' && (primaryTrackedAccount.tempResetCode || primaryTrackedAccount.password) && (
                 <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/40 space-y-3">
                   <div className="flex items-start gap-2.5">
                     <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
@@ -446,7 +527,7 @@ export const RoleSelectView: React.FC = () => {
                       <p className="text-xs text-emerald-100/90 leading-relaxed">
                         Permintaan reset sandi Anda telah disetujui oleh Admin. Sandi sementara Anda adalah{' '}
                         <span className="inline-block px-2 py-0.5 rounded bg-slate-950 border border-emerald-400/40 font-mono font-extrabold text-amber-300 tracking-wider">
-                          {primaryTrackedAccount.password}
+                          {primaryTrackedAccount.tempResetCode || primaryTrackedAccount.password}
                         </span>
                         . Silakan masuk ke layanan menggunakan sandi sementara ini, lalu ganti dengan sandi baru Anda setelah berada di dalam layanan.
                       </p>
@@ -457,7 +538,7 @@ export const RoleSelectView: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] text-slate-400">Sandi Sementara:</span>
                       <span className="font-mono text-sm font-extrabold text-amber-300 tracking-wider">
-                        {showTempResetPass ? primaryTrackedAccount.password : '••••••••'}
+                        {showTempResetPass ? (primaryTrackedAccount.tempResetCode || primaryTrackedAccount.password) : '••••••••'}
                       </span>
                       <button
                         type="button"
@@ -470,8 +551,9 @@ export const RoleSelectView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          if (navigator?.clipboard) {
-                            navigator.clipboard.writeText(primaryTrackedAccount.password).catch(() => {});
+                          const code = primaryTrackedAccount.tempResetCode || primaryTrackedAccount.password || '';
+                          if (navigator?.clipboard && code) {
+                            navigator.clipboard.writeText(code).catch(() => {});
                             setCopiedTempPass(true);
                             setTimeout(() => setCopiedTempPass(false), 1500);
                           }
@@ -485,11 +567,12 @@ export const RoleSelectView: React.FC = () => {
 
                     <button
                       type="button"
+                      disabled={isSubmitting}
                       onClick={() => handleUseIssuedResetPassword(primaryTrackedAccount)}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                     >
                       <LogIn className="w-3.5 h-3.5" />
-                      <span>Masuk ke Layanan dengan Sandi Sementara →</span>
+                      <span>{isSubmitting ? 'Memproses...' : 'Masuk ke Layanan dengan Sandi Sementara →'}</span>
                     </button>
                   </div>
                 </div>
@@ -944,11 +1027,12 @@ export const RoleSelectView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className={`flex-1 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all cursor-pointer ${
+                  disabled={isSubmitting}
+                  className={`flex-1 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                     roleMeta ? roleMeta.btnColor : 'bg-sky-600 hover:bg-sky-500'
                   }`}
                 >
-                  Masuk Sekarang
+                  {isSubmitting ? 'Memverifikasi...' : 'Masuk Sekarang'}
                 </button>
               </div>
 
@@ -1116,9 +1200,10 @@ export const RoleSelectView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl shadow-md transition-all cursor-pointer"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed rounded-xl shadow-md transition-all cursor-pointer"
                 >
-                  Kirim Pendaftaran
+                  {isSubmitting ? 'Mengirim...' : 'Kirim Pendaftaran'}
                 </button>
               </div>
 
@@ -1200,9 +1285,10 @@ export const RoleSelectView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 rounded-xl shadow-md transition-all cursor-pointer"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-60 disabled:cursor-not-allowed rounded-xl shadow-md transition-all cursor-pointer"
                 >
-                  Tampilkan Notifikasi
+                  {isSubmitting ? 'Memeriksa...' : 'Tampilkan Notifikasi'}
                 </button>
               </div>
             </form>
@@ -1296,9 +1382,10 @@ export const RoleSelectView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl shadow-md transition-all cursor-pointer"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 disabled:cursor-not-allowed rounded-xl shadow-md transition-all cursor-pointer"
                 >
-                  Kirim Permintaan Reset
+                  {isSubmitting ? 'Mengirim...' : 'Kirim Permintaan Reset'}
                 </button>
               </div>
             </form>
