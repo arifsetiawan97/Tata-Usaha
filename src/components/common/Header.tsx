@@ -91,7 +91,7 @@ export const Header: React.FC = () => {
   const logoTapRef = useRef<{ count: number; lastTap: number }>({ count: 0, lastTap: 0 });
   const handleLogoTap = () => {
     const now = Date.now();
-    if (now - logoTapRef.current.lastTap > 2500) {
+    if (now - logoTapRef.current.lastTap > 4000) {
       logoTapRef.current.count = 1;
     } else {
       logoTapRef.current.count += 1;
@@ -207,11 +207,11 @@ export const Header: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-3">
             {/* Left: School Identity */}
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                onClick={handleLogoTap}
-                className="w-10 h-10 shrink-0 flex items-center justify-center select-none"
-              >
+            <div
+              onClick={handleLogoTap}
+              className="flex items-center gap-3 min-w-0 select-none touch-manipulation"
+            >
+              <div className="w-10 h-10 shrink-0 flex items-center justify-center">
                 {schoolConfig.logoAplikasiUrl ? (
                   <img 
                     src={schoolConfig.logoAplikasiUrl} 
@@ -246,7 +246,7 @@ export const Header: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
-                  className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer tabular-nums bg-amber-50 text-amber-900 border-amber-300"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer tabular-nums bg-amber-50 text-amber-900 border-amber-300"
                   title="Buka Konsol Database Admin"
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />

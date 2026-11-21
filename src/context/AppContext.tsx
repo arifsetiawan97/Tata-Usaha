@@ -460,6 +460,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   schoolConfigRef.current = schoolConfig;
   const accessUsersRef = useRef<RegisteredAccessUser[]>(accessUsers);
   accessUsersRef.current = accessUsers;
+  const adminAuthStatusRef = useRef<AdminAuthStatusState>(adminAuthStatus);
+  adminAuthStatusRef.current = adminAuthStatus;
   const hasHydratedFromServerRef = useRef(false);
   const isFetchingRef = useRef(false);
 
@@ -591,11 +593,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshAdminAuthStatus = useCallback(async (): Promise<AdminAuthStatusState> => {
     const res = await storageService.adminAuthStatus();
     if (res.ok && res.data) {
-      setAdminAuthStatus(res.data);
-      return res.data;
+      const next = res.data;
+      setAdminAuthStatus(prev => {
+        if (
+          prev.envOverrideActive === next.envOverrideActive &&
+          prev.isClaimed === next.isClaimed &&
+          prev.setupRequired === next.setupRequired
+        ) {
+          return prev;
+        }
+        return next;
+      });
+      return next;
     }
-    return adminAuthStatus;
-  }, [adminAuthStatus]);
+    return adminAuthStatusRef.current;
+  }, []);
 
   const refreshAdminDashboard = useCallback(async (): Promise<boolean> => {
     if (!storageService.getAdminToken()) {

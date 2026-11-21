@@ -19,19 +19,32 @@ function MainLayout() {
   const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
   const [isOwnerAdminOpen, setIsOwnerAdminOpen] = useState(false);
 
-  // Private owner-only triggers: Ctrl+Shift+A, 5x tap logo event, or #owner-admin / ?owner=admin
+  // Private owner-only triggers: Alt+Shift+A, Ctrl+Alt+A, F9, Ctrl+Shift+A, 5x tap logo/footer, or #owner-admin / ?owner=admin / ?admin=1 / #admin
   useEffect(() => {
     const checkUrlTrigger = () => {
       const hash = window.location.hash.toLowerCase();
       const params = new URLSearchParams(window.location.search);
-      if (hash === '#owner-admin' || params.get('owner') === 'admin') {
+      const ownerParam = (params.get('owner') || '').toLowerCase();
+      const adminParam = (params.get('admin') || '').toLowerCase();
+      if (
+        hash.includes('owner-admin') ||
+        hash === '#admin' ||
+        ownerParam === 'admin' ||
+        adminParam === '1' ||
+        adminParam === 'true'
+      ) {
         setIsOwnerAdminOpen(true);
       }
     };
     checkUrlTrigger();
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+      const key = (e.key || '').toLowerCase();
+      const isAltShiftA = e.altKey && e.shiftKey && key === 'a';
+      const isCtrlAltA = (e.ctrlKey || e.metaKey) && e.altKey && key === 'a';
+      const isCtrlShiftA = (e.ctrlKey || e.metaKey) && e.shiftKey && key === 'a';
+      const isF9 = e.key === 'F9';
+      if (isAltShiftA || isCtrlAltA || isCtrlShiftA || isF9) {
         e.preventDefault();
         setIsOwnerAdminOpen(true);
       }
@@ -43,10 +56,12 @@ function MainLayout() {
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('hashchange', checkUrlTrigger);
+    window.addEventListener('popstate', checkUrlTrigger);
     window.addEventListener('siops-open-owner-panel', handleCustomOpen);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('hashchange', checkUrlTrigger);
+      window.removeEventListener('popstate', checkUrlTrigger);
       window.removeEventListener('siops-open-owner-panel', handleCustomOpen);
     };
   }, []);

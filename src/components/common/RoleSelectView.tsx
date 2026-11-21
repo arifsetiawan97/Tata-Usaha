@@ -66,7 +66,10 @@ export const RoleSelectView: React.FC = () => {
     siteSettings,
     isInitialLoading,
     connectionError,
-    retryConnection
+    retryConnection,
+    isAdminAuthenticated,
+    loginAdminSession,
+    refreshAdminAuthStatus
   } = useApp();
 
   // Modal state: 'login' | 'register' | 'forgot' | 'check_status' | null
@@ -76,11 +79,11 @@ export const RoleSelectView: React.FC = () => {
   const [selectedCardRole, setSelectedCardRole] = useState<RoleType | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Silent owner tap detector (5 quick clicks on school logo)
+  // Silent owner tap detector (5 quick clicks on school logo/title or copyright footer)
   const logoTapRef = useRef<{ count: number; lastTap: number }>({ count: 0, lastTap: 0 });
   const handleLogoTap = () => {
     const now = Date.now();
-    if (now - logoTapRef.current.lastTap > 2500) {
+    if (now - logoTapRef.current.lastTap > 4000) {
       logoTapRef.current.count = 1;
     } else {
       logoTapRef.current.count += 1;
@@ -217,6 +220,29 @@ export const RoleSelectView: React.FC = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const normalizedUser = loginUsername.trim().toLowerCase();
+      if (normalizedUser === 'admin' || normalizedUser === 'administrator') {
+        const status = await refreshAdminAuthStatus();
+        if (status.setupRequired && !status.envOverrideActive) {
+          setAuthModalMode(null);
+          setAuthFeedback(null);
+          window.dispatchEvent(new CustomEvent('siops-open-owner-panel'));
+          return;
+        }
+        const adminRes = await loginAdminSession(loginPassword);
+        if (adminRes.ok) {
+          setAuthModalMode(null);
+          setAuthFeedback(null);
+          window.dispatchEvent(new CustomEvent('siops-open-owner-panel'));
+        } else {
+          setAuthFeedback({
+            ok: false,
+            text: formatApiErrorMessage(adminRes.message, 'Sandi Admin tidak sesuai.')
+          });
+        }
+        return;
+      }
+
       const res = await loginAccessUser({
         username: loginUsername,
         password: loginPassword,
@@ -350,11 +376,11 @@ export const RoleSelectView: React.FC = () => {
       {/* Header Info */}
       <div className="max-w-6xl mx-auto w-full pt-4 pb-8">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-800 pb-6 text-center sm:text-left">
-          <div className="flex items-center gap-4">
-            <div
-              onClick={handleLogoTap}
-              className="w-14 h-16 shrink-0 flex items-center justify-center bg-slate-800/80 rounded-xl p-1.5 border border-slate-700 select-none"
-            >
+          <div
+            onClick={handleLogoTap}
+            className="flex items-center gap-4 select-none touch-manipulation"
+          >
+            <div className="w-14 h-16 shrink-0 flex items-center justify-center bg-slate-800/80 rounded-xl p-1.5 border border-slate-700">
               {schoolConfig.logoAplikasiUrl ? (
                 <img
                   src={schoolConfig.logoAplikasiUrl}
@@ -384,11 +410,23 @@ export const RoleSelectView: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 bg-slate-800/60 px-3.5 py-2 rounded-xl border border-slate-700/80 text-xs text-slate-300">
-            <School className="w-4 h-4 text-amber-400" />
-            <span>NPSN: {schoolConfig.npsn}</span>
-            <span>·</span>
-            <span>Kota: {schoolConfig.kabupatenKota}</span>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {isAdminAuthenticated && (
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
+                className="flex items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 px-3 py-2 rounded-xl border border-amber-500/40 text-xs font-bold text-amber-300 cursor-pointer transition-colors"
+              >
+                <Shield className="w-4 h-4 text-amber-400" />
+                <span>Buka Konsol Admin</span>
+              </button>
+            )}
+            <div className="flex items-center gap-3 bg-slate-800/60 px-3.5 py-2 rounded-xl border border-slate-700/80 text-xs text-slate-300">
+              <School className="w-4 h-4 text-amber-400" />
+              <span>NPSN: {schoolConfig.npsn}</span>
+              <span>·</span>
+              <span>Kota: {schoolConfig.kabupatenKota}</span>
+            </div>
           </div>
         </div>
 
@@ -1399,7 +1437,10 @@ export const RoleSelectView: React.FC = () => {
         </div>
       )}
 
-      <div className="text-center text-[11px] text-slate-500 py-2">
+      <div
+        onClick={handleLogoTap}
+        className="text-center text-[11px] text-slate-500 py-2 select-none touch-manipulation"
+      >
         UPT Satuan Pendidikan © 2026 · Tata Naskah Dinas Kementerian Pendidikan & Kebudayaan RI
       </div>
     </div>

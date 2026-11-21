@@ -3,10 +3,14 @@ import crypto from 'crypto';
 const EPHEMERAL_FALLBACK_KEY = '__siopsEphemeralSessionSecret';
 const TOKEN_TTL_SECONDS = 12 * 60 * 60; // 12 hours (refreshed automatically for 24h uptime)
 
-export function getSessionSecret() {
+export function getSessionSecret(persistentPepper = '') {
   const fromEnv = (process.env.SESSION_SECRET || '').trim();
   if (fromEnv && fromEnv.length >= 16) {
     return fromEnv;
+  }
+  const cleanPepper = typeof persistentPepper === 'string' ? persistentPepper.trim() : '';
+  if (cleanPepper && cleanPepper.length >= 16) {
+    return crypto.createHash('sha256').update(`siops-session-v1:${cleanPepper}`).digest('hex');
   }
   if (!globalThis[EPHEMERAL_FALLBACK_KEY]) {
     globalThis[EPHEMERAL_FALLBACK_KEY] = crypto.randomBytes(32).toString('hex');
@@ -66,7 +70,7 @@ function fromBase64Url(str) {
   return Buffer.from(padded, 'base64').toString('utf8');
 }
 
-export function signSessionToken(payload, ttlSeconds = TOKEN_TTL_SECONDS) {
+export function signSessionToken(payload, ttlSeconds = TOKEN_TTL_SECONDS, persistentPepper = '') {
   const nowSec = Math.floor(Date.now() / 1000);
   const fullPayload = {
     ...payload,
@@ -75,8 +79,9 @@ export function signSessionToken(payload, ttlSeconds = TOKEN_TTL_SECONDS) {
     jti: crypto.randomBytes(10).toString('hex')
   };
   const encodedPayload = toBase64Url(JSON.stringify(fullPayload));
+  const secret = getSessionSecret(persistentPepper);
   const sig = crypto
-    .createHmac('sha256', getSessionSecret())
+    .createHmac('sha256', secret)
     .update(encodedPayload)
     .digest();
   return {
@@ -86,7 +91,7 @@ export function signSessionToken(payload, ttlSeconds = TOKEN_TTL_SECONDS) {
   };
 }
 
-export function verifySessionToken(token) {
+export function verifySessionToken(token, persistentPepper = '') {
   if (!token || typeof token !== 'string') return null;
   const parts = token.trim().split('.');
   if (parts.length !== 2) return null;
@@ -94,8 +99,9 @@ export function verifySessionToken(token) {
   if (!encodedPayload || !encodedSig) return null;
 
   try {
+    const secret = getSessionSecret(persistentPepper);
     const expectedSig = toBase64Url(
-      crypto.createHmac('sha256', getSessionSecret()).update(encodedPayload).digest()
+      crypto.createHmac('sha256', secret).update(encodedPayload).digest()
     );
     if (!timingSafeEqualStr(encodedSig, expectedSig)) {
       return null;

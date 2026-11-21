@@ -81,7 +81,7 @@ export async function resolveAuthContext(req, db) {
   if (!token) {
     return { authenticated: false, isAdmin: false, isStaff: false, session: null, userRecord: null };
   }
-  const session = verifySessionToken(token);
+  const session = verifySessionToken(token, db?.serverSecurityPepper);
   if (!session) {
     return { authenticated: false, isAdmin: false, isStaff: false, session: null, userRecord: null, expired: true };
   }
@@ -201,6 +201,12 @@ export async function handleAuthAction(action, req, res) {
     }
     if (username.length < 3 || username.length > 50) {
       return res.status(400).json({ ok: false, message: 'Nama pengguna harus 3 sampai 50 karakter.' });
+    }
+    if (['admin', 'administrator', 'superadmin', 'root'].includes(usernameKey)) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Nama pengguna tersebut dicadangkan khusus untuk sistem. Silakan gunakan nama pengguna lain.'
+      });
     }
     if (password.length < 4 || password.length > 64) {
       return res.status(400).json({ ok: false, message: 'Sandi minimal 4 karakter.' });
@@ -412,13 +418,17 @@ export async function handleAuthAction(action, req, res) {
     });
     await writeDb(db);
 
-    const issued = signSessionToken({
-      sub: updatedUser.id,
-      username: updatedUser.username,
-      namaLengkap: updatedUser.namaLengkap,
-      role: updatedUser.role,
-      sessionType: 'staff'
-    });
+    const issued = signSessionToken(
+      {
+        sub: updatedUser.id,
+        username: updatedUser.username,
+        namaLengkap: updatedUser.namaLengkap,
+        role: updatedUser.role,
+        sessionType: 'staff'
+      },
+      undefined,
+      db.serverSecurityPepper
+    );
 
     return res.status(200).json({
       ok: true,
@@ -437,13 +447,17 @@ export async function handleAuthAction(action, req, res) {
     if (!ctx.isStaff || !ctx.userRecord) {
       return res.status(401).json({ ok: false, message: 'Sesi pengguna berakhir. Silakan masuk ulang.' });
     }
-    const issued = signSessionToken({
-      sub: ctx.userRecord.id,
-      username: ctx.userRecord.username,
-      namaLengkap: ctx.userRecord.namaLengkap,
-      role: ctx.userRecord.role,
-      sessionType: 'staff'
-    });
+    const issued = signSessionToken(
+      {
+        sub: ctx.userRecord.id,
+        username: ctx.userRecord.username,
+        namaLengkap: ctx.userRecord.namaLengkap,
+        role: ctx.userRecord.role,
+        sessionType: 'staff'
+      },
+      undefined,
+      db.serverSecurityPepper
+    );
     return res.status(200).json({
       ok: true,
       token: issued.token,
@@ -728,13 +742,17 @@ export async function handleAdminRoute(segments, req, res) {
     });
     await writeDb(db);
 
-    const issued = signSessionToken({
-      sub: 'admin-root',
-      username: 'admin',
-      namaLengkap: 'Administrator Utama',
-      role: 'ADMIN',
-      sessionType: 'admin'
-    });
+    const issued = signSessionToken(
+      {
+        sub: 'admin-root',
+        username: 'admin',
+        namaLengkap: 'Administrator Utama',
+        role: 'ADMIN',
+        sessionType: 'admin'
+      },
+      undefined,
+      db.serverSecurityPepper
+    );
 
     return res.status(201).json({
       ok: true,
@@ -802,13 +820,17 @@ export async function handleAdminRoute(segments, req, res) {
     });
     await writeDb(db);
 
-    const issued = signSessionToken({
-      sub: 'admin-root',
-      username: 'admin',
-      namaLengkap: 'Administrator Utama',
-      role: 'ADMIN',
-      sessionType: 'admin'
-    });
+    const issued = signSessionToken(
+      {
+        sub: 'admin-root',
+        username: 'admin',
+        namaLengkap: 'Administrator Utama',
+        role: 'ADMIN',
+        sessionType: 'admin'
+      },
+      undefined,
+      db.serverSecurityPepper
+    );
 
     return res.status(200).json({
       ok: true,
@@ -823,13 +845,17 @@ export async function handleAdminRoute(segments, req, res) {
   if (!adminCtx) return;
 
   if (pathJoined === 'auth/refresh' && req.method === 'POST') {
-    const issued = signSessionToken({
-      sub: 'admin-root',
-      username: 'admin',
-      namaLengkap: 'Administrator Utama',
-      role: 'ADMIN',
-      sessionType: 'admin'
-    });
+    const issued = signSessionToken(
+      {
+        sub: 'admin-root',
+        username: 'admin',
+        namaLengkap: 'Administrator Utama',
+        role: 'ADMIN',
+        sessionType: 'admin'
+      },
+      undefined,
+      db.serverSecurityPepper
+    );
     return res.status(200).json({ ok: true, token: issued.token, expiresAt: issued.expiresAt });
   }
 

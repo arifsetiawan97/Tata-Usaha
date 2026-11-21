@@ -5,8 +5,11 @@ import {
   ArrowRightLeft,
   CheckCircle2,
   Database,
+  Eye,
+  EyeOff,
   HardDrive,
   KeyRound,
+  Loader2,
   Lock,
   LogOut,
   RefreshCw,
@@ -46,6 +49,8 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
   const [activeTab, setActiveTab] = useState<ConsoleTab>('capacity');
   const [adminInput, setAdminInput] = useState('');
   const [confirmClaimInput, setConfirmClaimInput] = useState('');
+  const [showAdminPass, setShowAdminPass] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -58,10 +63,18 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
     if (!isOpen) {
       setAdminInput('');
       setConfirmClaimInput('');
+      setShowAdminPass(false);
       setAuthError(null);
       return;
     }
-    refreshRefs.current.refreshAdminAuthStatus();
+    let cancelled = false;
+    setCheckingStatus(true);
+    refreshRefs.current.refreshAdminAuthStatus().finally(() => {
+      if (!cancelled) setCheckingStatus(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen]);
 
   useEffect(() => {
@@ -208,7 +221,12 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
         {/* Auth Gate vs Authenticated Workspace */}
         {!isAdminAuthenticated ? (
           <div className="p-6 sm:p-10 flex items-center justify-center overflow-y-auto">
-            {adminAuthStatus.setupRequired && !adminAuthStatus.envOverrideActive ? (
+            {checkingStatus ? (
+              <div className="py-10 flex flex-col items-center gap-3 text-slate-300 text-xs">
+                <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
+                <span>Memeriksa status keamanan Database Admin...</span>
+              </div>
+            ) : adminAuthStatus.setupRequired && !adminAuthStatus.envOverrideActive ? (
               <form
                 onSubmit={handleClaimAdmin}
                 className="w-full max-w-md space-y-4 bg-slate-800/60 border border-emerald-500/35 rounded-2xl p-6"
@@ -227,19 +245,29 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Buat Sandi Admin Utama
                   </label>
-                  <input
-                    type="password"
-                    autoFocus
-                    required
-                    minLength={6}
-                    value={adminInput}
-                    onChange={e => {
-                      setAdminInput(e.target.value);
-                      if (authError) setAuthError(null);
-                    }}
-                    placeholder="Minimal 6 karakter..."
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-900 border border-slate-700 rounded-xl text-white"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showAdminPass ? 'text' : 'password'}
+                      autoFocus
+                      required
+                      minLength={6}
+                      value={adminInput}
+                      onChange={e => {
+                        setAdminInput(e.target.value);
+                        if (authError) setAuthError(null);
+                      }}
+                      placeholder="Minimal 6 karakter..."
+                      className="w-full pl-3.5 pr-10 py-2.5 text-sm bg-slate-900 border border-slate-700 rounded-xl text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPass(!showAdminPass)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                      aria-label={showAdminPass ? 'Sembunyikan sandi' : 'Lihat sandi'}
+                    >
+                      {showAdminPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -247,7 +275,7 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
                     Ulangi Sandi Admin
                   </label>
                   <input
-                    type="password"
+                    type={showAdminPass ? 'text' : 'password'}
                     required
                     minLength={6}
                     value={confirmClaimInput}
@@ -303,18 +331,28 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Sandi Admin:
                   </label>
-                  <input
-                    type="password"
-                    autoFocus
-                    required
-                    value={adminInput}
-                    onChange={e => {
-                      setAdminInput(e.target.value);
-                      if (authError) setAuthError(null);
-                    }}
-                    placeholder="Masukkan sandi Admin..."
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showAdminPass ? 'text' : 'password'}
+                      autoFocus
+                      required
+                      value={adminInput}
+                      onChange={e => {
+                        setAdminInput(e.target.value);
+                        if (authError) setAuthError(null);
+                      }}
+                      placeholder="Masukkan sandi Admin..."
+                      className="w-full pl-3.5 pr-10 py-2.5 text-sm bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPass(!showAdminPass)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                      aria-label={showAdminPass ? 'Sembunyikan sandi' : 'Lihat sandi'}
+                    >
+                      {showAdminPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 {authError && (
