@@ -45,7 +45,7 @@ import {
   initialLibraryMemberStats
 } from '../data/initialData';
 import { ROLE_OPERATIONAL_SPECS } from '../data/roleOperationalSpecs';
-import { AppStateData, ServerStorageMode, storageService } from '../services/storageService';
+import { AppStateData, ServerStorageMode, storageService, formatApiErrorMessage } from '../services/storageService';
 import {
   isTaskInMonth,
   getTaskClassification,
@@ -377,8 +377,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [actionFeedback, setActionFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const feedbackTimerRef = useRef<any>(null);
-  const showActionFeedback = useCallback((ok: boolean, text: string) => {
-    setActionFeedback({ ok, text });
+  const showActionFeedback = useCallback((ok: boolean, text: unknown) => {
+    const safeText = formatApiErrorMessage(text, ok ? 'Aksi berhasil.' : 'Terjadi kesalahan.');
+    setActionFeedback({ ok, text: safeText });
     if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     feedbackTimerRef.current = setTimeout(() => {
       setActionFeedback(null);
@@ -759,7 +760,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return true;
         }
         setSyncStatus(storageService.getAdminToken() ? 'synced' : 'offline');
-        showActionFeedback(false, res.error || `Gagal menyimpan ${fallbackActionName || 'perubahan'} ke Database Admin.`);
+        showActionFeedback(
+          false,
+          formatApiErrorMessage(res.error, `Gagal menyimpan ${fallbackActionName || 'perubahan'} ke Database Admin.`)
+        );
         return false;
       }
       return false;
@@ -793,7 +797,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return true;
         }
         setSyncStatus('synced');
-        showActionFeedback(false, res.error || `Gagal menyimpan ${fallbackLabel}.`);
+        showActionFeedback(false, formatApiErrorMessage(res.error, `Gagal menyimpan ${fallbackLabel}.`));
         return false;
       }
 
@@ -809,14 +813,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (res.ok) {
           showActionFeedback(
             true,
-            res.data?.message || `${fallbackLabel} dikirim ke antrean validasi Admin Database.`
+            formatApiErrorMessage(res.data?.message, `${fallbackLabel} dikirim ke antrean validasi Admin Database.`)
           );
           if (res.data?.submission) {
             setStaffSubmissions(prev => [res.data!.submission, ...prev]);
           }
           return true;
         }
-        showActionFeedback(false, res.error || `Pengajuan ${fallbackLabel} ditolak server.`);
+        showActionFeedback(false, formatApiErrorMessage(res.error, `Pengajuan ${fallbackLabel} ditolak server.`));
         return false;
       }
 
@@ -842,7 +846,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showActionFeedback(true, `${label} dipindahkan ke Arsip Sementara (Soft-Delete) Database Admin.`);
         return true;
       }
-      showActionFeedback(false, res.error || `Gagal menghapus ${label}.`);
+      showActionFeedback(false, formatApiErrorMessage(res.error, `Gagal menghapus ${label}.`));
       return false;
     },
     [showActionFeedback]
@@ -1563,7 +1567,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           note: `Pengajuan pembaruan kop surat pribadi @${currentUser?.username}`
         })
         .then(res => {
-          showActionFeedback(res.ok, res.data?.message || res.error || 'Kop surat diajukan ke Admin Database.');
+          showActionFeedback(
+            res.ok,
+            formatApiErrorMessage(res.data?.message ?? res.error, 'Kop surat diajukan ke Admin Database.')
+          );
         });
     }
   };
@@ -1654,7 +1661,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           note: `Pengajuan pembaruan tanda tangan/pengesahan @${currentUser?.username}`
         })
         .then(res => {
-          showActionFeedback(res.ok, res.data?.message || res.error || 'Pengesahan diajukan ke Admin Database.');
+          showActionFeedback(
+            res.ok,
+            formatApiErrorMessage(res.data?.message ?? res.error, 'Pengesahan diajukan ke Admin Database.')
+          );
         });
     }
   };
@@ -1905,7 +1915,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showActionFeedback(true, 'Cadangan database berhasil dipulihkan!');
         refreshAdminDashboard();
       } else {
-        showActionFeedback(false, res.error || 'Gagal memulihkan file JSON cadangan.');
+        showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal memulihkan file JSON cadangan.'));
       }
     });
     return true;
@@ -1947,7 +1957,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!res.ok) {
       return {
         ok: false,
-        message: res.error || res.data?.message || 'Pendaftaran gagal.'
+        message: formatApiErrorMessage(res.error ?? res.data?.message, 'Pendaftaran gagal.')
       };
     }
     const registered = res.data?.user;
@@ -1959,7 +1969,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {
       ok: true,
       user: registered,
-      message: res.data?.message || 'Pendaftaran berhasil dikirim ke Database Admin.'
+      message: formatApiErrorMessage(res.data?.message, 'Pendaftaran berhasil dikirim ke Database Admin.')
     };
   };
 
@@ -1972,7 +1982,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!res.ok || !res.data?.user) {
       return {
         ok: false,
-        message: res.error || res.data?.message || 'Gagal masuk ke sistem.'
+        message: formatApiErrorMessage(res.error ?? res.data?.message, 'Gagal masuk ke sistem.')
       };
     }
     const loggedInUser = res.data.user;
@@ -1989,7 +1999,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ok: true,
       user: loggedInUser,
       requiresPasswordChange: Boolean(res.data.requiresPasswordChange),
-      message: res.data.message || `Selamat datang, ${loggedInUser.namaLengkap}!`
+      message: formatApiErrorMessage(res.data.message, `Selamat datang, ${loggedInUser.namaLengkap}!`)
     };
   };
 
@@ -2007,13 +2017,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!res.ok) {
       return {
         ok: false,
-        message: res.error || res.data?.message || 'Gagal mengirim permintaan reset sandi.'
+        message: formatApiErrorMessage(res.error ?? res.data?.message, 'Gagal mengirim permintaan reset sandi.')
       };
     }
     setTrackedUsername(payload.username.trim());
     return {
       ok: true,
-      message: res.data?.message || 'Permintaan reset sandi berhasil dikirim ke Admin Database.'
+      message: formatApiErrorMessage(res.data?.message, 'Permintaan reset sandi berhasil dikirim ke Admin Database.')
     };
   };
 
@@ -2023,7 +2033,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!res.ok || !res.data?.user) {
       return {
         ok: false,
-        message: res.error || `Nama pengguna "@${clean}" belum terdaftar di sistem.`
+        message: formatApiErrorMessage(res.error, `Nama pengguna "@${clean}" belum terdaftar di sistem.`)
       };
     }
     setTrackedUsername(res.data.user.username);
@@ -2040,18 +2050,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await storageService.adminUserAction(userId, 'set-password', newPassword);
       if (res.ok) {
         await refreshAdminDashboard();
-        return { ok: true, user: res.data?.user, message: res.data?.message || 'Sandi akun diperbarui.' };
+        return {
+          ok: true,
+          user: res.data?.user,
+          message: formatApiErrorMessage(res.data?.message, 'Sandi akun diperbarui.')
+        };
       }
-      return { ok: false, message: res.error || 'Gagal memperbarui sandi akun.' };
+      return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal memperbarui sandi akun.') };
     }
 
     const res = await storageService.authChangePassword(newPassword);
     if (res.ok && res.data?.user) {
       setCurrentUser(res.data.user);
       setTrackedUserAccount(res.data.user);
-      return { ok: true, user: res.data.user, message: res.data.message || 'Sandi baru berhasil disimpan.' };
+      return {
+        ok: true,
+        user: res.data.user,
+        message: formatApiErrorMessage(res.data?.message, 'Sandi baru berhasil disimpan.')
+      };
     }
-    return { ok: false, message: res.error || 'Gagal memperbarui sandi.' };
+    return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal memperbarui sandi.') };
   };
 
   const completePasswordResetWithNewPassword = async (
@@ -2065,23 +2083,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return {
         ok: true,
         user: res.data.user,
-        message: res.data.message || 'Sandi baru berhasil disimpan!'
+        message: formatApiErrorMessage(res.data?.message, 'Sandi baru berhasil disimpan!')
       };
     }
-    return { ok: false, message: res.error || 'Gagal menyimpan sandi baru.' };
+    return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal menyimpan sandi baru.') };
   };
 
   // Admin Console Auth & Governance Actions
   const claimAdminPassword = async (password: string): Promise<AuthActionResult> => {
     const res = await storageService.adminAuthClaim(password);
     if (!res.ok) {
-      return { ok: false, message: res.error || 'Gagal menetapkan sandi Admin Utama.' };
+      return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal menetapkan sandi Admin Utama.') };
     }
     setIsAdminAuthenticated(true);
     setAdminAuthStatus(prev => ({ ...prev, isClaimed: true, setupRequired: false }));
     setSessionExpiredNotice(null);
     await refreshAdminDashboard();
-    return { ok: true, message: res.data?.message || 'Sandi Admin Utama aktif!' };
+    return { ok: true, message: formatApiErrorMessage(res.data?.message, 'Sandi Admin Utama aktif!') };
   };
 
   const loginAdminSession = async (password: string): Promise<AuthActionResult> => {
@@ -2090,12 +2108,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (res.data?.setupRequired) {
         setAdminAuthStatus(prev => ({ ...prev, setupRequired: true, isClaimed: false }));
       }
-      return { ok: false, message: res.error || 'Sandi Admin tidak sesuai!' };
+      return { ok: false, message: formatApiErrorMessage(res.error, 'Sandi Admin tidak sesuai!') };
     }
     setIsAdminAuthenticated(true);
     setSessionExpiredNotice(null);
     await refreshAdminDashboard();
-    return { ok: true, message: res.data?.message || 'Berhasil masuk ke Database Admin Satu Pintu.' };
+    return {
+      ok: true,
+      message: formatApiErrorMessage(res.data?.message, 'Berhasil masuk ke Database Admin Satu Pintu.')
+    };
   };
 
   const logoutAdminSession = () => {
@@ -2108,18 +2129,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const res = await storageService.adminUserAction(userId, 'approve', assignedPassword);
     if (res.ok) {
       await refreshAdminDashboard();
-      return { ok: true, user: res.data?.user, message: res.data?.message || 'Akun disetujui.' };
+      return {
+        ok: true,
+        user: res.data?.user,
+        message: formatApiErrorMessage(res.data?.message, 'Akun disetujui.')
+      };
     }
-    return { ok: false, message: res.error || 'Gagal menyetujui akun.' };
+    return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal menyetujui akun.') };
   };
 
   const rejectAccessUser = async (userId: string): Promise<AuthActionResult> => {
     const res = await storageService.adminUserAction(userId, 'reject');
     if (res.ok) {
       await refreshAdminDashboard();
-      return { ok: true, user: res.data?.user, message: res.data?.message || 'Akun ditolak.' };
+      return {
+        ok: true,
+        user: res.data?.user,
+        message: formatApiErrorMessage(res.data?.message, 'Akun ditolak.')
+      };
     }
-    return { ok: false, message: res.error || 'Gagal menolak akun.' };
+    return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal menolak akun.') };
   };
 
   const deleteAccessUser = async (userId: string): Promise<AuthActionResult> => {
@@ -2141,9 +2170,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const res = await storageService.adminCreateUser(payload);
     if (res.ok) {
       await refreshAdminDashboard();
-      return { ok: true, user: res.data?.user, message: res.data?.message || 'Pengguna berhasil ditambahkan.' };
+      return {
+        ok: true,
+        user: res.data?.user,
+        message: formatApiErrorMessage(res.data?.message, 'Pengguna berhasil ditambahkan.')
+      };
     }
-    return { ok: false, message: res.error || 'Gagal menambahkan pengguna.' };
+    return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal menambahkan pengguna.') };
   };
 
   const updateAccessRules = async (updates: Partial<AccessSecurityRules>): Promise<AuthActionResult> => {
@@ -2153,16 +2186,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await refreshAdminDashboard();
       return { ok: true, message: 'Aturan keamanan akses diperbarui.' };
     }
-    return { ok: false, message: res.error || 'Gagal memperbarui aturan keamanan.' };
+    return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal memperbarui aturan keamanan.') };
   };
 
   const updateAdminPassword = async (newPassword: string): Promise<AuthActionResult> => {
     const res = await storageService.adminAuthChangePassword(newPassword);
     if (res.ok) {
       await refreshAdminDashboard();
-      return { ok: true, message: res.data?.message || 'Sandi Admin berhasil diperbarui.' };
+      return {
+        ok: true,
+        message: formatApiErrorMessage(res.data?.message, 'Sandi Admin berhasil diperbarui.')
+      };
     }
-    return { ok: false, message: res.error || 'Gagal memperbarui sandi Admin.' };
+    return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal memperbarui sandi Admin.') };
   };
 
   const issueResetPasswordByAdmin = async (
@@ -2172,9 +2208,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const res = await storageService.adminUserAction(userId, 'reset-password', tempResetPassword);
     if (res.ok) {
       await refreshAdminDashboard();
-      return { ok: true, user: res.data?.user, message: res.data?.message || 'Sandi reset diterbitkan.' };
+      return {
+        ok: true,
+        user: res.data?.user,
+        message: formatApiErrorMessage(res.data?.message, 'Sandi reset diterbitkan.')
+      };
     }
-    return { ok: false, message: res.error || 'Gagal menerbitkan sandi reset.' };
+    return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal menerbitkan sandi reset.') };
   };
 
   return (

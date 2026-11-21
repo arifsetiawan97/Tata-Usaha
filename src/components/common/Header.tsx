@@ -34,6 +34,7 @@ import { initialSchoolConfig } from '../../data/initialData';
 import { AiAssistantModal } from './AiAssistantModal';
 import { SecretAiGeneratorModal } from './SecretAiGeneratorModal';
 import { LogoKabupatenDefault } from './KopSurat';
+import { formatApiErrorMessage } from '../../services/storageService';
 
 export const Header: React.FC = () => {
   const { 
@@ -470,7 +471,7 @@ export const Header: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2 text-xs text-amber-900">
               <div className="flex items-center gap-2">
                 <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>{sessionExpiredNotice}</span>
+                <span>{formatApiErrorMessage(sessionExpiredNotice, '')}</span>
               </div>
               <button
                 type="button"
@@ -499,7 +500,7 @@ export const Header: React.FC = () => {
                 ) : (
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                 )}
-                <span>{actionFeedback.text}</span>
+                <span>{formatApiErrorMessage(actionFeedback.text, '')}</span>
               </div>
               <button
                 type="button"
@@ -665,7 +666,10 @@ export const Header: React.FC = () => {
                       return;
                     }
                     const res = await completePasswordResetWithNewPassword(currentUser.id, newPinInput.trim());
-                    setPinChangeNotice({ ok: res.ok, text: res.message });
+                    setPinChangeNotice({
+                      ok: res.ok,
+                      text: formatApiErrorMessage(res.message, res.ok ? 'Sandi diperbarui.' : 'Gagal memperbarui sandi.')
+                    });
                     if (res.ok) {
                       setTimeout(() => {
                         setIsPinModalOpen(false);
@@ -674,7 +678,10 @@ export const Header: React.FC = () => {
                     }
                   } else if (currentUser) {
                     const res = await updateAccessUserPassword(currentUser.id, newPinInput.trim());
-                    setPinChangeNotice({ ok: res.ok, text: res.message });
+                    setPinChangeNotice({
+                      ok: res.ok,
+                      text: formatApiErrorMessage(res.message, res.ok ? 'Sandi diperbarui.' : 'Gagal memperbarui sandi.')
+                    });
                     if (res.ok) {
                       setTimeout(() => {
                         setIsPinModalOpen(false);

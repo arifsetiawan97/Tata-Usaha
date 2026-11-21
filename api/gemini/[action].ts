@@ -23,7 +23,7 @@ function parseBody(raw: any): any {
 }
 
 export default async function handler(req: any, res: any) {
-  applyCorsHeaders(res);
+  applyCorsHeaders(req, res);
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }

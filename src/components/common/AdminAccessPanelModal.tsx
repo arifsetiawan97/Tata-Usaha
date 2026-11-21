@@ -20,6 +20,7 @@ import { AdminDataGovernanceTab } from '../admin/AdminDataGovernanceTab';
 import { AdminMigrationTab } from '../admin/AdminMigrationTab';
 import { AdminTrashBackupTab } from '../admin/AdminTrashBackupTab';
 import { AdminUsersAuditTab } from '../admin/AdminUsersAuditTab';
+import { formatApiErrorMessage } from '../../services/storageService';
 
 interface AdminAccessPanelModalProps {
   isOpen: boolean;
@@ -95,9 +96,12 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
     if (res.ok) {
       setAdminInput('');
       setConfirmClaimInput('');
-      setNotice({ ok: true, text: res.message || 'Akun Admin berhasil diaktifkan.' });
+      setNotice({
+        ok: true,
+        text: formatApiErrorMessage(res.message, 'Akun Admin berhasil diaktifkan.')
+      });
     } else {
-      setAuthError(res.message || 'Gagal mengaktifkan akun Admin.');
+      setAuthError(formatApiErrorMessage(res.message, 'Gagal mengaktifkan akun Admin.'));
     }
   };
 
@@ -114,9 +118,12 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
     setAuthSubmitting(false);
     if (res.ok) {
       setAdminInput('');
-      setNotice({ ok: true, text: res.message || 'Sesi Database Admin aktif.' });
+      setNotice({
+        ok: true,
+        text: formatApiErrorMessage(res.message, 'Sesi Database Admin aktif.')
+      });
     } else {
-      setAuthError(res.message || 'Sandi Admin tidak sesuai.');
+      setAuthError(formatApiErrorMessage(res.message, 'Sandi Admin tidak sesuai.'));
     }
   };
 
@@ -133,8 +140,11 @@ export const AdminAccessPanelModal: React.FC<AdminAccessPanelModalProps> = ({ is
     setAdminInput('');
   };
 
-  const handleNotice = (ok: boolean, text: string) => {
-    setNotice({ ok, text });
+  const handleNotice = (ok: boolean, text: unknown) => {
+    setNotice({
+      ok,
+      text: formatApiErrorMessage(text, ok ? 'Operasi berhasil.' : 'Terjadi kesalahan.')
+    });
   };
 
   const pendingUsersCount = accessUsers.filter(u => u.status === 'PENDING').length;

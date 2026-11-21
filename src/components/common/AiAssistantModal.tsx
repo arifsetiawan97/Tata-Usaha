@@ -104,10 +104,20 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
         })
       });
 
-      const data = await res.json();
-      if (data && data.reply) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && typeof data.reply === 'string') {
         setResponseOutput(data.reply);
         setIsAiGenerated(!!data.isAi);
+      } else {
+        const msg =
+          typeof data?.error === 'string'
+            ? data.error
+            : typeof data?.error?.message === 'string'
+            ? data.error.message
+            : typeof data?.message === 'string'
+            ? data.message
+            : 'Asisten AI belum dapat merespons saat ini. Silakan coba lagi.';
+        setResponseOutput(msg);
       }
     } catch (err) {
       console.error('Error contacting AI Assistant:', err);

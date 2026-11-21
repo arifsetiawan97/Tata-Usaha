@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { formatApiErrorMessage } from '../../services/storageService';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -20,10 +21,10 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
     return {
       hasError: true,
-      errorMessage: error?.message || 'Terjadi kendala teknis saat memuat tampilan.'
+      errorMessage: formatApiErrorMessage(error, 'Terjadi kendala teknis saat memuat tampilan.')
     };
   }
 

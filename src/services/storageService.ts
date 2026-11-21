@@ -124,6 +124,52 @@ function resolveApiBaseUrl(): string {
   return envBase;
 }
 
+export function formatApiErrorMessage(
+  raw: unknown,
+  fallback = 'Terjadi kesalahan pada server.'
+): string {
+  if (raw === null || raw === undefined) return fallback;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    return trimmed || fallback;
+  }
+  if (typeof raw === 'number' || typeof raw === 'boolean') {
+    return String(raw);
+  }
+  if (raw instanceof Error) {
+    return formatApiErrorMessage(raw.message, fallback);
+  }
+  if (typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    if (obj.error !== undefined && obj.error !== raw) {
+      const nested = formatApiErrorMessage(obj.error, '');
+      if (nested) return nested;
+    }
+    const msgCandidate = obj.message ?? obj.detail ?? obj.reason ?? obj.errorMessage;
+    const msgText =
+      typeof msgCandidate === 'string'
+        ? msgCandidate.trim()
+        : msgCandidate !== undefined && msgCandidate !== null
+        ? formatApiErrorMessage(msgCandidate, '')
+        : '';
+    const codeText =
+      typeof obj.code === 'string' || typeof obj.code === 'number' ? String(obj.code).trim() : '';
+
+    if (msgText && codeText && !msgText.includes(codeText)) {
+      return `[${codeText}] ${msgText}`;
+    }
+    if (msgText) return msgText;
+    if (codeText) return `Kesalahan server (${codeText}).`;
+    try {
+      const serialized = JSON.stringify(obj);
+      return serialized && serialized !== '{}' ? serialized : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 async function parseJsonSafe(response: Response): Promise<any | null> {
   const ct = (response.headers.get('content-type') || '').toLowerCase();
   if (!ct.includes('application/json')) {
@@ -220,20 +266,31 @@ class StorageService {
         });
         const json = await parseJsonSafe(res);
         if (!res.ok) {
-          if (res.status === 401 && json?.code === 'ADMIN_AUTH_REQUIRED' && this.adminToken) {
+          const rawCode = json?.code ?? json?.error?.code;
+          const safeCode =
+            typeof rawCode === 'string' || typeof rawCode === 'number' ? String(rawCode) : undefined;
+          if (res.status === 401 && safeCode === 'ADMIN_AUTH_REQUIRED' && this.adminToken) {
             this.adminToken = null;
             this.onAuthExpiredCallback?.('admin');
-          } else if (res.status === 401 && json?.code === 'AUTH_REQUIRED' && this.staffToken) {
+          } else if (res.status === 401 && safeCode === 'AUTH_REQUIRED' && this.staffToken) {
             this.staffToken = null;
             this.onAuthExpiredCallback?.('staff');
           }
+          const safeError = formatApiErrorMessage(
+            json?.error !== undefined ? json.error : json?.message,
+            `Permintaan gagal (Kode ${res.status}).`
+          );
+          const safeMessage = formatApiErrorMessage(
+            json?.message !== undefined ? json.message : json?.error,
+            safeError
+          );
           return {
             ok: false,
             status: res.status,
             data: json,
-            error: json?.error || json?.message || `Permintaan gagal (Kode ${res.status}).`,
-            message: json?.message || json?.error,
-            code: json?.code
+            error: safeError,
+            message: safeMessage,
+            code: safeCode
           };
         }
         if (!json) {
@@ -244,11 +301,15 @@ class StorageService {
             error: 'Respons server tidak berbentuk JSON yang valid.'
           };
         }
+        const safeOkMessage =
+          json?.message !== undefined && json?.message !== null
+            ? formatApiErrorMessage(json.message, '')
+            : undefined;
         return {
           ok: true,
           status: res.status,
           data: json as T,
-          message: json?.message
+          message: safeOkMessage || undefined
         };
       } catch (err: any) {
         return {
@@ -271,9 +332,17 @@ class StorageService {
       result = await runAttempt(primaryUrl);
     }
 
-    if (result.networkFailure && primaryUrl !== cleanPath) {
+    const shouldTrySameOriginFallback =
+      primaryUrl !== cleanPath &&
+      !result.ok &&
+      (result.networkFailure ||
+        result.status === 404 ||
+        result.status >= 500 ||
+        (result.data as any)?.error?.code !== undefined);
+
+    if (shouldTrySameOriginFallback) {
       const fallback = await runAttempt(cleanPath);
-      if (fallback.ok) {
+      if (fallback.ok || (fallback.status > 0 && fallback.status !== 404 && fallback.status < 500)) {
         try {
           localStorage.removeItem('siops_central_api_base');
         } catch {

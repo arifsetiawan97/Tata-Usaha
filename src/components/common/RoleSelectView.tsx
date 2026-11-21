@@ -31,6 +31,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { LogoKabupatenDefault } from './KopSurat';
+import { formatApiErrorMessage } from '../../services/storageService';
 
 const SERVICE_OPTIONS: { value: RoleType; label: string }[] = [
   { value: 'TU', label: 'Tata Usaha (TU)' },
@@ -200,7 +201,10 @@ export const RoleSelectView: React.FC = () => {
         setSelectedCardRole(account.role);
         setLoginUsername(account.username);
         setLoginPassword(tempCode);
-        setAuthFeedback({ ok: false, text: res.message });
+        setAuthFeedback({
+          ok: false,
+          text: formatApiErrorMessage(res.message, 'Gagal masuk dengan sandi sementara.')
+        });
         setAuthModalMode('login');
       }
     } finally {
@@ -222,7 +226,10 @@ export const RoleSelectView: React.FC = () => {
         setAuthModalMode(null);
         setAuthFeedback(null);
       } else {
-        setAuthFeedback({ ok: false, text: res.message });
+        setAuthFeedback({
+          ok: false,
+          text: formatApiErrorMessage(res.message, 'Gagal masuk ke sistem.')
+        });
       }
     } finally {
       setIsSubmitting(false);
@@ -240,7 +247,10 @@ export const RoleSelectView: React.FC = () => {
         role: regRole,
         password: regPassword
       });
-      setAuthFeedback({ ok: res.ok, text: res.message });
+      setAuthFeedback({
+        ok: res.ok,
+        text: formatApiErrorMessage(res.message, res.ok ? 'Pendaftaran berhasil.' : 'Pendaftaran gagal.')
+      });
       if (res.ok) {
         setRegNama('');
         setRegUsername('');
@@ -260,7 +270,13 @@ export const RoleSelectView: React.FC = () => {
         username: forgotUsername,
         note: forgotNote
       });
-      setAuthFeedback({ ok: res.ok, text: res.message });
+      setAuthFeedback({
+        ok: res.ok,
+        text: formatApiErrorMessage(
+          res.message,
+          res.ok ? 'Permintaan reset sandi terkirim.' : 'Gagal mengirim permintaan reset sandi.'
+        )
+      });
       if (res.ok) {
         setForgotNote('');
       }
@@ -280,7 +296,7 @@ export const RoleSelectView: React.FC = () => {
       if (!res.ok) {
         setAuthFeedback({
           ok: false,
-          text: res.message
+          text: formatApiErrorMessage(res.message, 'Akun tidak ditemukan.')
         });
         return;
       }
