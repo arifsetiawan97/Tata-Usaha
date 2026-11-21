@@ -240,37 +240,41 @@ export const Header: React.FC = () => {
 
             {/* Right: Active Role Account Profile & Logout (Protected Role Isolation) */}
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              {/* Database Server Sync & Mode Badge */}
-              <button
-                type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
-                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer tabular-nums ${
-                  isAdminAuthenticated
-                    ? 'bg-amber-50 text-amber-900 border-amber-300'
-                    : syncStatus === 'synced'
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                    : syncStatus === 'saving'
-                    ? 'bg-amber-50 text-amber-800 border-amber-200'
-                    : 'bg-slate-100 text-slate-700 border-slate-200'
-                }`}
-                title="Klik untuk membuka Panel Database Admin Satu Pintu"
-              >
-                {isAdminAuthenticated ? (
+              {/* Database Server Sync & Mode Indicator (non-clickable for regular users) */}
+              {isAdminAuthenticated ? (
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
+                  className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer tabular-nums bg-amber-50 text-amber-900 border-amber-300"
+                  title="Buka Konsol Database Admin"
+                >
                   <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-                ) : (
+                  <span>
+                    Admin DB Aktif
+                    {databaseCapacitySummary ? ` · ${databaseCapacitySummary.totalPercentUsed}%` : ''}
+                  </span>
+                </button>
+              ) : (
+                <div
+                  className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold tabular-nums ${
+                    syncStatus === 'synced'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : syncStatus === 'saving'
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : 'bg-slate-100 text-slate-700 border-slate-200'
+                  }`}
+                  title="Status koneksi server terpusat"
+                >
                   <Database className={`w-3.5 h-3.5 ${syncStatus === 'saving' ? 'text-amber-600' : syncStatus === 'synced' ? 'text-emerald-600' : 'text-slate-500'}`} />
-                )}
-                <span>
-                  {isAdminAuthenticated
-                    ? 'Admin DB Aktif'
-                    : syncStatus === 'saving'
-                    ? 'Menyimpan...'
-                    : syncStatus === 'synced'
-                    ? 'DB Satu Pintu'
-                    : 'Koneksi Terputus'}
-                  {databaseCapacitySummary ? ` · ${databaseCapacitySummary.totalPercentUsed}%` : ''}
-                </span>
-              </button>
+                  <span>
+                    {syncStatus === 'saving'
+                      ? 'Menyimpan...'
+                      : syncStatus === 'synced'
+                      ? 'Server Terhubung'
+                      : 'Koneksi Terputus'}
+                  </span>
+                </div>
+              )}
 
               {/* Operator Profile Tag */}
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs ${roleMeta.badgeClass} shadow-2xs`}>
@@ -423,17 +427,19 @@ export const Header: React.FC = () => {
                       : `PERINGATAN KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Penggunaan Database Admin telah mencapai 80% atau lebih.`}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
-                    databaseCapacitySummary.effectiveAlertLevel === 'FULL'
-                      ? 'bg-white text-rose-700 hover:bg-rose-50'
-                      : 'bg-slate-900 text-white hover:bg-slate-800'
-                  }`}
-                >
-                  Kelola Kapasitas (Admin)
-                </button>
+                {isAdminAuthenticated && (
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
+                      databaseCapacitySummary.effectiveAlertLevel === 'FULL'
+                        ? 'bg-white text-rose-700 hover:bg-rose-50'
+                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    Kelola Kapasitas (Admin)
+                  </button>
+                )}
               </div>
             </div>
           )}

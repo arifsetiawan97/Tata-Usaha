@@ -27,7 +27,6 @@ import {
   Clock,
   Copy,
   UserCheck,
-  Database,
   WifiOff,
   Loader2
 } from 'lucide-react';
@@ -421,7 +420,7 @@ export const RoleSelectView: React.FC = () => {
             {isolatedRole
               ? `Akun @${primaryTrackedAccount?.username} terdaftar untuk layanan ${ROLE_LABELS_MAP[isolatedRole]}. Layanan lain tidak ditampilkan sesuai hak akses akun Anda.`
               : siteSettings.welcomeSubheadline ||
-                'Masuk dengan akun dan sandi Anda, ajukan pendaftaran satu layanan, atau kelola pusat data melalui Panel Database Admin.'}
+                'Masuk dengan akun dan sandi Anda, atau ajukan pendaftaran satu layanan operasional sekolah.'}
           </p>
 
           {/* Main User Auth Actions */}
@@ -462,15 +461,6 @@ export const RoleSelectView: React.FC = () => {
             >
               <Bell className="w-4 h-4 text-sky-400" />
               <span>Cek Notifikasi Akun</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-xs sm:text-sm font-bold transition-all cursor-pointer"
-            >
-              <Database className="w-4 h-4 text-amber-400" />
-              <span>Masuk Database Admin</span>
             </button>
           </div>
         </div>
