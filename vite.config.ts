@@ -8,7 +8,47 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
+      },
+    },
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: 'vendor-react',
+                test: /node_modules[\\/](react|react-dom|scheduler)/,
+                priority: 30,
+              },
+              {
+                name: 'vendor-xlsx',
+                test: /node_modules[\\/]xlsx/,
+                priority: 25,
+              },
+              {
+                name: 'vendor-jspdf',
+                test: /node_modules[\\/]jspdf/,
+                priority: 28,
+              },
+              {
+                name: 'vendor-html2pdf',
+                test: /node_modules[\\/](html2pdf\.js|html2canvas-pro|dompurify|canvg|fflate|rgbcolor|stackblur-canvas|svg-pathdata)/,
+                priority: 25,
+              },
+              {
+                name: 'vendor-docx',
+                test: /node_modules[\\/](docx|jszip)/,
+                priority: 25,
+              },
+              {
+                name: 'vendor-ui',
+                test: /node_modules[\\/](lucide-react|motion|framer-motion)/,
+                priority: 20,
+              },
+            ],
+          },
+        },
       },
     },
     server: {

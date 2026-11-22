@@ -1,18 +1,6 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { useApp, RoleSubTab } from '../../context/AppContext';
 import { RoleType } from '../../types';
-import { PenjagaView } from './PenjagaView';
-import { TUView } from './TUView';
-import { ServiceView } from './ServiceView';
-import { PerpusView } from './PerpusView';
-import { LabIpaView } from './LabIpaView';
-import { TupoksiManagerView } from './TupoksiManagerView';
-import { MonthlyReportView } from '../reports/MonthlyReportView';
-import { AnnualReportView } from '../reports/AnnualReportView';
-import { InventoryTable } from '../common/InventoryTable';
-import { LibraryBookManager } from '../perpus/LibraryBookManager';
-import { LibraryMemberManager } from '../perpus/LibraryMemberManager';
-import { BeritaAcaraManager } from './BeritaAcaraManager';
 import { BERITA_ACARA_TEMPLATES } from '../../data/beritaAcaraTemplates';
 import { initialSchoolConfig } from '../../data/initialData';
 import { 
@@ -30,9 +18,23 @@ import {
   Printer,
   Bot,
   Users,
-  ScrollText
+  ScrollText,
+  Loader2
 } from 'lucide-react';
-import { AiAssistantModal } from '../common/AiAssistantModal';
+
+const PenjagaView = lazy(() => import('./PenjagaView').then(m => ({ default: m.PenjagaView })));
+const TUView = lazy(() => import('./TUView').then(m => ({ default: m.TUView })));
+const ServiceView = lazy(() => import('./ServiceView').then(m => ({ default: m.ServiceView })));
+const PerpusView = lazy(() => import('./PerpusView').then(m => ({ default: m.PerpusView })));
+const LabIpaView = lazy(() => import('./LabIpaView').then(m => ({ default: m.LabIpaView })));
+const TupoksiManagerView = lazy(() => import('./TupoksiManagerView').then(m => ({ default: m.TupoksiManagerView })));
+const MonthlyReportView = lazy(() => import('../reports/MonthlyReportView').then(m => ({ default: m.MonthlyReportView })));
+const AnnualReportView = lazy(() => import('../reports/AnnualReportView').then(m => ({ default: m.AnnualReportView })));
+const InventoryTable = lazy(() => import('../common/InventoryTable').then(m => ({ default: m.InventoryTable })));
+const LibraryBookManager = lazy(() => import('../perpus/LibraryBookManager').then(m => ({ default: m.LibraryBookManager })));
+const LibraryMemberManager = lazy(() => import('../perpus/LibraryMemberManager').then(m => ({ default: m.LibraryMemberManager })));
+const BeritaAcaraManager = lazy(() => import('./BeritaAcaraManager').then(m => ({ default: m.BeritaAcaraManager })));
+const AiAssistantModal = lazy(() => import('../common/AiAssistantModal').then(m => ({ default: m.AiAssistantModal })));
 
 interface RoleWorkspaceViewProps {
   role: RoleType;
@@ -275,73 +277,84 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
 
       {/* Content based on selected sub-tab for this operational role */}
       <div className="transition-all">
-        {currentSubTab === 'tasks' && (
-          <div>
-            {role === 'PENJAGA' && <PenjagaView />}
-            {role === 'TU' && <TUView />}
-            {role === 'SERVICE' && <ServiceView />}
-            {role === 'PERPUS' && <PerpusView />}
-            {role === 'LAB_IPA' && <LabIpaView />}
-          </div>
-        )}
-
-        {currentSubTab === 'tupoksi' && (
-          <TupoksiManagerView initialRole={role} />
-        )}
-
-        {currentSubTab === 'monthly' && (
-          <MonthlyReportView 
-            initialRole={role} 
-            lockRole={true} 
-            onOpenPrint={onOpenPrint} 
-          />
-        )}
-
-        {currentSubTab === 'annual' && (
-          <AnnualReportView 
-            initialRole={role} 
-            lockRole={true} 
-            onOpenPrint={onOpenPrint} 
-          />
-        )}
-
-        {currentSubTab === 'inventory' && (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2">
-                <Boxes className="w-5 h-5 text-indigo-600" />
-                <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                  Daftar Sarana Prasarana & Alat Operasional ({operator.jabatan})
-                </h2>
-              </div>
-              <span className="text-xs text-slate-500">
-                {roleInventories.length} item terdaftar
-              </span>
+        <Suspense
+          fallback={
+            <div className="min-h-[220px] flex items-center justify-center p-8 text-slate-500 text-xs gap-2 bg-white rounded-xl border border-slate-200">
+              <Loader2 className="w-4 h-4 animate-spin text-sky-500" />
+              <span>Memuat tampilan layanan...</span>
             </div>
-            <InventoryTable role={role} />
-          </div>
-        )}
+          }
+        >
+          {currentSubTab === 'tasks' && (
+            <div>
+              {role === 'PENJAGA' && <PenjagaView />}
+              {role === 'TU' && <TUView />}
+              {role === 'SERVICE' && <ServiceView />}
+              {role === 'PERPUS' && <PerpusView />}
+              {role === 'LAB_IPA' && <LabIpaView />}
+            </div>
+          )}
 
-        {currentSubTab === 'buku' && (
-          <LibraryBookManager />
-        )}
+          {currentSubTab === 'tupoksi' && (
+            <TupoksiManagerView initialRole={role} />
+          )}
 
-        {currentSubTab === 'anggota' && (
-          <LibraryMemberManager />
-        )}
+          {currentSubTab === 'monthly' && (
+            <MonthlyReportView 
+              initialRole={role} 
+              lockRole={true} 
+              onOpenPrint={onOpenPrint} 
+            />
+          )}
 
-        {currentSubTab === 'berita_acara' && role === 'TU' && (
-          <BeritaAcaraManager />
-        )}
+          {currentSubTab === 'annual' && (
+            <AnnualReportView 
+              initialRole={role} 
+              lockRole={true} 
+              onOpenPrint={onOpenPrint} 
+            />
+          )}
+
+          {currentSubTab === 'inventory' && (
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <div className="flex items-center gap-2">
+                  <Boxes className="w-5 h-5 text-indigo-600" />
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                    Daftar Sarana Prasarana & Alat Operasional ({operator.jabatan})
+                  </h2>
+                </div>
+                <span className="text-xs text-slate-500">
+                  {roleInventories.length} item terdaftar
+                </span>
+              </div>
+              <InventoryTable role={role} />
+            </div>
+          )}
+
+          {currentSubTab === 'buku' && (
+            <LibraryBookManager />
+          )}
+
+          {currentSubTab === 'anggota' && (
+            <LibraryMemberManager />
+          )}
+
+          {currentSubTab === 'berita_acara' && role === 'TU' && (
+            <BeritaAcaraManager />
+          )}
+        </Suspense>
       </div>
 
       {/* AI Assistant Modal for this Role */}
       {isAiAssistantOpen && (
-        <AiAssistantModal
-          isOpen={isAiAssistantOpen}
-          onClose={() => setIsAiAssistantOpen(false)}
-          initialRole={role}
-        />
+        <Suspense fallback={null}>
+          <AiAssistantModal
+            isOpen={isAiAssistantOpen}
+            onClose={() => setIsAiAssistantOpen(false)}
+            initialRole={role}
+          />
+        </Suspense>
       )}
     </div>
   );

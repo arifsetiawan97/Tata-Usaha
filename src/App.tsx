@@ -1,18 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { RoleSelectView } from './components/common/RoleSelectView';
-import { RoleWorkspaceView } from './components/roles/RoleWorkspaceView';
-import { TupoksiManagerView } from './components/roles/TupoksiManagerView';
-import { MonthlyReportView } from './components/reports/MonthlyReportView';
-import { AnnualReportView } from './components/reports/AnnualReportView';
-import { PrintDocumentView } from './components/reports/PrintDocumentView';
-import { InventoryTable } from './components/common/InventoryTable';
-import { DocumentArchiveView } from './components/archive/DocumentArchiveView';
-import { AiAssistantModal } from './components/common/AiAssistantModal';
-import { AdminAccessPanelModal } from './components/common/AdminAccessPanelModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
-import { Bot, Sparkles } from 'lucide-react';
+import { Bot, Loader2, Sparkles } from 'lucide-react';
+
+const RoleWorkspaceView = lazy(() =>
+  import('./components/roles/RoleWorkspaceView').then(m => ({ default: m.RoleWorkspaceView }))
+);
+const PrintDocumentView = lazy(() =>
+  import('./components/reports/PrintDocumentView').then(m => ({ default: m.PrintDocumentView }))
+);
+const DocumentArchiveView = lazy(() =>
+  import('./components/archive/DocumentArchiveView').then(m => ({ default: m.DocumentArchiveView }))
+);
+const AiAssistantModal = lazy(() =>
+  import('./components/common/AiAssistantModal').then(m => ({ default: m.AiAssistantModal }))
+);
+const AdminAccessPanelModal = lazy(() =>
+  import('./components/common/AdminAccessPanelModal').then(m => ({ default: m.AdminAccessPanelModal }))
+);
+
+const LazyViewFallback = () => (
+  <div className="min-h-[240px] flex items-center justify-center p-8 text-slate-500 text-xs gap-2">
+    <Loader2 className="w-4 h-4 animate-spin text-sky-500" />
+    <span>Memuat modul layanan...</span>
+  </div>
+);
 
 function MainLayout() {
   const { currentRole, activeNavTab } = useApp();
@@ -78,10 +92,14 @@ function MainLayout() {
     return (
       <>
         <RoleSelectView />
-        <AdminAccessPanelModal
-          isOpen={isOwnerAdminOpen}
-          onClose={() => setIsOwnerAdminOpen(false)}
-        />
+        {isOwnerAdminOpen && (
+          <Suspense fallback={null}>
+            <AdminAccessPanelModal
+              isOpen={isOwnerAdminOpen}
+              onClose={() => setIsOwnerAdminOpen(false)}
+            />
+          </Suspense>
+        )}
       </>
     );
   }
@@ -89,12 +107,14 @@ function MainLayout() {
   if (printState && printState.isOpen) {
     return (
       <div className="min-h-screen bg-slate-100 p-4 sm:p-6 print:p-0 print:m-0 print:bg-white print:min-h-0">
-        <PrintDocumentView
-          reportType={printState.reportType}
-          reportData={printState.reportData}
-          autoPrint={printState.autoPrint}
-          onBack={() => setPrintState(null)}
-        />
+        <Suspense fallback={<LazyViewFallback />}>
+          <PrintDocumentView
+            reportType={printState.reportType}
+            reportData={printState.reportData}
+            autoPrint={printState.autoPrint}
+            onBack={() => setPrintState(null)}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -110,9 +130,17 @@ function MainLayout() {
 
   const renderActiveContent = () => {
     if (activeNavTab === 'archive') {
-      return <DocumentArchiveView onOpenDocument={handleOpenPrint} />;
+      return (
+        <Suspense fallback={<LazyViewFallback />}>
+          <DocumentArchiveView onOpenDocument={handleOpenPrint} />
+        </Suspense>
+      );
     }
-    return <RoleWorkspaceView role={currentRole} onOpenPrint={handleOpenPrint} />;
+    return (
+      <Suspense fallback={<LazyViewFallback />}>
+        <RoleWorkspaceView role={currentRole} onOpenPrint={handleOpenPrint} />
+      </Suspense>
+    );
   };
 
   return (
@@ -149,18 +177,24 @@ function MainLayout() {
 
       {/* Global AI Assistant Modal */}
       {isFloatingAiOpen && (
-        <AiAssistantModal
-          isOpen={isFloatingAiOpen}
-          onClose={() => setIsFloatingAiOpen(false)}
-          initialRole={currentRole}
-        />
+        <Suspense fallback={null}>
+          <AiAssistantModal
+            isOpen={isFloatingAiOpen}
+            onClose={() => setIsFloatingAiOpen(false)}
+            initialRole={currentRole}
+          />
+        </Suspense>
       )}
 
       {/* Hidden Owner-Only Admin Panel Modal */}
-      <AdminAccessPanelModal
-        isOpen={isOwnerAdminOpen}
-        onClose={() => setIsOwnerAdminOpen(false)}
-      />
+      {isOwnerAdminOpen && (
+        <Suspense fallback={null}>
+          <AdminAccessPanelModal
+            isOpen={isOwnerAdminOpen}
+            onClose={() => setIsOwnerAdminOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useRef, useEffect } from 'react';
 import { useApp, RoleSubTab } from '../../context/AppContext';
-import { SchoolConfigModal } from '../settings/SchoolConfigModal';
 import { 
   Building2, 
   Shield, 
@@ -9,13 +8,10 @@ import {
   FlaskConical,
   Settings, 
   LogOut, 
-  FileText, 
-  Award, 
   Boxes, 
   CalendarDays,
   RotateCcw,
   Archive,
-  CheckSquare,
   AlertTriangle,
   KeyRound,
   Check,
@@ -31,10 +27,18 @@ import {
   X
 } from 'lucide-react';
 import { initialSchoolConfig } from '../../data/initialData';
-import { AiAssistantModal } from './AiAssistantModal';
-import { SecretAiGeneratorModal } from './SecretAiGeneratorModal';
 import { LogoKabupatenDefault } from './KopSurat';
 import { formatApiErrorMessage } from '../../services/storageService';
+
+const SchoolConfigModal = lazy(() =>
+  import('../settings/SchoolConfigModal').then(m => ({ default: m.SchoolConfigModal }))
+);
+const AiAssistantModal = lazy(() =>
+  import('./AiAssistantModal').then(m => ({ default: m.AiAssistantModal }))
+);
+const SecretAiGeneratorModal = lazy(() =>
+  import('./SecretAiGeneratorModal').then(m => ({ default: m.SecretAiGeneratorModal }))
+);
 
 export const Header: React.FC = () => {
   const { 
@@ -543,10 +547,12 @@ export const Header: React.FC = () => {
 
       {/* Settings Modal */}
       {isConfigModalOpen && (
-        <SchoolConfigModal
-          isOpen={isConfigModalOpen}
-          onClose={() => setIsConfigModalOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <SchoolConfigModal
+            isOpen={isConfigModalOpen}
+            onClose={() => setIsConfigModalOpen(false)}
+          />
+        </Suspense>
       )}
 
       {/* In-UI Reset Data Confirmation Modal */}
@@ -792,23 +798,27 @@ export const Header: React.FC = () => {
 
       {/* AI Assistant Modal */}
       {isAiAssistantOpen && (
-        <AiAssistantModal
-          isOpen={isAiAssistantOpen}
-          onClose={() => setIsAiAssistantOpen(false)}
-          initialRole={currentRole}
-        />
+        <Suspense fallback={null}>
+          <AiAssistantModal
+            isOpen={isAiAssistantOpen}
+            onClose={() => setIsAiAssistantOpen(false)}
+            initialRole={currentRole}
+          />
+        </Suspense>
       )}
 
       {/* Secret AI Generator Modal (Otorisasi: ARIF SETIAWAN) */}
       {isSecretAiOpen && (
-        <SecretAiGeneratorModal
-          isOpen={isSecretAiOpen}
-          onClose={() => setIsSecretAiOpen(false)}
-          defaultRole={currentRole}
-          onOpenReport={(m, y, r) => {
-            setActiveNavTab('monthly');
-          }}
-        />
+        <Suspense fallback={null}>
+          <SecretAiGeneratorModal
+            isOpen={isSecretAiOpen}
+            onClose={() => setIsSecretAiOpen(false)}
+            defaultRole={currentRole}
+            onOpenReport={(m, y, r) => {
+              setActiveNavTab('monthly');
+            }}
+          />
+        </Suspense>
       )}
     </>
   );
