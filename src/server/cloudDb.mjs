@@ -357,12 +357,14 @@ function buildFallbackSeedData() {
     beritaAcaraHistory: [],
     userTupoksiDefinitions: {},
     userLibraryMemberStats: {},
+    userServiceBackgrounds: {},
     customDatabaseRecords: {},
     databaseRegistry: buildDefaultDatabaseRegistry(),
     databaseQuotaBytes: DEFAULT_DATABASE_QUOTA_BYTES,
     siteSettings: {
       welcomeHeadline: DEFAULT_WELCOME_HEADLINE,
       welcomeSubheadline: DEFAULT_WELCOME_SUBHEADLINE,
+      mainBackground: null,
       updatedAt: new Date().toISOString(),
       updatedBy: 'Sistem'
     },
@@ -471,6 +473,11 @@ function migrateAndNormalizeDb(parsed) {
     patched = true;
   }
 
+  if (!parsed.userServiceBackgrounds || typeof parsed.userServiceBackgrounds !== 'object') {
+    parsed.userServiceBackgrounds = {};
+    patched = true;
+  }
+
   if (!parsed.customDatabaseRecords || typeof parsed.customDatabaseRecords !== 'object') {
     parsed.customDatabaseRecords = {};
     patched = true;
@@ -510,16 +517,29 @@ function migrateAndNormalizeDb(parsed) {
     parsed.siteSettings = {
       welcomeHeadline: DEFAULT_WELCOME_HEADLINE,
       welcomeSubheadline: DEFAULT_WELCOME_SUBHEADLINE,
+      mainBackground: null,
       updatedAt: new Date().toISOString(),
       updatedBy: 'Sistem'
     };
     patched = true;
-  } else if (
-    typeof parsed.siteSettings.welcomeHeadline !== 'string' ||
-    !parsed.siteSettings.welcomeHeadline.trim()
-  ) {
-    parsed.siteSettings.welcomeHeadline = DEFAULT_WELCOME_HEADLINE;
-    patched = true;
+  } else {
+    if (
+      typeof parsed.siteSettings.welcomeHeadline !== 'string' ||
+      !parsed.siteSettings.welcomeHeadline.trim()
+    ) {
+      parsed.siteSettings.welcomeHeadline = DEFAULT_WELCOME_HEADLINE;
+      patched = true;
+    }
+    if (parsed.siteSettings.mainBackground) {
+      const bgCheck = validateBackgroundConfigInput(parsed.siteSettings.mainBackground, {
+        actorName: parsed.siteSettings.updatedBy || 'ADMIN_UTAMA',
+        defaultOpacity: 0.55
+      });
+      if (!bgCheck.valid) {
+        parsed.siteSettings.mainBackground = null;
+        patched = true;
+      }
+    }
   }
 
   if (!Array.isArray(parsed.softDeletedItems)) {
@@ -1260,6 +1280,84 @@ export function resolveApprovedSchoolHeader(db, user) {
   return sanitizeSchoolConfigForPublic(baseCfg);
 }
 
+const VALID_BG_MODES = new Set(['default', 'preset', 'image', 'color']);
+const SAFE_DATA_IMAGE_REGEX = /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i;
+const SAFE_HTTP_IMAGE_REGEX = /^https?:\/\/[^\s<>'"]{4,1200}$/i;
+const SAFE_HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+
+export function isValidBackgroundImageUrl(url) {
+  if (typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.length > 1_650_000) return false;
+  return SAFE_DATA_IMAGE_REGEX.test(trimmed) || SAFE_HTTP_IMAGE_REGEX.test(trimmed);
+}
+
+export function validateBackgroundConfigInput(raw, { actorName = 'USER', defaultOpacity = 0.55 } = {}) {
+  if (raw === null || raw === undefined) {
+    return { valid: true, config: null };
+  }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { valid: false, error: 'Format konfigurasi background tidak valid.' };
+  }
+  const mode = VALID_BG_MODES.has(raw.mode) ? raw.mode : 'default';
+  const presetId = typeof raw.presetId === 'string'
+    ? raw.presetId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60)
+    : 'default';
+
+  let imageUrl = '';
+  if (typeof raw.imageUrl === 'string' && raw.imageUrl.trim()) {
+    const candidate = raw.imageUrl.trim();
+    if (candidate.length > 1_650_000) {
+      return { valid: false, error: 'Ukuran gambar terlalu besar (maksimal 1.5 MB setelah kompresi).' };
+    }
+    if (!isValidBackgroundImageUrl(candidate)) {
+      return {
+        valid: false,
+        error: 'Format gambar harus PNG, JPG, WEBP, GIF, atau tautan https:// yang valid.'
+      };
+    }
+    imageUrl = candidate;
+  }
+
+  if (mode === 'image' && !imageUrl) {
+    return { valid: false, error: 'Silakan unggah foto atau masukkan URL gambar yang valid terlebih dahulu.' };
+  }
+
+  const customColor =
+    typeof raw.customColor === 'string' && SAFE_HEX_COLOR_REGEX.test(raw.customColor.trim())
+      ? raw.customColor.trim().toLowerCase()
+      : '#0f172a';
+  const customColorSecondary =
+    typeof raw.customColorSecondary === 'string' && SAFE_HEX_COLOR_REGEX.test(raw.customColorSecondary.trim())
+      ? raw.customColorSecondary.trim().toLowerCase()
+      : '';
+
+  const rawOpacity = Number(raw.overlayOpacity);
+  const overlayOpacity = Number.isFinite(rawOpacity)
+    ? Math.max(0, Math.min(0.92, Math.round(rawOpacity * 100) / 100))
+    : defaultOpacity;
+
+  const rawBlur = Number(raw.blurPx);
+  const blurPx = Number.isFinite(rawBlur)
+    ? Math.max(0, Math.min(16, Math.round(rawBlur)))
+    : 0;
+
+  return {
+    valid: true,
+    config: {
+      mode,
+      presetId: presetId || 'default',
+      ...(imageUrl ? { imageUrl } : {}),
+      customColor,
+      ...(customColorSecondary ? { customColorSecondary } : {}),
+      overlayOpacity,
+      blurPx,
+      updatedAt: new Date().toISOString(),
+      updatedBy: String(actorName || 'USER').slice(0, 80)
+    }
+  };
+}
+
 export function buildPublicStateResponse(db) {
   const metrics = computeDatabaseMetrics(db);
   const approvedRoleCounts = { TU: 0, PENJAGA: 0, SERVICE: 0, PERPUS: 0, LAB_IPA: 0 };
@@ -1366,6 +1464,20 @@ export function buildStaffStateResponse(db, staffSession) {
     db.libraryMemberStats ||
     null;
 
+  // Scope userServiceBackgrounds strictly to this caller
+  const rawBgMap = db.userServiceBackgrounds && typeof db.userServiceBackgrounds === 'object'
+    ? db.userServiceBackgrounds
+    : {};
+  const scopedUserBackgrounds = {};
+  for (const [k, v] of Object.entries(rawBgMap)) {
+    if (!v || typeof v !== 'object') continue;
+    const matchesSub = Boolean(staffSub) && (k === staffSub || k.startsWith(`${staffSub}:`));
+    const matchesAlt = Boolean(altStaffKey) && (k === altStaffKey || k.startsWith(`${altStaffKey}:`));
+    if (matchesSub || matchesAlt) {
+      scopedUserBackgrounds[k] = v;
+    }
+  }
+
   return {
     publicOnly: false,
     tasks: scopeCollectionForUser(db.tasks),
@@ -1379,6 +1491,7 @@ export function buildStaffStateResponse(db, staffSession) {
     libraryBooks: scopeCollectionForUser(db.libraryBooks),
     libraryMembers: scopeCollectionForUser(db.libraryMembers),
     libraryMemberStats: userMemberStats,
+    userServiceBackgrounds: scopedUserBackgrounds,
     beritaAcaraHistory: scopeCollectionForUser(db.beritaAcaraHistory),
     customDatabases: (db.databaseRegistry || []).filter(d => !d.isBuiltin),
     customDatabaseRecords: db.customDatabaseRecords || {},
@@ -1424,6 +1537,7 @@ export function buildAdminStateResponse(db) {
     libraryMembers: db.libraryMembers || [],
     libraryMemberStats: db.libraryMemberStats || null,
     userLibraryMemberStats: db.userLibraryMemberStats || {},
+    userServiceBackgrounds: db.userServiceBackgrounds || {},
     beritaAcaraHistory: db.beritaAcaraHistory || [],
     customDatabases: (db.databaseRegistry || []).filter(d => !d.isBuiltin),
     customDatabaseRecords: db.customDatabaseRecords || {},
@@ -1552,6 +1666,10 @@ export async function applyStateUpdate(body, actor = 'ADMIN') {
         ? libraryMemberStats
         : current.libraryMemberStats,
     userLibraryMemberStats: mergePerUserIsolationMap(current.userLibraryMemberStats, userLibraryMemberStats),
+    userServiceBackgrounds: mergePerUserIsolationMap(
+      current.userServiceBackgrounds,
+      body?.userServiceBackgrounds
+    ),
     beritaAcaraHistory: pickCollection(beritaAcaraHistory, current.beritaAcaraHistory),
     siteSettings:
       siteSettings && typeof siteSettings === 'object'

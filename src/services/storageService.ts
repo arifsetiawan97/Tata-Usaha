@@ -13,6 +13,7 @@ import {
   ApprovedSchoolHeader,
   ArchiveDocument,
   AuditLogEntry,
+  BackgroundConfig,
   BackupScheduleConfig,
   CustomCategory,
   DatabaseBackupMeta,
@@ -57,6 +58,7 @@ export interface AppStateData {
   libraryMembers?: LibraryMemberItem[];
   libraryMemberStats?: LibraryMemberStats;
   userLibraryMemberStats?: Record<string, LibraryMemberStats>;
+  userServiceBackgrounds?: Record<string, BackgroundConfig>;
   beritaAcaraHistory?: SavedBeritaAcaraRecord[];
   customDatabases?: DatabaseModuleMetrics[];
   customDatabaseRecords?: Record<string, any[]>;
@@ -583,8 +585,11 @@ class StorageService {
       | 'SAVE_TUPOKSI'
       | 'SAVE_LIBRARY_MEMBER_STATS'
       | 'SAVE_RECORD'
-      | 'SAVE_RECORDS_BATCH';
+      | 'SAVE_RECORDS_BATCH'
+      | 'SAVE_SERVICE_BACKGROUND'
+      | 'RESET_SERVICE_BACKGROUND';
     collection?: string;
+    role?: RoleType;
     payload?: any;
     records?: any[];
   }) {
@@ -592,6 +597,8 @@ class StorageService {
     return this.requestJson<{
       ok: boolean;
       isolationKey?: string;
+      storageKey?: string;
+      role?: RoleType;
       entry?: any;
       stats?: LibraryMemberStats;
       collection?: string;
@@ -726,7 +733,11 @@ class StorageService {
     );
   }
 
-  async adminUpdateSiteSettings(payload: { welcomeHeadline: string; welcomeSubheadline?: string }) {
+  async adminUpdateSiteSettings(payload: {
+    welcomeHeadline?: string;
+    welcomeSubheadline?: string;
+    mainBackground?: BackgroundConfig | null;
+  }) {
     return this.requestJson('/api/admin/site-settings', {
       method: 'PUT',
       tokenType: 'admin',

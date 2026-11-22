@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { LogoKabupatenDefault } from './KopSurat';
 import { formatApiErrorMessage } from '../../services/storageService';
+import { MAIN_BACKGROUND_PRESETS, resolveBackgroundPresentation } from '../../utils/backgroundHelper';
 
 const SERVICE_OPTIONS: { value: RoleType; label: string }[] = [
   { value: 'TU', label: 'Tata Usaha (TU)' },
@@ -432,10 +433,28 @@ export const RoleSelectView: React.FC = () => {
         .join(' · ')
     : '';
 
+  const mainBgPresentation = resolveBackgroundPresentation(
+    siteSettings.mainBackground,
+    MAIN_BACKGROUND_PRESETS,
+    'main'
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-850 to-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-8">
+    <div className="relative min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-8 overflow-x-hidden">
+      {/* Dynamic Admin-Configured Main Background Layer */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 transition-all duration-300"
+        style={mainBgPresentation.layerStyle}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 transition-all duration-300"
+        style={mainBgPresentation.overlayStyle}
+      />
+
       {/* Header Info */}
-      <div className="max-w-6xl mx-auto w-full pt-4 pb-8">
+      <div className="relative z-10 max-w-6xl mx-auto w-full pt-4 pb-8">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-800 pb-6 text-center sm:text-left">
           <div
             onClick={handleLogoTap}
@@ -1614,7 +1633,7 @@ export const RoleSelectView: React.FC = () => {
 
       <div
         onClick={handleLogoTap}
-        className="text-center text-[11px] text-slate-500 py-2 select-none touch-manipulation"
+        className="relative z-10 text-center text-[11px] text-slate-300/80 py-2 select-none touch-manipulation"
       >
         UPT Satuan Pendidikan © 2026 · Tata Naskah Dinas Kementerian Pendidikan & Kebudayaan RI
       </div>

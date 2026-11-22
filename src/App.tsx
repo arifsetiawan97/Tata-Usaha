@@ -4,6 +4,7 @@ import { Header } from './components/common/Header';
 import { RoleSelectView } from './components/common/RoleSelectView';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Bot, Loader2, Sparkles } from 'lucide-react';
+import { resolveBackgroundPresentation, SERVICE_BACKGROUND_PRESETS } from './utils/backgroundHelper';
 
 const RoleWorkspaceView = lazy(() =>
   import('./components/roles/RoleWorkspaceView').then(m => ({ default: m.RoleWorkspaceView }))
@@ -29,7 +30,7 @@ const LazyViewFallback = () => (
 );
 
 function MainLayout() {
-  const { currentRole, activeNavTab } = useApp();
+  const { currentRole, activeNavTab, getServiceBackground } = useApp();
   const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
   const [isOwnerAdminOpen, setIsOwnerAdminOpen] = useState(false);
 
@@ -143,21 +144,40 @@ function MainLayout() {
     );
   };
 
+  const activeServiceBg = getServiceBackground(currentRole);
+  const serviceBgPresentation = resolveBackgroundPresentation(
+    activeServiceBg,
+    SERVICE_BACKGROUND_PRESETS,
+    'service'
+  );
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
-      <div>
+    <div className="relative min-h-screen bg-slate-50 flex flex-col justify-between overflow-x-hidden">
+      {/* Dynamic Per-User Service Workspace Background */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 transition-all duration-300 print:hidden"
+        style={serviceBgPresentation.layerStyle}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 transition-all duration-300 print:hidden"
+        style={serviceBgPresentation.overlayStyle}
+      />
+
+      <div className="relative z-10">
         <Header />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {renderActiveContent()}
         </main>
       </div>
 
-      <footer className="border-t border-slate-200 bg-white py-4 mt-12 no-print">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+      <footer className="relative z-10 border-t border-slate-200/80 bg-white/90 backdrop-blur-xs py-4 mt-12 no-print">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600">
           <p>
             Sistem Informasi Operator Layanan Operasional (TU, Penjaga, Service, Perpustakaan, Lab IPA) · Standar Tata Kelola Satuan Pendidikan
           </p>
-          <p className="font-mono text-[11px] text-slate-400">
+          <p className="font-mono text-[11px] text-slate-500">
             Kop 3 Kolom · Lembar Pengesahan NIP/NIPPK · Tanda Tangan Basah
           </p>
         </div>

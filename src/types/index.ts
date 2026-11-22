@@ -540,9 +540,28 @@ export interface AuthActionResult {
   adminProfile?: AdminProfile | null;
 }
 
+export type BackgroundMode = 'default' | 'preset' | 'image' | 'color';
+
+export interface BackgroundConfig {
+  mode: BackgroundMode;
+  presetId?: string;
+  imageUrl?: string;
+  customColor?: string;
+  customColorSecondary?: string;
+  overlayOpacity?: number;
+  blurPx?: number;
+  updatedAt?: string;
+  updatedBy?: string;
+  userId?: string;
+  username?: string;
+  role?: RoleType;
+  deleted?: boolean;
+}
+
 export interface SiteSettings {
   welcomeHeadline: string;
   welcomeSubheadline?: string;
+  mainBackground?: BackgroundConfig | null;
   updatedAt?: string;
   updatedBy?: string;
 }

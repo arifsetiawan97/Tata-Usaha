@@ -32,6 +32,7 @@ import {
   DatabaseBackupMeta,
   BackupScheduleConfig,
   AuditLogEntry,
+  BackgroundConfig,
   StaffSubmissionItem,
   MigrationReport
 } from '../types';
@@ -251,6 +252,10 @@ interface AppContextType {
   clearActionFeedback: () => void;
   sessionExpiredNotice: string | null;
   clearSessionExpiredNotice: () => void;
+  userServiceBackgrounds: Record<string, BackgroundConfig>;
+  getServiceBackground: (role: RoleType) => BackgroundConfig | null;
+  saveServiceBackground: (role: RoleType, config: BackgroundConfig) => Promise<{ ok: boolean; message: string }>;
+  resetServiceBackground: (role: RoleType) => Promise<{ ok: boolean; message: string }>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -424,8 +429,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Governance, Site Settings & Admin Database State
   const [siteSettings, setSiteSettings] = useState<SiteSettings>({
     welcomeHeadline: DEFAULT_WELCOME_HEADLINE,
-    welcomeSubheadline: DEFAULT_WELCOME_SUBHEADLINE
+    welcomeSubheadline: DEFAULT_WELCOME_SUBHEADLINE,
+    mainBackground: null
   });
+  const [userServiceBackgrounds, setUserServiceBackgrounds] = useState<Record<string, BackgroundConfig>>({});
   const [databaseCapacitySummary, setDatabaseCapacitySummary] = useState<DatabaseCapacityQuickSummary | null>(null);
   const [customDatabases, setCustomDatabases] = useState<DatabaseModuleMetrics[]>([]);
   const [customDatabaseRecords, setCustomDatabaseRecords] = useState<Record<string, any[]>>({});
@@ -508,6 +515,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSiteSettings({
         welcomeHeadline: serverData.siteSettings.welcomeHeadline?.trim() || DEFAULT_WELCOME_HEADLINE,
         welcomeSubheadline: serverData.siteSettings.welcomeSubheadline?.trim() || DEFAULT_WELCOME_SUBHEADLINE,
+        mainBackground: serverData.siteSettings.mainBackground || null,
         updatedAt: serverData.siteSettings.updatedAt,
         updatedBy: serverData.siteSettings.updatedBy
       });
@@ -573,6 +581,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else if (serverData.libraryMemberStats && typeof serverData.libraryMemberStats === 'object') {
         setLibraryMemberStats(serverData.libraryMemberStats);
       }
+    }
+    if (serverData.userServiceBackgrounds && typeof serverData.userServiceBackgrounds === 'object') {
+      setUserServiceBackgrounds(serverData.userServiceBackgrounds);
     }
     if (Array.isArray(serverData.customDatabases)) {
       setCustomDatabases(serverData.customDatabases);
@@ -2336,7 +2347,84 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLibraryBooks(initialLibraryBooks);
     setLibraryMembers(initialLibraryMembers);
     setLibraryMemberStats(initialLibraryMemberStats);
+    setUserServiceBackgrounds({});
     fetchLatestState();
+  };
+
+  const getServiceBackground = useCallback(
+    (role: RoleType): BackgroundConfig | null => {
+      const userKey = getUserIsolationKey(currentUser) || (isAdminAuthenticated ? 'admin-root' : null);
+      if (!userKey) return null;
+      const altKey = currentUser?.username ? `user:${currentUser.username.trim().toLowerCase()}` : null;
+      const entry =
+        userServiceBackgrounds[`${userKey}:${role}`] ||
+        (altKey ? userServiceBackgrounds[`${altKey}:${role}`] : undefined) ||
+        userServiceBackgrounds[userKey] ||
+        null;
+      if (!entry || entry.deleted || entry.mode === 'default') return null;
+      return entry;
+    },
+    [currentUser, isAdminAuthenticated, userServiceBackgrounds]
+  );
+
+  const saveServiceBackground = async (
+    role: RoleType,
+    config: BackgroundConfig
+  ): Promise<{ ok: boolean; message: string }> => {
+    const userKey = getUserIsolationKey(currentUser) || (isAdminAuthenticated ? 'admin-root' : null);
+    if (!userKey || (!storageService.getStaffToken() && !storageService.getAdminToken())) {
+      const msg = 'Sesi akun tidak aktif. Silakan masuk ulang untuk menyimpan background layanan.';
+      showActionFeedback(false, msg);
+      return { ok: false, message: msg };
+    }
+    setSyncStatus('saving');
+    const res = await storageService.staffSelfSave({
+      actionType: 'SAVE_SERVICE_BACKGROUND',
+      role,
+      payload: { ...config, role }
+    });
+    setSyncStatus(res.ok ? 'synced' : 'offline');
+    if (res.ok && res.data?.entry) {
+      const sKey = res.data.storageKey || `${userKey}:${role}`;
+      setUserServiceBackgrounds(prev => ({ ...prev, [sKey]: res.data!.entry }));
+      const msg = formatApiErrorMessage(res.data.message, 'Background layanan berhasil disimpan permanen.');
+      showActionFeedback(true, msg);
+      return { ok: true, message: msg };
+    }
+    const errMsg = formatApiErrorMessage(res.error, 'Gagal menyimpan background layanan ke server.');
+    showActionFeedback(false, errMsg);
+    return { ok: false, message: errMsg };
+  };
+
+  const resetServiceBackground = async (
+    role: RoleType
+  ): Promise<{ ok: boolean; message: string }> => {
+    const userKey = getUserIsolationKey(currentUser) || (isAdminAuthenticated ? 'admin-root' : null);
+    if (!userKey || (!storageService.getStaffToken() && !storageService.getAdminToken())) {
+      const msg = 'Sesi akun tidak aktif. Silakan masuk ulang untuk mengatur ulang background layanan.';
+      showActionFeedback(false, msg);
+      return { ok: false, message: msg };
+    }
+    setSyncStatus('saving');
+    const res = await storageService.staffSelfSave({
+      actionType: 'RESET_SERVICE_BACKGROUND',
+      role,
+      payload: { role }
+    });
+    setSyncStatus(res.ok ? 'synced' : 'offline');
+    if (res.ok) {
+      const sKey = res.data?.storageKey || `${userKey}:${role}`;
+      setUserServiceBackgrounds(prev => ({
+        ...prev,
+        [sKey]: res.data?.entry || { mode: 'default', presetId: 'default', deleted: true, role }
+      }));
+      const msg = formatApiErrorMessage(res.data?.message, 'Background layanan dikembalikan ke tampilan standar.');
+      showActionFeedback(true, msg);
+      return { ok: true, message: msg };
+    }
+    const errMsg = formatApiErrorMessage(res.error, 'Gagal mengatur ulang background layanan.');
+    showActionFeedback(false, errMsg);
+    return { ok: false, message: errMsg };
   };
 
   const requestPasswordReset = async (payload: { username: string; note?: string }): Promise<AuthActionResult> => {
@@ -2709,7 +2797,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         actionFeedback,
         clearActionFeedback,
         sessionExpiredNotice,
-        clearSessionExpiredNotice
+        clearSessionExpiredNotice,
+        userServiceBackgrounds,
+        getServiceBackground,
+        saveServiceBackground,
+        resetServiceBackground
       }}
     >
       {children}

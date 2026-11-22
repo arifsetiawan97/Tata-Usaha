@@ -19,8 +19,10 @@ import {
   Bot,
   Users,
   ScrollText,
-  Loader2
+  Loader2,
+  Image as ImageIcon
 } from 'lucide-react';
+import { ServiceBackgroundModal } from '../common/BackgroundCustomizer';
 
 const PenjagaView = lazy(() => import('./PenjagaView').then(m => ({ default: m.PenjagaView })));
 const TUView = lazy(() => import('./TUView').then(m => ({ default: m.TUView })));
@@ -52,10 +54,16 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
     monthlyReports,
     generateMonthlyReportFromTasks,
     libraryBooks,
-    libraryMemberStats
+    libraryMemberStats,
+    currentUser,
+    getServiceBackground,
+    saveServiceBackground,
+    resetServiceBackground
   } = useApp();
 
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
+  const [isBgModalOpen, setIsBgModalOpen] = useState(false);
+  const activeServiceBg = getServiceBackground(role);
 
   const handleDirectPrintCurrentMonth = () => {
     const currentMonth = new Date().getMonth() + 1;
@@ -204,8 +212,18 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
             </div>
           </div>
 
-          {/* Quick Actions (Cetak Langsung & Asisten AI) */}
+          {/* Quick Actions (Atur Background, Cetak Langsung & Asisten AI) */}
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsBgModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white/15 hover:bg-white/25 text-white border border-white/25 text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+              title="Ubah background tampilan utama layanan sesuai keinginan Anda"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-sky-300" />
+              <span>Atur Background</span>
+            </button>
+
             <button
               type="button"
               onClick={handleDirectPrintCurrentMonth}
@@ -355,6 +373,19 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
             initialRole={role}
           />
         </Suspense>
+      )}
+
+      {/* Per-User Service Background Modal */}
+      {isBgModalOpen && (
+        <ServiceBackgroundModal
+          isOpen={isBgModalOpen}
+          onClose={() => setIsBgModalOpen(false)}
+          serviceLabel={roleMeta.sublabel}
+          usernameLabel={currentUser?.username}
+          initialConfig={activeServiceBg}
+          onSave={cfg => saveServiceBackground(role, cfg)}
+          onReset={() => resetServiceBackground(role)}
+        />
       )}
     </div>
   );

@@ -34,6 +34,7 @@ import {
   runDataMigration,
   sanitizeAdminProfile,
   softDeleteRecord,
+  validateBackgroundConfigInput,
   verifyUserCredentials,
   writeDb
 } from './cloudDb.mjs';
@@ -1289,6 +1290,116 @@ export async function handleStaffSelfSave(req, res) {
     });
   }
 
+  if (actionType === 'SAVE_SERVICE_BACKGROUND') {
+    const metrics = computeDatabaseMetrics(db);
+    if (metrics.totalPercentUsed >= 100) {
+      return res.status(507).json({
+        ok: false,
+        error: 'Kapasitas total Database Admin mencapai 100% (Penuh). Hubungi Admin untuk perluasan kapasitas.'
+      });
+    }
+
+    const incoming = body.payload && typeof body.payload === 'object' ? body.payload : {};
+    const requestedRole = String(incoming.role || body.role || '').trim();
+    const targetRole =
+      ctx.userRecord?.role && VALID_ROLES.includes(ctx.userRecord.role)
+        ? ctx.userRecord.role
+        : VALID_ROLES.includes(requestedRole)
+        ? requestedRole
+        : 'TU';
+
+    const bgCheck = validateBackgroundConfigInput(incoming, {
+      actorName,
+      defaultOpacity: 0.72
+    });
+    if (!bgCheck.valid || !bgCheck.config) {
+      return res.status(400).json({
+        ok: false,
+        error: bgCheck.error || 'Konfigurasi background layanan tidak valid.'
+      });
+    }
+
+    const storageKey = `${isolationKey}:${targetRole}`;
+    if (!db.userServiceBackgrounds || typeof db.userServiceBackgrounds !== 'object') {
+      db.userServiceBackgrounds = {};
+    }
+
+    const savedEntry = {
+      ...bgCheck.config,
+      role: targetRole,
+      userId: isolationKey,
+      username: actorName,
+      deleted: false,
+      updatedAt: now
+    };
+    db.userServiceBackgrounds[storageKey] = savedEntry;
+
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'SAVE_USER_SERVICE_BACKGROUND',
+      targetDatabase: 'userServiceBackgrounds',
+      targetId: storageKey,
+      status: 'SUCCESS',
+      detail: `Menyimpan background menu layanan ${targetRole} secara permanen untuk @${actorName}.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      isolationKey,
+      storageKey,
+      role: targetRole,
+      entry: savedEntry,
+      lastUpdated: db.lastUpdated,
+      message: `Background layanan ${ROLE_LABELS_MAP[targetRole] || targetRole} tersimpan permanen untuk akun Anda.`
+    });
+  }
+
+  if (actionType === 'RESET_SERVICE_BACKGROUND') {
+    const requestedRole = String(body.payload?.role || body.role || '').trim();
+    const targetRole =
+      ctx.userRecord?.role && VALID_ROLES.includes(ctx.userRecord.role)
+        ? ctx.userRecord.role
+        : VALID_ROLES.includes(requestedRole)
+        ? requestedRole
+        : 'TU';
+    const storageKey = `${isolationKey}:${targetRole}`;
+
+    if (!db.userServiceBackgrounds || typeof db.userServiceBackgrounds !== 'object') {
+      db.userServiceBackgrounds = {};
+    }
+    const deletedEntry = {
+      mode: 'default',
+      presetId: 'default',
+      role: targetRole,
+      userId: isolationKey,
+      username: actorName,
+      deleted: true,
+      updatedAt: now
+    };
+    db.userServiceBackgrounds[storageKey] = deletedEntry;
+
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'RESET_USER_SERVICE_BACKGROUND',
+      targetDatabase: 'userServiceBackgrounds',
+      targetId: storageKey,
+      status: 'SUCCESS',
+      detail: `Mengembalikan background menu layanan ${targetRole} milik @${actorName} ke tampilan standar.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      isolationKey,
+      storageKey,
+      role: targetRole,
+      entry: deletedEntry,
+      lastUpdated: db.lastUpdated,
+      message: `Background layanan ${ROLE_LABELS_MAP[targetRole] || targetRole} dikembalikan ke tampilan standar.`
+    });
+  }
+
   return res.status(400).json({ ok: false, error: `Jenis aksi penyimpanan "${actionType}" tidak dikenali.` });
 }
 
@@ -1601,11 +1712,15 @@ export async function handleAdminRoute(segments, req, res) {
     });
   }
 
-  // Site Settings (Welcome Headline Customization)
+  // Site Settings (Welcome Headline & Main Menu Background Customization)
   if (pathJoined === 'site-settings' && req.method === 'PUT') {
     const bodyCheck = sanitizeAndInspectPayload(parseJsonBody(req.body));
     if (!bodyCheck.valid) return res.status(400).json({ ok: false, error: bodyCheck.error });
-    const headline = String(bodyCheck.value?.welcomeHeadline || '').trim().slice(0, 200);
+
+    const hasHeadline = bodyCheck.value?.welcomeHeadline !== undefined;
+    const headline = hasHeadline
+      ? String(bodyCheck.value?.welcomeHeadline || '').trim().slice(0, 200)
+      : db.siteSettings?.welcomeHeadline || DEFAULT_WELCOME_HEADLINE;
     const subheadline =
       bodyCheck.value?.welcomeSubheadline !== undefined
         ? String(bodyCheck.value.welcomeSubheadline || '').trim().slice(0, 400)
@@ -1615,25 +1730,43 @@ export async function handleAdminRoute(segments, req, res) {
       return res.status(400).json({ ok: false, error: 'Kalimat pembuka tidak boleh kosong.' });
     }
 
+    let nextMainBackground = db.siteSettings?.mainBackground ?? null;
+    const hasMainBackground = Object.prototype.hasOwnProperty.call(bodyCheck.value || {}, 'mainBackground');
+    if (hasMainBackground) {
+      const bgCheck = validateBackgroundConfigInput(bodyCheck.value.mainBackground, {
+        actorName: 'ADMIN_UTAMA',
+        defaultOpacity: 0.55
+      });
+      if (!bgCheck.valid) {
+        return res.status(400).json({ ok: false, error: bgCheck.error });
+      }
+      nextMainBackground = bgCheck.config;
+    }
+
     db.siteSettings = {
       welcomeHeadline: headline,
       welcomeSubheadline: subheadline,
+      mainBackground: nextMainBackground,
       updatedAt: new Date().toISOString(),
       updatedBy: 'ADMIN_UTAMA'
     };
     appendAuditLog(db, {
       actor: 'ADMIN_UTAMA',
       actorRole: 'ADMIN',
-      action: 'UPDATE_WELCOME_TEXT',
+      action: hasMainBackground && !hasHeadline ? 'UPDATE_MAIN_BACKGROUND' : 'UPDATE_WELCOME_TEXT',
       targetDatabase: 'siteSettings',
       status: 'SUCCESS',
-      detail: `Kalimat pembuka diperbarui menjadi "${headline}".`
+      detail: hasMainBackground
+        ? `Pengaturan tampilan & background halaman pembuka diperbarui (mode: ${nextMainBackground?.mode || 'default'}).`
+        : `Kalimat pembuka diperbarui menjadi "${headline}".`
     });
     await writeDb(db);
     return res.status(200).json({
       ok: true,
       siteSettings: db.siteSettings,
-      message: 'Kalimat halaman pembuka berhasil diperbarui untuk semua pengguna.'
+      message: hasMainBackground && !hasHeadline
+        ? 'Background menu utama berhasil diperbarui untuk semua pengunjung.'
+        : 'Pengaturan halaman pembuka berhasil diperbarui.'
     });
   }
 

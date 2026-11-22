@@ -15,8 +15,9 @@ import {
 } from 'lucide-react';
 import { DEFAULT_WELCOME_HEADLINE, DEFAULT_WELCOME_SUBHEADLINE, useApp } from '../../context/AppContext';
 import { storageService } from '../../services/storageService';
-import { DatabaseFieldDef, DatabaseModuleMetrics, DatabaseStatus } from '../../types';
+import { BackgroundConfig, DatabaseFieldDef, DatabaseModuleMetrics, DatabaseStatus } from '../../types';
 import { ALERT_META, formatBytes } from './adminFormatters';
+import { BackgroundCustomizerPanel } from '../common/BackgroundCustomizer';
 
 interface AdminCapacityDatabasesTabProps {
   onNotice: (ok: boolean, text: string) => void;
@@ -31,10 +32,11 @@ export const AdminCapacityDatabasesTab: React.FC<AdminCapacityDatabasesTabProps>
   const metrics = adminDashboardData.databaseMetrics;
   const databases = metrics?.databases || adminDashboardData.databaseRegistry || [];
 
-  // Welcome headline editor state
+  // Welcome headline & main background editor state
   const [headline, setHeadline] = useState(siteSettings.welcomeHeadline || DEFAULT_WELCOME_HEADLINE);
   const [subheadline, setSubheadline] = useState(siteSettings.welcomeSubheadline || DEFAULT_WELCOME_SUBHEADLINE);
   const [savingHeadline, setSavingHeadline] = useState(false);
+  const [savingMainBg, setSavingMainBg] = useState(false);
 
   // Global quota editor state
   const [quotaMbInput, setQuotaMbInput] = useState(() =>
@@ -107,6 +109,36 @@ export const AdminCapacityDatabasesTab: React.FC<AdminCapacityDatabasesTabProps>
   const handleResetDefaultHeadline = () => {
     setHeadline(DEFAULT_WELCOME_HEADLINE);
     setSubheadline(DEFAULT_WELCOME_SUBHEADLINE);
+  };
+
+  const handleSaveMainBackground = async (bgConfig: BackgroundConfig) => {
+    if (savingMainBg) return;
+    setSavingMainBg(true);
+    const res = await storageService.adminUpdateSiteSettings({
+      mainBackground: bgConfig
+    });
+    setSavingMainBg(false);
+    if (res.ok) {
+      onNotice(true, res.data?.message || 'Background menu utama berhasil diperbarui.');
+      await Promise.all([onRefreshDashboard(), refreshAccessState(true)]);
+    } else {
+      onNotice(false, res.error || 'Gagal menyimpan background menu utama.');
+    }
+  };
+
+  const handleResetMainBackground = async () => {
+    if (savingMainBg) return;
+    setSavingMainBg(true);
+    const res = await storageService.adminUpdateSiteSettings({
+      mainBackground: null
+    });
+    setSavingMainBg(false);
+    if (res.ok) {
+      onNotice(true, 'Background menu utama dikembalikan ke tampilan standar.');
+      await Promise.all([onRefreshDashboard(), refreshAccessState(true)]);
+    } else {
+      onNotice(false, res.error || 'Gagal mengatur ulang background menu utama.');
+    }
   };
 
   const handleSaveGlobalQuota = async (e: React.FormEvent) => {
@@ -415,6 +447,20 @@ export const AdminCapacityDatabasesTab: React.FC<AdminCapacityDatabasesTabProps>
           </button>
         </div>
       </form>
+
+      {/* Background Menu Utama Editor (Admin Only) */}
+      <BackgroundCustomizerPanel
+        variant="main"
+        theme="dark"
+        initialConfig={siteSettings.mainBackground || null}
+        title="Pengaturan Background Menu Utama (Halaman Pembuka)"
+        subtitle="Atur tampilan latar belakang halaman pembuka portal dengan tema pilihan, upload foto sekolah, warna, atau tautan gambar."
+        previewHeadline={headline || DEFAULT_WELCOME_HEADLINE}
+        previewSubline={subheadline || DEFAULT_WELCOME_SUBHEADLINE}
+        isSaving={savingMainBg}
+        onSave={handleSaveMainBackground}
+        onReset={handleResetMainBackground}
+      />
 
       {/* Tambah Database Baru Form */}
       {showCreateForm && (
