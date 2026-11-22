@@ -8,6 +8,7 @@
 
 import {
   AccessSecurityRules,
+  AdminProfile,
   AnnualReport,
   ArchiveDocument,
   AuditLogEntry,
@@ -48,10 +49,12 @@ export interface AppStateData {
   schoolConfig?: SchoolConfig;
   archives?: ArchiveDocument[];
   tupoksiDefinitions?: TupoksiDefinitionsMap;
+  userTupoksiDefinitions?: Record<string, any>;
   customCategories?: CustomCategory[];
   libraryBooks?: LibraryBookItem[];
   libraryMembers?: LibraryMemberItem[];
   libraryMemberStats?: LibraryMemberStats;
+  userLibraryMemberStats?: Record<string, LibraryMemberStats>;
   beritaAcaraHistory?: SavedBeritaAcaraRecord[];
   customDatabases?: DatabaseModuleMetrics[];
   customDatabaseRecords?: Record<string, any[]>;
@@ -69,6 +72,7 @@ export interface AppStateData {
   accessUsers?: RegisteredAccessUser[];
   deletedAccessUserIds?: string[];
   accessRules?: AccessSecurityRules;
+  adminProfile?: AdminProfile | null;
   approvedRoleCounts?: Record<RoleType, number>;
   clientHydratedFromServer?: boolean;
   lastUpdated?: string;
@@ -444,10 +448,12 @@ class StorageService {
   }): Promise<
     ApiResponse<{
       ok: boolean;
+      isAdmin?: boolean;
       token: string;
       expiresAt: string;
       requiresPasswordChange?: boolean;
-      user: RegisteredAccessUser;
+      user?: RegisteredAccessUser;
+      adminProfile?: AdminProfile | null;
       message: string;
     }>
   > {
@@ -458,7 +464,11 @@ class StorageService {
       body: JSON.stringify(payload)
     });
     if (res.ok && res.data?.token) {
-      this.setStaffToken(res.data.token);
+      if (res.data.isAdmin) {
+        this.setAdminToken(res.data.token);
+      } else {
+        this.setStaffToken(res.data.token);
+      }
     }
     return res;
   }
@@ -525,15 +535,52 @@ class StorageService {
     );
   }
 
+  async staffSelfSave(payload: {
+    actionType:
+      | 'SAVE_LETTERHEAD'
+      | 'RESET_LETTERHEAD'
+      | 'SAVE_SIGNATURE'
+      | 'RESET_SIGNATURE'
+      | 'SAVE_TUPOKSI'
+      | 'SAVE_LIBRARY_MEMBER_STATS'
+      | 'SAVE_RECORD'
+      | 'SAVE_RECORDS_BATCH';
+    collection?: string;
+    payload?: any;
+    records?: any[];
+  }) {
+    const tokenType: 'staff' | 'admin' = this.staffToken ? 'staff' : 'admin';
+    return this.requestJson<{
+      ok: boolean;
+      isolationKey?: string;
+      entry?: any;
+      stats?: LibraryMemberStats;
+      collection?: string;
+      savedRecord?: any;
+      savedRecords?: any[];
+      replacedId?: string | null;
+      databaseMetrics?: DatabaseMetricsSummary;
+      lastUpdated?: string;
+      message?: string;
+    }>('/api/staff/self-save', {
+      method: 'POST',
+      tokenType,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
   // =========================================================================
   // ADMIN AUTH & GOVERNANCE ENDPOINTS
   // =========================================================================
 
   async adminAuthStatus() {
-    return this.requestJson<{ envOverrideActive: boolean; isClaimed: boolean; setupRequired: boolean }>(
-      '/api/admin/auth/status',
-      { method: 'GET', tokenType: 'none' }
-    );
+    return this.requestJson<{
+      envOverrideActive: boolean;
+      isClaimed: boolean;
+      setupRequired: boolean;
+      isDefaultCredentials?: boolean;
+    }>('/api/admin/auth/status', { method: 'GET', tokenType: 'none' });
   }
 
   async adminAuthClaim(password: string) {
@@ -552,18 +599,19 @@ class StorageService {
     return res;
   }
 
-  async adminAuthLogin(password: string) {
+  async adminAuthLogin(username: string, password: string) {
     const res = await this.requestJson<{
       ok: boolean;
       token: string;
       expiresAt: string;
       setupRequired?: boolean;
+      adminProfile?: AdminProfile | null;
       message: string;
     }>('/api/admin/auth/login', {
       method: 'POST',
       tokenType: 'none',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password })
+      body: JSON.stringify({ username, password })
     });
     if (res.ok && res.data?.token) {
       this.setAdminToken(res.data.token);
@@ -582,6 +630,31 @@ class StorageService {
       return true;
     }
     return false;
+  }
+
+  async adminAuthUpdateProfile(payload: {
+    currentPassword: string;
+    newUsername: string;
+    newEmail?: string;
+    newNamaLengkap?: string;
+    newPassword?: string;
+  }) {
+    const res = await this.requestJson<{
+      ok: boolean;
+      token?: string;
+      expiresAt?: string;
+      adminProfile?: AdminProfile | null;
+      message?: string;
+    }>('/api/admin/auth/profile', {
+      method: 'PUT',
+      tokenType: 'admin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok && res.data?.token) {
+      this.setAdminToken(res.data.token);
+    }
+    return res;
   }
 
   async adminAuthChangePassword(newPassword: string) {

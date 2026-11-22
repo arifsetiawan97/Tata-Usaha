@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RoleType, MonthlyReport, OperationalKPI } from '../../types';
 import { InventoryTable } from '../common/InventoryTable';
@@ -336,9 +336,26 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSecretAiOpen, setIsSecretAiOpen] = useState(false);
+  const hasUnsavedChangesRef = useRef(false);
+  const lastReportContextKeyRef = useRef(`${effectiveRole}:${selectedYear}:${selectedMonth}`);
 
-  // Synchronize report state if role, month, or year changes or monthlyReports updates
+  const markDirty = () => {
+    hasUnsavedChangesRef.current = true;
+  };
+  const clearDirty = () => {
+    hasUnsavedChangesRef.current = false;
+  };
+
+  // Synchronize report state on role/month/year change or server update when not actively editing
   useEffect(() => {
+    const contextKey = `${effectiveRole}:${selectedYear}:${selectedMonth}`;
+    const isContextSwitch = lastReportContextKeyRef.current !== contextKey;
+    if (isContextSwitch) {
+      lastReportContextKeyRef.current = contextKey;
+      hasUnsavedChangesRef.current = false;
+    } else if (hasUnsavedChangesRef.current) {
+      return;
+    }
     const rep = monthlyReports.find(
       r => r.role === effectiveRole && r.month === selectedMonth && r.year === selectedYear
     ) || generateMonthlyReportFromTasks(effectiveRole, selectedMonth, selectedYear);
@@ -446,10 +463,11 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
       ...reportState,
       customKPIs: editingKpis
     };
+    clearDirty();
     setReportState(updated);
     saveMonthlyReport(updated);
     setIsEditKpiModalOpen(false);
-    showNotification('✅ Matriks Indikator Kinerja Kunci (KPI) berhasil disesuaikan dan disimpan!');
+    showNotification('✅ Matriks Indikator Kinerja Kunci (KPI) tersimpan permanen!');
   };
 
   const handleResetKpisToDefault = () => {
@@ -532,9 +550,10 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
       summary: summaryText,
       achievements: dynamicAchievements.length > 0 ? dynamicAchievements : reportState.achievements
     };
+    clearDirty();
     setReportState(updated);
     saveMonthlyReport(updated);
-    showNotification('✨ Ringkasan eksekutif dan capaian berhasil disusun dari kegiatan riil bulan ini (Tugas Pokok & Tambahan)!');
+    showNotification('✨ Ringkasan eksekutif & capaian disusun dari kegiatan bulan ini dan tersimpan permanen!');
   };
 
   const filteredDisplayTasks = monthTasks.filter(t => {
@@ -579,11 +598,12 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             obstacles: Array.isArray(obstacles) && obstacles.length > 0 ? obstacles : currentRep.obstacles,
             solutions: Array.isArray(solutions) && solutions.length > 0 ? solutions : currentRep.solutions
           };
+          clearDirty();
           setReportState(updated);
           saveMonthlyReport(updated);
           showNotification(json.isAi 
-            ? '✨ Analisis cerdas AI berhasil disintesis ke ringkasan, capaian, kendala, dan solusi bulanan!' 
-            : '✨ Analisis cerdas otomatis berhasil disinkronkan ke seluruh bagian laporan bulanan!');
+            ? '✨ Analisis cerdas AI disintesis & tersimpan permanen ke laporan bulanan!' 
+            : '✨ Analisis cerdas otomatis tersinkron & tersimpan permanen ke laporan bulanan!');
         }
       } else {
         showNotification('Gagal menghubungi layanan analisis cerdas.');
@@ -597,6 +617,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
   };
 
   const handleMonthYearChange = (m: number, y: number) => {
+    clearDirty();
     setSelectedMonth(m);
     setSelectedYear(y);
     const rep = monthlyReports.find(
@@ -606,15 +627,17 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
   };
 
   const handleSyncFromTasks = () => {
+    clearDirty();
     const fresh = generateMonthlyReportFromTasks(effectiveRole, selectedMonth, selectedYear);
     setReportState(fresh);
     saveMonthlyReport(fresh);
-    showNotification('Data disinkronkan kembali dari catatan tugas harian operasional!');
+    showNotification('Data disinkronkan kembali & tersimpan permanen dari catatan tugas harian!');
   };
 
   const handleLoadOfficialTemplate = () => {
     const tpl = OFFICIAL_MONTHLY_TEMPLATES[effectiveRole];
     if (tpl) {
+      markDirty();
       setReportState(prev => ({
         ...prev,
         summary: tpl.summary,
@@ -622,13 +645,14 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
         obstacles: [...tpl.obstacles],
         solutions: [...tpl.solutions]
       }));
-      showNotification(`Template resmi standar ${roleTitle} berhasil diterapkan!`);
+      showNotification(`Template resmi standar ${roleTitle} berhasil diterapkan! Klik Simpan Laporan untuk menyimpan permanen.`);
     }
   };
 
   const handleSave = () => {
+    clearDirty();
     saveMonthlyReport(reportState);
-    showNotification('Laporan bulanan berhasil disimpan dan disinkronkan ke sistem pengesahan!');
+    showNotification('Laporan bulanan tersimpan permanen untuk akun Anda!');
   };
 
   const handleExportTemplateJson = () => {
@@ -649,6 +673,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
       reader.onload = (event) => {
         try {
           const parsed = JSON.parse(event.target?.result as string);
+          markDirty();
           setReportState(prev => ({
             ...prev,
             summary: parsed.summary || prev.summary,
@@ -657,7 +682,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             solutions: Array.isArray(parsed.solutions) ? parsed.solutions : prev.solutions,
             manualDocDate: parsed.manualDocDate || prev.manualDocDate
           }));
-          showNotification('Template laporan berhasil diimpor!');
+          showNotification('Template laporan berhasil diimpor! Klik Simpan Laporan untuk menyimpan permanen.');
         } catch (err) {
           showNotification('Gagal membaca file JSON template!');
         }
@@ -668,31 +693,37 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
 
   const addAchievement = () => {
     if (!newAchievement.trim()) return;
+    markDirty();
     setReportState(prev => ({ ...prev, achievements: [...prev.achievements, newAchievement.trim()] }));
     setNewAchievement('');
   };
 
   const removeAchievement = (index: number) => {
+    markDirty();
     setReportState(prev => ({ ...prev, achievements: prev.achievements.filter((_, i) => i !== index) }));
   };
 
   const addObstacle = () => {
     if (!newObstacle.trim()) return;
+    markDirty();
     setReportState(prev => ({ ...prev, obstacles: [...prev.obstacles, newObstacle.trim()] }));
     setNewObstacle('');
   };
 
   const removeObstacle = (index: number) => {
+    markDirty();
     setReportState(prev => ({ ...prev, obstacles: prev.obstacles.filter((_, i) => i !== index) }));
   };
 
   const addSolution = () => {
     if (!newSolution.trim()) return;
+    markDirty();
     setReportState(prev => ({ ...prev, solutions: [...prev.solutions, newSolution.trim()] }));
     setNewSolution('');
   };
 
   const removeSolution = (index: number) => {
+    markDirty();
     setReportState(prev => ({ ...prev, solutions: prev.solutions.filter((_, i) => i !== index) }));
   };
 
@@ -1224,7 +1255,10 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
           <input
             type="text"
             value={reportState.manualDocDate}
-            onChange={(e) => setReportState(prev => ({ ...prev, manualDocDate: e.target.value }))}
+            onChange={(e) => {
+              markDirty();
+              setReportState(prev => ({ ...prev, manualDocDate: e.target.value }));
+            }}
             className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-semibold w-full sm:w-64 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             placeholder="Contoh: Tempat, 30 September 2026"
           />
@@ -1331,7 +1365,10 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
           <textarea
             rows={3}
             value={reportState.summary}
-            onChange={(e) => setReportState(prev => ({ ...prev, summary: e.target.value }))}
+            onChange={(e) => {
+              markDirty();
+              setReportState(prev => ({ ...prev, summary: e.target.value }));
+            }}
             className="w-full p-3 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500 leading-relaxed font-sans"
             placeholder="Ketik uraian ringkasan eksekutif kinerja bulanan..."
           />
@@ -1361,9 +1398,10 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
                           ...reportState,
                           customKPIs: JSON.parse(JSON.stringify(preset.kpis))
                         };
+                        clearDirty();
                         setReportState(updated);
                         saveMonthlyReport(updated);
-                        showNotification(`Preset Matriks KPI "${preset.label}" berhasil diterapkan!`);
+                        showNotification(`Preset Matriks KPI "${preset.label}" diterapkan & tersimpan permanen!`);
                       }}
                       className="px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:text-indigo-700 hover:bg-white rounded transition-colors"
                       title={preset.desc}
@@ -1442,6 +1480,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             <button
               type="button"
               onClick={() => {
+                markDirty();
                 const specItems = ROLE_OPERATIONAL_SPECS[effectiveRole]?.monthlyAchievements || [];
                 setReportState(prev => {
                   const merged = Array.from(new Set([...prev.achievements, ...specItems]));
@@ -1510,6 +1549,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             <button
               type="button"
               onClick={() => {
+                markDirty();
                 const specObstacles = ROLE_OPERATIONAL_SPECS[effectiveRole]?.fieldObstacles || [];
                 const obsTexts = specObstacles.map(o => o.obstacle);
                 const solTexts = specObstacles.map(o => o.solution);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RoleType, AnnualReport } from '../../types';
 import { InventoryTable } from '../common/InventoryTable';
@@ -149,6 +149,8 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
 
   const [reportState, setReportState] = useState<AnnualReport>(activeReport);
   const [hasManualSummaryEdit, setHasManualSummaryEdit] = useState(false);
+  const hasUnsavedChangesRef = useRef(false);
+  const lastAnnualContextKeyRef = useRef(`${effectiveRole}:${selectedYear}`);
   const [newMilestone, setNewMilestone] = useState('');
   const [newRec, setNewRec] = useState('');
   const [newObstacle, setNewObstacle] = useState('');
@@ -156,13 +158,30 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const markDirty = () => {
+    hasUnsavedChangesRef.current = true;
+  };
+  const clearDirty = () => {
+    hasUnsavedChangesRef.current = false;
+  };
+
   // Reset manual edit flag when role or year switches
   useEffect(() => {
     setHasManualSummaryEdit(false);
+    hasUnsavedChangesRef.current = false;
   }, [effectiveRole, selectedYear]);
 
   // Automatically sync Annual Report & Executive Narrative with Monthly Reports + real data
   useEffect(() => {
+    const contextKey = `${effectiveRole}:${selectedYear}`;
+    const isContextSwitch = lastAnnualContextKeyRef.current !== contextKey;
+    if (isContextSwitch) {
+      lastAnnualContextKeyRef.current = contextKey;
+      hasUnsavedChangesRef.current = false;
+    } else if (hasUnsavedChangesRef.current) {
+      return;
+    }
+
     const savedRep = annualReports.find(
       r => r.role === effectiveRole && r.year === selectedYear
     );
@@ -177,8 +196,10 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
       ...savedRep,
       summary: hasManualSummaryEdit && prev.role === effectiveRole && prev.year === selectedYear
         ? prev.summary
-        : autoRep.summary,
-      annualMilestones: autoRep.annualMilestones.length > 0 ? autoRep.annualMilestones : savedRep.annualMilestones
+        : (savedRep.summary || autoRep.summary),
+      annualMilestones: savedRep.annualMilestones?.length > 0
+        ? savedRep.annualMilestones
+        : autoRep.annualMilestones
     }));
   }, [
     effectiveRole,
@@ -465,6 +486,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             annualMilestones: Array.isArray(annualMilestones) && annualMilestones.length > 0 ? annualMilestones : currentRep.annualMilestones,
             strategicRecommendations: Array.isArray(strategicRecommendations) && strategicRecommendations.length > 0 ? strategicRecommendations : currentRep.strategicRecommendations
           };
+          clearDirty();
           setReportState(updated);
           saveAnnualReport(updated);
           showNotification(json.isAi 
@@ -496,6 +518,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
   const avgCompletionRate = Math.round(annualPerformance.averagePercentage);
 
   const handleYearChange = (y: number) => {
+    clearDirty();
     setSelectedYear(y);
     setHasManualSummaryEdit(false);
     const rep = generateAnnualReportFromMonthly(effectiveRole, y, true);
@@ -503,16 +526,18 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
   };
 
   const handleSyncFromMonthly = () => {
+    clearDirty();
     setHasManualSummaryEdit(false);
     const fresh = generateAnnualReportFromMonthly(effectiveRole, selectedYear, true);
     setReportState(fresh);
     saveAnnualReport(fresh);
-    showNotification('Data & Narasi Ringkasan Eksekutif Tahunan disinkronkan otomatis dari kompilasi laporan bulanan!');
+    showNotification('Data & Narasi Ringkasan Eksekutif Tahunan disinkronkan & tersimpan permanen!');
   };
 
   const handleLoadOfficialTemplate = () => {
     const tpl = OFFICIAL_ANNUAL_TEMPLATES[effectiveRole];
     if (tpl) {
+      markDirty();
       setReportState(prev => ({
         ...prev,
         summary: tpl.summary,
@@ -521,13 +546,14 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
         obstacles: [...tpl.obstacles],
         solutions: [...tpl.solutions]
       }));
-      showNotification(`Template resmi tahunan ${roleTitle} berhasil diterapkan!`);
+      showNotification(`Template resmi tahunan ${roleTitle} diterapkan! Klik Simpan Laporan untuk menyimpan permanen.`);
     }
   };
 
   const handleSave = () => {
+    clearDirty();
     saveAnnualReport(reportState);
-    showNotification('Laporan tahunan berhasil disimpan dan siap dicetak!');
+    showNotification('Laporan tahunan tersimpan permanen untuk akun Anda dan siap dicetak!');
   };
 
   const handleExportTemplateJson = () => {
@@ -548,6 +574,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
       reader.onload = (event) => {
         try {
           const parsed = JSON.parse(event.target?.result as string);
+          markDirty();
           setReportState(prev => ({
             ...prev,
             summary: parsed.summary || prev.summary,
@@ -557,7 +584,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             solutions: Array.isArray(parsed.solutions) ? parsed.solutions : prev.solutions,
             manualDocDate: parsed.manualDocDate || prev.manualDocDate
           }));
-          showNotification('Template laporan tahunan berhasil diimpor!');
+          showNotification('Template laporan tahunan berhasil diimpor! Klik Simpan Laporan untuk menyimpan permanen.');
         } catch (err) {
           showNotification('Gagal membaca file JSON template!');
         }
@@ -568,41 +595,49 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
 
   const addMilestone = () => {
     if (!newMilestone.trim()) return;
+    markDirty();
     setReportState(prev => ({ ...prev, annualMilestones: [...prev.annualMilestones, newMilestone.trim()] }));
     setNewMilestone('');
   };
 
   const removeMilestone = (index: number) => {
+    markDirty();
     setReportState(prev => ({ ...prev, annualMilestones: prev.annualMilestones.filter((_, i) => i !== index) }));
   };
 
   const addRecommendation = () => {
     if (!newRec.trim()) return;
+    markDirty();
     setReportState(prev => ({ ...prev, strategicRecommendations: [...prev.strategicRecommendations, newRec.trim()] }));
     setNewRec('');
   };
 
   const removeRecommendation = (index: number) => {
+    markDirty();
     setReportState(prev => ({ ...prev, strategicRecommendations: prev.strategicRecommendations.filter((_, i) => i !== index) }));
   };
 
   const addObstacle = () => {
     if (!newObstacle.trim()) return;
+    markDirty();
     setReportState(prev => ({ ...prev, obstacles: [...(prev.obstacles || []), newObstacle.trim()] }));
     setNewObstacle('');
   };
 
   const removeObstacle = (index: number) => {
+    markDirty();
     setReportState(prev => ({ ...prev, obstacles: (prev.obstacles || []).filter((_, i) => i !== index) }));
   };
 
   const addSolution = () => {
     if (!newSolution.trim()) return;
+    markDirty();
     setReportState(prev => ({ ...prev, solutions: [...(prev.solutions || []), newSolution.trim()] }));
     setNewSolution('');
   };
 
   const removeSolution = (index: number) => {
+    markDirty();
     setReportState(prev => ({ ...prev, solutions: (prev.solutions || []).filter((_, i) => i !== index) }));
   };
 
@@ -1012,7 +1047,10 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
           <input
             type="text"
             value={reportState.manualDocDate}
-            onChange={(e) => setReportState(prev => ({ ...prev, manualDocDate: e.target.value }))}
+            onChange={(e) => {
+              markDirty();
+              setReportState(prev => ({ ...prev, manualDocDate: e.target.value }));
+            }}
             className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 font-semibold w-full sm:w-64 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             placeholder="Contoh: Tempat, 31 Desember 2026"
           />
@@ -1163,6 +1201,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             rows={4}
             value={reportState.summary}
             onChange={(e) => {
+              markDirty();
               setHasManualSummaryEdit(true);
               setReportState(prev => ({ ...prev, summary: e.target.value }));
             }}
@@ -1236,6 +1275,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             <button
               type="button"
               onClick={() => {
+                markDirty();
                 const specItems = ROLE_OPERATIONAL_SPECS[effectiveRole]?.annualMilestones || [];
                 setReportState(prev => {
                   const merged = Array.from(new Set([...prev.annualMilestones, ...specItems]));
@@ -1302,6 +1342,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             <button
               type="button"
               onClick={() => {
+                markDirty();
                 const specObstacles = ROLE_OPERATIONAL_SPECS[effectiveRole]?.fieldObstacles || [];
                 const obsTexts = specObstacles.map(o => o.obstacle);
                 const solTexts = specObstacles.map(o => o.solution);
@@ -1417,6 +1458,7 @@ export const AnnualReportView: React.FC<AnnualReportViewProps> = ({
             <button
               type="button"
               onClick={() => {
+                markDirty();
                 const specRecs = ROLE_OPERATIONAL_SPECS[effectiveRole]?.strategicRecommendations || [];
                 setReportState(prev => {
                   const merged = Array.from(new Set([...prev.strategicRecommendations, ...specRecs]));

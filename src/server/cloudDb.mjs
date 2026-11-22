@@ -272,7 +272,39 @@ function buildDefaultDatabaseRegistry() {
   }));
 }
 
+export function createDefaultAdminAccount() {
+  const now = new Date().toISOString();
+  const seededHash = hashSecret('admin123');
+  return {
+    id: 'admin-root',
+    username: 'admin',
+    email: 'admin@sekolah.local',
+    namaLengkap: 'Administrator Utama',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    passwordHash: seededHash,
+    isDefaultCredentials: true,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+export function sanitizeAdminProfile(adminAccount) {
+  if (!adminAccount || typeof adminAccount !== 'object') return null;
+  return {
+    id: adminAccount.id || 'admin-root',
+    username: adminAccount.username || 'admin',
+    email: adminAccount.email || '',
+    namaLengkap: adminAccount.namaLengkap || 'Administrator Utama',
+    role: 'ADMIN',
+    status: adminAccount.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+    isDefaultCredentials: Boolean(adminAccount.isDefaultCredentials),
+    updatedAt: adminAccount.updatedAt || adminAccount.createdAt || ''
+  };
+}
+
 function buildFallbackSeedData() {
+  const defaultAdmin = createDefaultAdminAccount();
   return {
     tasks: [],
     inventories: [],
@@ -296,6 +328,8 @@ function buildFallbackSeedData() {
       lastUpdated: ''
     },
     beritaAcaraHistory: [],
+    userTupoksiDefinitions: {},
+    userLibraryMemberStats: {},
     customDatabaseRecords: {},
     databaseRegistry: buildDefaultDatabaseRegistry(),
     databaseQuotaBytes: DEFAULT_DATABASE_QUOTA_BYTES,
@@ -318,7 +352,8 @@ function buildFallbackSeedData() {
     accessUsers: [],
     deletedAccessUserIds: [],
     accessRules: { ...DEFAULT_ACCESS_RULES },
-    adminCredentialHash: '',
+    adminAccount: defaultAdmin,
+    adminCredentialHash: defaultAdmin.passwordHash,
     serverSecurityPepper: crypto.randomBytes(32).toString('hex'),
     lastUpdated: new Date().toISOString()
   };
@@ -363,6 +398,32 @@ function migrateAndNormalizeDb(parsed) {
     patched = true;
   }
 
+  // Bootstrap default admin account when database/storage has no admin account yet
+  if (
+    !parsed.adminAccount ||
+    typeof parsed.adminAccount !== 'object' ||
+    !String(parsed.adminAccount.username || '').trim() ||
+    !String(parsed.adminAccount.passwordHash || '').trim()
+  ) {
+    const defaultAdmin = createDefaultAdminAccount();
+    parsed.adminAccount = defaultAdmin;
+    parsed.adminCredentialHash = defaultAdmin.passwordHash;
+    patched = true;
+  } else {
+    if (!parsed.adminAccount.status) {
+      parsed.adminAccount.status = 'ACTIVE';
+      patched = true;
+    }
+    if (parsed.adminAccount.role !== 'ADMIN') {
+      parsed.adminAccount.role = 'ADMIN';
+      patched = true;
+    }
+    if (parsed.adminCredentialHash !== parsed.adminAccount.passwordHash) {
+      parsed.adminCredentialHash = parsed.adminAccount.passwordHash;
+      patched = true;
+    }
+  }
+
   if (!Array.isArray(parsed.deletedAccessUserIds)) {
     parsed.deletedAccessUserIds = [];
     patched = true;
@@ -370,6 +431,16 @@ function migrateAndNormalizeDb(parsed) {
 
   if (!Array.isArray(parsed.beritaAcaraHistory)) {
     parsed.beritaAcaraHistory = [];
+    patched = true;
+  }
+
+  if (!parsed.userTupoksiDefinitions || typeof parsed.userTupoksiDefinitions !== 'object') {
+    parsed.userTupoksiDefinitions = {};
+    patched = true;
+  }
+
+  if (!parsed.userLibraryMemberStats || typeof parsed.userLibraryMemberStats !== 'object') {
+    parsed.userLibraryMemberStats = {};
     patched = true;
   }
 
@@ -1074,12 +1145,14 @@ export function rollbackMigration(db, { migrationId, actor = 'ADMIN' }) {
 
   // Restore target collection & custom database state cleanly from pre-migration snapshot
   const preservedBackups = db.backups;
+  const preservedAdminAccount = db.adminAccount;
   const preservedAdminHash = db.adminCredentialHash;
   const preservedPepper = db.serverSecurityPepper;
   const restoredBody = snap.snapshot;
 
   Object.assign(db, restoredBody, {
     backups: preservedBackups,
+    adminAccount: preservedAdminAccount,
     adminCredentialHash: preservedAdminHash,
     serverSecurityPepper: preservedPepper,
     migrationLogs: logs.map(m =>
@@ -1152,20 +1225,92 @@ export function buildStaffStateResponse(db, staffSession) {
     }
   }
 
+  const staffSub = typeof staffSession?.sub === 'string' ? staffSession.sub.trim() : '';
+  const staffUsername = typeof staffSession?.username === 'string' ? staffSession.username.trim().toLowerCase() : '';
+  const altStaffKey = staffUsername ? `user:${staffUsername}` : '';
+  const primaryStaffKey = staffSub || altStaffKey;
+
+  const isOwnedByCaller = (item) => {
+    if (!item || typeof item !== 'object') return false;
+    if (item.ownerUserId) {
+      return (Boolean(staffSub) && item.ownerUserId === staffSub) || (Boolean(altStaffKey) && item.ownerUserId === altStaffKey);
+    }
+    if (item.ownerUsername) {
+      return Boolean(staffUsername) && String(item.ownerUsername).trim().toLowerCase() === staffUsername;
+    }
+    return false;
+  };
+
+  const scopeCollectionForUser = (list) => {
+    if (!Array.isArray(list)) return [];
+    const callerForkedBaseIds = new Set();
+    for (const item of list) {
+      if (item && item.forkedFromId && isOwnedByCaller(item)) {
+        callerForkedBaseIds.add(item.forkedFromId);
+      }
+    }
+    return list.filter(item => {
+      if (!item || typeof item !== 'object') return false;
+      if (item.ownerUserId || item.ownerUsername) {
+        return isOwnedByCaller(item);
+      }
+      // Shared/base seed record: hide only if caller already created their own forked copy
+      return !callerForkedBaseIds.has(item.id);
+    });
+  };
+
+  // Scope SchoolConfig userLetterheads & userSignatures strictly to this caller
+  let scopedSchoolConfig = db.schoolConfig || null;
+  if (scopedSchoolConfig && typeof scopedSchoolConfig === 'object') {
+    const rawKopMap = scopedSchoolConfig.userLetterheads || {};
+    const rawSigMap = scopedSchoolConfig.userSignatures || {};
+    const ownKop = (staffSub && rawKopMap[staffSub]) || (altStaffKey && rawKopMap[altStaffKey]) || null;
+    const ownSig = (staffSub && rawSigMap[staffSub]) || (altStaffKey && rawSigMap[altStaffKey]) || null;
+    scopedSchoolConfig = {
+      ...scopedSchoolConfig,
+      userLetterheads: ownKop && primaryStaffKey ? { [primaryStaffKey]: ownKop } : {},
+      userSignatures: ownSig && primaryStaffKey ? { [primaryStaffKey]: ownSig } : {}
+    };
+  }
+
+  // Merge user's personal Tupoksi customizations over base Tupoksi
+  const userTupoksiOverlay =
+    (staffSub && db.userTupoksiDefinitions?.[staffSub]) ||
+    (altStaffKey && db.userTupoksiDefinitions?.[altStaffKey]) ||
+    null;
+  let effectiveTupoksi = db.tupoksiDefinitions || null;
+  if (userTupoksiOverlay && typeof userTupoksiOverlay === 'object') {
+    const base = db.tupoksiDefinitions && typeof db.tupoksiDefinitions === 'object' ? db.tupoksiDefinitions : {};
+    const mergedTupoksi = { ...base };
+    for (const roleKey of VALID_ROLES) {
+      if (userTupoksiOverlay[roleKey] && typeof userTupoksiOverlay[roleKey] === 'object') {
+        mergedTupoksi[roleKey] = userTupoksiOverlay[roleKey];
+      }
+    }
+    effectiveTupoksi = mergedTupoksi;
+  }
+
+  // Resolve user's personal LibraryMemberStats if saved, else base
+  const userMemberStats =
+    (staffSub && db.userLibraryMemberStats?.[staffSub]) ||
+    (altStaffKey && db.userLibraryMemberStats?.[altStaffKey]) ||
+    db.libraryMemberStats ||
+    null;
+
   return {
     publicOnly: false,
-    tasks: db.tasks || [],
-    inventories: db.inventories || [],
-    monthlyReports: db.monthlyReports || [],
-    annualReports: db.annualReports || [],
-    schoolConfig: db.schoolConfig || null,
-    archives: db.archives || [],
-    tupoksiDefinitions: db.tupoksiDefinitions || null,
-    customCategories: db.customCategories || [],
-    libraryBooks: db.libraryBooks || [],
-    libraryMembers: db.libraryMembers || [],
-    libraryMemberStats: db.libraryMemberStats || null,
-    beritaAcaraHistory: db.beritaAcaraHistory || [],
+    tasks: scopeCollectionForUser(db.tasks),
+    inventories: scopeCollectionForUser(db.inventories),
+    monthlyReports: scopeCollectionForUser(db.monthlyReports),
+    annualReports: scopeCollectionForUser(db.annualReports),
+    schoolConfig: scopedSchoolConfig,
+    archives: scopeCollectionForUser(db.archives),
+    tupoksiDefinitions: effectiveTupoksi,
+    customCategories: scopeCollectionForUser(db.customCategories),
+    libraryBooks: scopeCollectionForUser(db.libraryBooks),
+    libraryMembers: scopeCollectionForUser(db.libraryMembers),
+    libraryMemberStats: userMemberStats,
+    beritaAcaraHistory: scopeCollectionForUser(db.beritaAcaraHistory),
     customDatabases: (db.databaseRegistry || []).filter(d => !d.isBuiltin),
     customDatabaseRecords: db.customDatabaseRecords || {},
     staffSubmissions: (db.staffSubmissions || []).filter(
@@ -1204,10 +1349,12 @@ export function buildAdminStateResponse(db) {
     schoolConfig: db.schoolConfig || null,
     archives: db.archives || [],
     tupoksiDefinitions: db.tupoksiDefinitions || null,
+    userTupoksiDefinitions: db.userTupoksiDefinitions || {},
     customCategories: db.customCategories || [],
     libraryBooks: db.libraryBooks || [],
     libraryMembers: db.libraryMembers || [],
     libraryMemberStats: db.libraryMemberStats || null,
+    userLibraryMemberStats: db.userLibraryMemberStats || {},
     beritaAcaraHistory: db.beritaAcaraHistory || [],
     customDatabases: (db.databaseRegistry || []).filter(d => !d.isBuiltin),
     customDatabaseRecords: db.customDatabaseRecords || {},
@@ -1226,6 +1373,7 @@ export function buildAdminStateResponse(db) {
     ),
     deletedAccessUserIds: db.deletedAccessUserIds || [],
     accessRules: db.accessRules,
+    adminProfile: sanitizeAdminProfile(db.adminAccount),
     lastUpdated: db.lastUpdated
   };
 }
@@ -1239,10 +1387,12 @@ export async function applyStateUpdate(body, actor = 'ADMIN') {
     schoolConfig,
     archives,
     tupoksiDefinitions,
+    userTupoksiDefinitions,
     customCategories,
     libraryBooks,
     libraryMembers,
     libraryMemberStats,
+    userLibraryMemberStats,
     beritaAcaraHistory,
     accessRules,
     siteSettings,
@@ -1324,6 +1474,7 @@ export async function applyStateUpdate(body, actor = 'ADMIN') {
       tupoksiDefinitions !== undefined && (canReplaceOperational || !current.tupoksiDefinitions)
         ? tupoksiDefinitions
         : current.tupoksiDefinitions,
+    userTupoksiDefinitions: mergePerUserIsolationMap(current.userTupoksiDefinitions, userTupoksiDefinitions),
     customCategories: pickCollection(customCategories, current.customCategories),
     libraryBooks: pickCollection(libraryBooks, current.libraryBooks),
     libraryMembers: pickCollection(libraryMembers, current.libraryMembers),
@@ -1331,6 +1482,7 @@ export async function applyStateUpdate(body, actor = 'ADMIN') {
       libraryMemberStats !== undefined && (canReplaceOperational || !current.libraryMemberStats)
         ? libraryMemberStats
         : current.libraryMemberStats,
+    userLibraryMemberStats: mergePerUserIsolationMap(current.userLibraryMemberStats, userLibraryMemberStats),
     beritaAcaraHistory: pickCollection(beritaAcaraHistory, current.beritaAcaraHistory),
     siteSettings:
       siteSettings && typeof siteSettings === 'object'

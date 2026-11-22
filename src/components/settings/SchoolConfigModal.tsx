@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { KopBorderStyle, RoleType, SchoolConfig, SchoolOfficer } from '../../types';
 import { KopSurat } from '../common/KopSurat';
-import { KOP_BORDER_OPTIONS, extractBaseLetterhead } from '../../utils/letterheadHelper';
+import { KOP_BORDER_OPTIONS, extractBaseLetterhead, getUserIsolationKey } from '../../utils/letterheadHelper';
 import { formatOfficialNameWithDegree, formatOfficialNipOrPppk } from '../../utils/formatters';
 import {
   X,
@@ -95,74 +95,85 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
     }
   );
 
-  const [logoAplikasiUrl, setLogoAplikasiUrl] = useState(schoolConfig.logoAplikasiUrl || '');
+  const [logoAplikasiUrl, setLogoAplikasiUrl] = useState(
+    effectiveSchoolConfig.logoAplikasiUrl || schoolConfig.logoAplikasiUrl || ''
+  );
   const [activeTab, setActiveTab] = useState<'kop' | 'pengesahan' | 'aplikasi' | 'backup'>('kop');
   const [saveFeedback, setSaveFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [restoreFeedback, setRestoreFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const wasOpenKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setKopForm({
-        pemerintahDaerah: effectiveSchoolConfig.pemerintahDaerah || '',
-        dinasPendidikan: effectiveSchoolConfig.dinasPendidikan || '',
-        namaSekolah: effectiveSchoolConfig.namaSekolah || '',
-        npsn: effectiveSchoolConfig.npsn || '',
-        nss: effectiveSchoolConfig.nss || '',
-        alamat: effectiveSchoolConfig.alamat || '',
-        desaKecamatan: effectiveSchoolConfig.desaKecamatan || '',
-        kabupatenKota: effectiveSchoolConfig.kabupatenKota || '',
-        provinsi: effectiveSchoolConfig.provinsi || '',
-        kodePos: effectiveSchoolConfig.kodePos || '',
-        telepon: effectiveSchoolConfig.telepon || '',
-        email: effectiveSchoolConfig.email || '',
-        website: effectiveSchoolConfig.website || '',
-        logoKabupatenUrl: effectiveSchoolConfig.logoKabupatenUrl || '',
-        logoSekolahUrl: effectiveSchoolConfig.logoSekolahUrl || '',
-        logoKopKiri: effectiveSchoolConfig.logoKopKiri || effectiveSchoolConfig.logoKabupatenUrl || '',
-        logoKopKanan: effectiveSchoolConfig.logoKopKanan || effectiveSchoolConfig.logoSekolahUrl || '',
-        kopBorderStyle: (effectiveSchoolConfig.kopBorderStyle || 'double_thick') as KopBorderStyle
-      });
-      setKepsekForm({
-        ...(effectiveSchoolConfig.kepalaSekolah || {
-          nama: '',
-          nip: '',
-          jabatan: 'Kepala Satuan Pendidikan',
-          signatureType: 'script',
-          signatureData: ''
-        })
-      });
-      setWakasekForm({
-        ...(effectiveSchoolConfig.wakilKepalaSekolah || {
-          nama: '',
-          nip: '',
-          jabatan: 'Wakil Kepala Sekolah',
-          signatureType: 'script',
-          signatureData: ''
-        })
-      });
-      setOperatorForm({
-        ...(effectiveSchoolConfig.operatorProfiles?.[activeOperatorRole] || {
-          nama: currentUser?.namaLengkap || '',
-          nip: '',
-          jabatan:
-            activeOperatorRole === 'TU'
-              ? 'Operator Tata Usaha'
-              : activeOperatorRole === 'PENJAGA'
-                ? 'Penjaga Sekolah'
-                : activeOperatorRole === 'SERVICE'
-                  ? 'Petugas Layanan Kebersihan'
-                  : activeOperatorRole === 'PERPUS'
-                    ? 'Pengelola Perpustakaan'
-                    : 'Laboran IPA',
-          signatureType: 'script',
-          signatureData: ''
-        })
-      });
-      setLogoAplikasiUrl(schoolConfig.logoAplikasiUrl || '');
-      setSaveFeedback(null);
-      setRestoreFeedback(null);
+    if (!isOpen) {
+      wasOpenKeyRef.current = null;
+      return;
     }
-  }, [isOpen, effectiveSchoolConfig, schoolConfig.logoAplikasiUrl, activeOperatorRole, currentUser?.namaLengkap]);
+    const openKey = `${getUserIsolationKey(currentUser) || 'anon'}:${activeOperatorRole}`;
+    if (wasOpenKeyRef.current === openKey) {
+      return;
+    }
+    wasOpenKeyRef.current = openKey;
+
+    setKopForm({
+      pemerintahDaerah: effectiveSchoolConfig.pemerintahDaerah || '',
+      dinasPendidikan: effectiveSchoolConfig.dinasPendidikan || '',
+      namaSekolah: effectiveSchoolConfig.namaSekolah || '',
+      npsn: effectiveSchoolConfig.npsn || '',
+      nss: effectiveSchoolConfig.nss || '',
+      alamat: effectiveSchoolConfig.alamat || '',
+      desaKecamatan: effectiveSchoolConfig.desaKecamatan || '',
+      kabupatenKota: effectiveSchoolConfig.kabupatenKota || '',
+      provinsi: effectiveSchoolConfig.provinsi || '',
+      kodePos: effectiveSchoolConfig.kodePos || '',
+      telepon: effectiveSchoolConfig.telepon || '',
+      email: effectiveSchoolConfig.email || '',
+      website: effectiveSchoolConfig.website || '',
+      logoKabupatenUrl: effectiveSchoolConfig.logoKabupatenUrl || '',
+      logoSekolahUrl: effectiveSchoolConfig.logoSekolahUrl || '',
+      logoKopKiri: effectiveSchoolConfig.logoKopKiri || effectiveSchoolConfig.logoKabupatenUrl || '',
+      logoKopKanan: effectiveSchoolConfig.logoKopKanan || effectiveSchoolConfig.logoSekolahUrl || '',
+      kopBorderStyle: (effectiveSchoolConfig.kopBorderStyle || 'double_thick') as KopBorderStyle
+    });
+    setKepsekForm({
+      ...(effectiveSchoolConfig.kepalaSekolah || {
+        nama: '',
+        nip: '',
+        jabatan: 'Kepala Satuan Pendidikan',
+        signatureType: 'script',
+        signatureData: ''
+      })
+    });
+    setWakasekForm({
+      ...(effectiveSchoolConfig.wakilKepalaSekolah || {
+        nama: '',
+        nip: '',
+        jabatan: 'Wakil Kepala Sekolah',
+        signatureType: 'script',
+        signatureData: ''
+      })
+    });
+    setOperatorForm({
+      ...(effectiveSchoolConfig.operatorProfiles?.[activeOperatorRole] || {
+        nama: currentUser?.namaLengkap || '',
+        nip: '',
+        jabatan:
+          activeOperatorRole === 'TU'
+            ? 'Operator Tata Usaha'
+            : activeOperatorRole === 'PENJAGA'
+              ? 'Penjaga Sekolah'
+              : activeOperatorRole === 'SERVICE'
+                ? 'Petugas Layanan Kebersihan'
+                : activeOperatorRole === 'PERPUS'
+                  ? 'Pengelola Perpustakaan'
+                  : 'Laboran IPA',
+        signatureType: 'script',
+        signatureData: ''
+      })
+    });
+    setLogoAplikasiUrl(effectiveSchoolConfig.logoAplikasiUrl || schoolConfig.logoAplikasiUrl || '');
+    setSaveFeedback(null);
+    setRestoreFeedback(null);
+  }, [isOpen, effectiveSchoolConfig, schoolConfig.logoAplikasiUrl, activeOperatorRole, currentUser]);
 
   const previewKopConfig: SchoolConfig = useMemo(
     () => ({
@@ -183,8 +194,8 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
     saveUserLetterhead(kopForm);
     showTempFeedback(
       currentUser
-        ? `Kop surat pribadi untuk akun @${currentUser.username} berhasil disimpan tanpa memengaruhi pengguna lain.`
-        : 'Pengaturan kop surat berhasil disimpan.'
+        ? `Kop surat pribadi akun @${currentUser.username} tersimpan permanen tanpa memengaruhi pengguna lain.`
+        : 'Pengaturan kop surat tersimpan permanen.'
     );
   };
 
@@ -211,7 +222,7 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
       logoKopKanan: baseKop.logoKopKanan || baseKop.logoSekolahUrl || '',
       kopBorderStyle: (baseKop.kopBorderStyle || 'double_thick') as KopBorderStyle
     });
-    showTempFeedback('Kop surat Anda dikembalikan ke Template Bawaan Sistem.');
+    showTempFeedback('Kop surat akun Anda dikembalikan permanen ke Template Bawaan Sistem.');
   };
 
   const handleSavePengesahanMandiri = () => {
@@ -222,8 +233,8 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
     });
     showTempFeedback(
       currentUser
-        ? `Lembar pengesahan tanda tangan akun @${currentUser.username} berhasil disimpan secara terisolasi.`
-        : 'Lembar pengesahan tanda tangan berhasil disimpan.'
+        ? `Lembar pengesahan tanda tangan akun @${currentUser.username} tersimpan permanen secara terisolasi.`
+        : 'Lembar pengesahan tanda tangan tersimpan permanen.'
     );
   };
 
@@ -248,12 +259,16 @@ export const SchoolConfigModal: React.FC<SchoolConfigModalProps> = ({ isOpen, on
         signatureData: ''
       })
     });
-    showTempFeedback('Lembar pengesahan Anda dikembalikan ke Template Bawaan Sistem.');
+    showTempFeedback('Lembar pengesahan akun Anda dikembalikan permanen ke Template Bawaan Sistem.');
   };
 
   const handleSaveLogoAplikasi = () => {
     updateSchoolConfig({ logoAplikasiUrl });
-    showTempFeedback('Logo aplikasi berhasil diperbarui.');
+    showTempFeedback(
+      currentUser
+        ? `Logo aplikasi untuk akun @${currentUser.username} tersimpan permanen.`
+        : 'Logo aplikasi berhasil diperbarui permanen.'
+    );
   };
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import {
   checkLoginRateLimit,
   computePasswordFingerprint,
@@ -29,6 +30,7 @@ import {
   restoreSoftDeletedRecord,
   rollbackMigration,
   runDataMigration,
+  sanitizeAdminProfile,
   softDeleteRecord,
   verifyUserCredentials,
   writeDb
@@ -149,7 +151,7 @@ export async function handleGetState(req, res) {
     return res.status(200).json({
       initialized: true,
       accessLevel: 'ADMIN',
-      adminSetupRequired: !envPass && !db.adminCredentialHash,
+      adminSetupRequired: false,
       data: buildAdminStateResponse(db),
       ...info
     });
@@ -159,7 +161,7 @@ export async function handleGetState(req, res) {
     return res.status(200).json({
       initialized: true,
       accessLevel: 'STAFF',
-      adminSetupRequired: !envPass && !db.adminCredentialHash,
+      adminSetupRequired: false,
       data: buildStaffStateResponse(db, ctx.session),
       ...info
     });
@@ -168,7 +170,7 @@ export async function handleGetState(req, res) {
   return res.status(200).json({
     initialized: true,
     accessLevel: 'PUBLIC',
-    adminSetupRequired: !envPass && !db.adminCredentialHash,
+    adminSetupRequired: false,
     data: buildPublicStateResponse(db),
     ...info
   });
@@ -202,10 +204,11 @@ export async function handleAuthAction(action, req, res) {
     if (username.length < 3 || username.length > 50) {
       return res.status(400).json({ ok: false, message: 'Nama pengguna harus 3 sampai 50 karakter.' });
     }
-    if (['admin', 'administrator', 'superadmin', 'root'].includes(usernameKey)) {
+    const activeAdminUsername = String(db.adminAccount?.username || 'admin').trim().toLowerCase();
+    if (['admin', 'administrator', 'superadmin', 'root', activeAdminUsername].includes(usernameKey)) {
       return res.status(400).json({
         ok: false,
-        message: 'Nama pengguna tersebut dicadangkan khusus untuk sistem. Silakan gunakan nama pengguna lain.'
+        message: 'Nama pengguna tersebut khusus untuk Administrator sistem.'
       });
     }
     if (password.length < 4 || password.length > 64) {
@@ -317,6 +320,66 @@ export async function handleAuthAction(action, req, res) {
 
     if (!cleanUsername || !cleanPassword) {
       return res.status(400).json({ ok: false, message: 'Nama pengguna dan sandi wajib diisi.' });
+    }
+
+    // Check if logging in with Admin username/email from the unified portal (when no specific operator card was forced)
+    const adminAcc = db.adminAccount;
+    if (adminAcc && !expectedRole) {
+      const idLower = cleanUsername.toLowerCase();
+      const matchesAdminId =
+        idLower === String(adminAcc.username || 'admin').toLowerCase() ||
+        (adminAcc.email && idLower === String(adminAcc.email).toLowerCase());
+      if (matchesAdminId) {
+        if (adminAcc.status !== 'ACTIVE') {
+          return res.status(403).json({ ok: false, message: 'Akun Admin sedang nonaktif.' });
+        }
+        const envPass = getAdminPasscodeEnv();
+        const adminPassOk = envPass
+          ? timingSafeEqualStr(cleanPassword, envPass)
+          : verifySecret(cleanPassword, adminAcc.passwordHash || db.adminCredentialHash);
+        if (!adminPassOk) {
+          appendAuditLog(db, {
+            actor: cleanUsername,
+            actorRole: 'ADMIN',
+            action: 'ADMIN_LOGIN_FAILED',
+            targetDatabase: 'system',
+            status: 'DENIED',
+            detail: `Sandi tidak sesuai saat login Admin @${adminAcc.username}.`
+          });
+          await writeDb(db);
+          return res.status(401).json({ ok: false, message: 'Username atau sandi Admin tidak sesuai.' });
+        }
+        resetLoginRateLimit(`staff:${getClientIpKey(req)}`);
+        maybeRunScheduledBackup(db);
+        appendAuditLog(db, {
+          actor: adminAcc.username,
+          actorRole: 'ADMIN',
+          action: 'ADMIN_LOGIN_SUCCESS',
+          targetDatabase: 'system',
+          status: 'SUCCESS',
+          detail: `Admin @${adminAcc.username} masuk melalui portal akun.`
+        });
+        await writeDb(db);
+        const issuedAdmin = signSessionToken(
+          {
+            sub: adminAcc.id || 'admin-root',
+            username: adminAcc.username || 'admin',
+            namaLengkap: adminAcc.namaLengkap || 'Administrator Utama',
+            role: 'ADMIN',
+            sessionType: 'admin'
+          },
+          undefined,
+          db.serverSecurityPepper
+        );
+        return res.status(200).json({
+          ok: true,
+          isAdmin: true,
+          token: issuedAdmin.token,
+          expiresAt: issuedAdmin.expiresAt,
+          adminProfile: sanitizeAdminProfile(adminAcc),
+          message: `Selamat datang kembali, ${adminAcc.namaLengkap || 'Administrator'}!`
+        });
+      }
     }
 
     const rules = { ...DEFAULT_ACCESS_RULES, ...(db.accessRules || {}) };
@@ -693,6 +756,526 @@ export async function handleStaffSubmission(req, res) {
 }
 
 // =====================================================================
+// 3B. AUTHENTICATED USER SELF-SAVE (PERMANENT + MULTI-USER ISOLATED)
+// =====================================================================
+
+const ALLOWED_KOP_FIELDS = [
+  'pemerintahDaerah',
+  'dinasPendidikan',
+  'namaSekolah',
+  'npsn',
+  'nss',
+  'alamat',
+  'desaKecamatan',
+  'kabupatenKota',
+  'provinsi',
+  'kodePos',
+  'telepon',
+  'email',
+  'website',
+  'logoKabupatenUrl',
+  'logoSekolahUrl',
+  'logoKopKiri',
+  'logoKopKanan',
+  'logoAplikasiUrl',
+  'kopBorderStyle'
+];
+
+const ALLOWED_KOP_BORDERS = ['double_thick', 'double', 'solid_thick', 'solid_thin', 'dashed'];
+
+function cleanOfficerForStorage(rawOfficer, defaultJabatan = '') {
+  if (!rawOfficer || typeof rawOfficer !== 'object') return undefined;
+  return {
+    nama: String(rawOfficer.nama ?? '').trim().slice(0, 200),
+    nip: String(rawOfficer.nip ?? '').trim().slice(0, 100),
+    ...(rawOfficer.pangkatGolongan !== undefined
+      ? { pangkatGolongan: String(rawOfficer.pangkatGolongan || '').trim().slice(0, 120) }
+      : {}),
+    jabatan: String(rawOfficer.jabatan ?? defaultJabatan).trim().slice(0, 200) || defaultJabatan,
+    signatureType: ['draw', 'bsre_qr', 'script', 'upload'].includes(rawOfficer.signatureType)
+      ? rawOfficer.signatureType
+      : 'script',
+    ...(rawOfficer.signatureData !== undefined ? { signatureData: String(rawOfficer.signatureData || '') } : {}),
+    ...(rawOfficer.signatureImage !== undefined ? { signatureImage: String(rawOfficer.signatureImage || '') } : {})
+  };
+}
+
+function buildUserForkId(baseId, userShortHash) {
+  const cleanBase = String(baseId || 'rec')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 48);
+  return `${cleanBase}__u_${userShortHash}`.slice(0, 64);
+}
+
+function upsertUserIsolatedRecord(db, collection, rawRecord, { isolationKey, actorName, userShortHash, isAdminRoot, now }) {
+  const validation = validateRecordForCollection(collection, rawRecord);
+  if (!validation.valid) {
+    return { ok: false, status: 400, error: validation.error };
+  }
+
+  if (!Array.isArray(db[collection])) db[collection] = [];
+  const list = db[collection];
+  const candidate = { ...validation.record };
+
+  const belongsToCaller = (item) => {
+    if (!item || typeof item !== 'object') return false;
+    if (item.ownerUserId) return item.ownerUserId === isolationKey;
+    if (item.ownerUsername) return String(item.ownerUsername).trim().toLowerCase() === String(actorName).toLowerCase();
+    return false;
+  };
+
+  let targetIdx = list.findIndex(item => item && item.id === candidate.id);
+
+  // For monthlyReports / annualReports also match same caller's period slot to avoid duplicates
+  if (targetIdx === -1 && (collection === 'monthlyReports' || collection === 'annualReports')) {
+    targetIdx = list.findIndex(item => {
+      if (!item || !belongsToCaller(item)) return false;
+      if (collection === 'monthlyReports') {
+        return item.role === candidate.role && item.month === candidate.month && item.year === candidate.year;
+      }
+      return item.role === candidate.role && item.year === candidate.year;
+    });
+    if (targetIdx !== -1) {
+      candidate.id = list[targetIdx].id;
+    }
+  }
+
+  let savedRecord;
+  let replacedId = null;
+
+  if (targetIdx !== -1) {
+    const existing = list[targetIdx];
+    const hasOwner = Boolean(existing.ownerUserId || existing.ownerUsername);
+    const sameOwner = belongsToCaller(existing);
+
+    if (sameOwner || (isAdminRoot && !hasOwner)) {
+      savedRecord = {
+        ...existing,
+        ...candidate,
+        id: existing.id,
+        ...(isAdminRoot && !hasOwner ? {} : { ownerUserId: isolationKey, ownerUsername: actorName }),
+        updatedAt: now
+      };
+      list[targetIdx] = savedRecord;
+    } else if (!hasOwner) {
+      // Base / shared record: create a per-user fork so other users & defaults are untouched
+      const forkId = buildUserForkId(existing.id, userShortHash);
+      const forkIdx = list.findIndex(item => item && item.id === forkId);
+      savedRecord = {
+        ...candidate,
+        id: forkId,
+        forkedFromId: existing.id,
+        ownerUserId: isolationKey,
+        ownerUsername: actorName,
+        updatedAt: now
+      };
+      if (forkIdx === -1) {
+        const cap = checkWriteCapacity(db, collection, getByteSize(savedRecord));
+        if (!cap.allowed) return { ok: false, status: cap.status, error: cap.error };
+        list.unshift(savedRecord);
+      } else {
+        list[forkIdx] = savedRecord;
+      }
+      replacedId = existing.id;
+    } else {
+      // Owned by a DIFFERENT user — NEVER overwrite! Clone cleanly for caller
+      const clonedId = `${candidate.id.slice(0, 36)}-${Date.now().toString(36)}-${userShortHash}`.slice(0, 64);
+      savedRecord = {
+        ...candidate,
+        id: clonedId,
+        ownerUserId: isolationKey,
+        ownerUsername: actorName,
+        updatedAt: now
+      };
+      const cap = checkWriteCapacity(db, collection, getByteSize(savedRecord));
+      if (!cap.allowed) return { ok: false, status: cap.status, error: cap.error };
+      list.unshift(savedRecord);
+      replacedId = candidate.id;
+    }
+  } else {
+    // Brand new record
+    const cap = checkWriteCapacity(db, collection, getByteSize(candidate));
+    if (!cap.allowed) return { ok: false, status: cap.status, error: cap.error };
+    savedRecord = {
+      ...candidate,
+      ...(isAdminRoot ? {} : { ownerUserId: isolationKey, ownerUsername: actorName }),
+      updatedAt: now
+    };
+    list.unshift(savedRecord);
+  }
+
+  return { ok: true, savedRecord, replacedId };
+}
+
+export async function handleStaffSelfSave(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  }
+  const db = await readDb();
+  const ctx = await requireStaffOrAdminOrReject(req, res, db, 'staff/self-save');
+  if (!ctx) return;
+
+  const bodyCheck = sanitizeAndInspectPayload(parseJsonBody(req.body));
+  if (!bodyCheck.valid) {
+    return res.status(400).json({ ok: false, error: bodyCheck.error });
+  }
+
+  const body = bodyCheck.value || {};
+  const actionType = String(body.actionType || '').trim();
+  const now = new Date().toISOString();
+
+  // Derive caller identity strictly from verified server token
+  const isAdminRoot = Boolean(ctx.isAdmin && !ctx.userRecord);
+  const actorName = ctx.userRecord?.username || ctx.session?.username || 'ADMIN_UTAMA';
+  const actorRole = ctx.userRecord?.role || ctx.session?.role || 'ADMIN';
+  const isolationKey =
+    ctx.userRecord?.id ||
+    (isAdminRoot ? 'admin-root' : `user:${String(actorName).trim().toLowerCase()}`);
+  const userShortHash = crypto.createHash('sha1').update(isolationKey).digest('hex').slice(0, 8);
+
+  if (actionType === 'SAVE_LETTERHEAD') {
+    const incoming = body.payload && typeof body.payload === 'object' ? body.payload : {};
+    const metrics = computeDatabaseMetrics(db);
+    if (metrics.totalPercentUsed >= 100) {
+      return res.status(507).json({
+        ok: false,
+        error: 'Kapasitas total Database Admin mencapai 100% (Penuh). Hubungi Admin untuk pembersihan/perluasan kapasitas.'
+      });
+    }
+
+    db.schoolConfig = db.schoolConfig || {};
+    db.schoolConfig.userLetterheads = db.schoolConfig.userLetterheads || {};
+    const prevEntry = db.schoolConfig.userLetterheads[isolationKey];
+    const cleanFields = {};
+    for (const key of ALLOWED_KOP_FIELDS) {
+      if (incoming[key] !== undefined) {
+        if (key === 'kopBorderStyle') {
+          cleanFields[key] = ALLOWED_KOP_BORDERS.includes(incoming[key]) ? incoming[key] : 'double_thick';
+        } else {
+          cleanFields[key] = typeof incoming[key] === 'string' ? incoming[key] : String(incoming[key] ?? '');
+        }
+      }
+    }
+
+    const nextEntry = {
+      ...(prevEntry && !prevEntry.deleted ? prevEntry : {}),
+      ...cleanFields,
+      userId: isolationKey,
+      username: actorName,
+      deleted: false,
+      updatedAt: now
+    };
+    db.schoolConfig.userLetterheads[isolationKey] = nextEntry;
+
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'SAVE_USER_LETTERHEAD',
+      targetDatabase: 'schoolConfig.userLetterheads',
+      targetId: isolationKey,
+      status: 'SUCCESS',
+      detail: `Menyimpan Kop Surat pribadi secara permanen & terisolasi untuk @${actorName}.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      isolationKey,
+      entry: nextEntry,
+      lastUpdated: db.lastUpdated,
+      message: `Kop surat akun @${actorName} tersimpan permanen tanpa memengaruhi pengguna lain.`
+    });
+  }
+
+  if (actionType === 'RESET_LETTERHEAD') {
+    db.schoolConfig = db.schoolConfig || {};
+    db.schoolConfig.userLetterheads = db.schoolConfig.userLetterheads || {};
+    const entry = {
+      userId: isolationKey,
+      username: actorName,
+      deleted: true,
+      updatedAt: now
+    };
+    db.schoolConfig.userLetterheads[isolationKey] = entry;
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'RESET_USER_LETTERHEAD',
+      targetDatabase: 'schoolConfig.userLetterheads',
+      targetId: isolationKey,
+      status: 'SUCCESS',
+      detail: `Mengembalikan Kop Surat pribadi @${actorName} ke Template Bawaan Sistem.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      isolationKey,
+      entry,
+      lastUpdated: db.lastUpdated,
+      message: 'Kop surat Anda dikembalikan ke Template Bawaan Sistem.'
+    });
+  }
+
+  if (actionType === 'SAVE_SIGNATURE') {
+    const incoming = body.payload && typeof body.payload === 'object' ? body.payload : {};
+    const metrics = computeDatabaseMetrics(db);
+    if (metrics.totalPercentUsed >= 100) {
+      return res.status(507).json({
+        ok: false,
+        error: 'Kapasitas total Database Admin mencapai 100% (Penuh).'
+      });
+    }
+
+    db.schoolConfig = db.schoolConfig || {};
+    db.schoolConfig.userSignatures = db.schoolConfig.userSignatures || {};
+    const prevEntry = db.schoolConfig.userSignatures[isolationKey];
+    const sigRole = VALID_ROLES.includes(incoming.role) ? incoming.role : (VALID_ROLES.includes(actorRole) ? actorRole : 'TU');
+
+    const cleanSig = {
+      ...(prevEntry && !prevEntry.deleted ? prevEntry : {}),
+      role: sigRole,
+      ...(incoming.kepalaSekolah ? { kepalaSekolah: cleanOfficerForStorage(incoming.kepalaSekolah, 'Kepala Sekolah') } : {}),
+      ...(incoming.wakilKepalaSekolah
+        ? { wakilKepalaSekolah: cleanOfficerForStorage(incoming.wakilKepalaSekolah, 'Wakil Kepala Sekolah') }
+        : {}),
+      ...(incoming.operatorProfile
+        ? { operatorProfile: cleanOfficerForStorage(incoming.operatorProfile, 'Petugas Layanan Operasional') }
+        : {}),
+      ...(incoming.stempelEnabled !== undefined ? { stempelEnabled: Boolean(incoming.stempelEnabled) } : {}),
+      ...(incoming.stempelTextLine1 !== undefined
+        ? { stempelTextLine1: String(incoming.stempelTextLine1 || '').slice(0, 120) }
+        : {}),
+      ...(incoming.stempelTextLine2 !== undefined
+        ? { stempelTextLine2: String(incoming.stempelTextLine2 || '').slice(0, 120) }
+        : {}),
+      ...(incoming.customStempelUrl !== undefined ? { customStempelUrl: String(incoming.customStempelUrl || '') } : {}),
+      userId: isolationKey,
+      username: actorName,
+      deleted: false,
+      updatedAt: now
+    };
+    db.schoolConfig.userSignatures[isolationKey] = cleanSig;
+
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'SAVE_USER_SIGNATURE',
+      targetDatabase: 'schoolConfig.userSignatures',
+      targetId: isolationKey,
+      status: 'SUCCESS',
+      detail: `Menyimpan Lembar Pengesahan pribadi secara permanen & terisolasi untuk @${actorName}.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      isolationKey,
+      entry: cleanSig,
+      lastUpdated: db.lastUpdated,
+      message: `Lembar pengesahan akun @${actorName} tersimpan permanen tanpa memengaruhi pengguna lain.`
+    });
+  }
+
+  if (actionType === 'RESET_SIGNATURE') {
+    db.schoolConfig = db.schoolConfig || {};
+    db.schoolConfig.userSignatures = db.schoolConfig.userSignatures || {};
+    const sigRole = VALID_ROLES.includes(actorRole) ? actorRole : 'TU';
+    const entry = {
+      role: sigRole,
+      userId: isolationKey,
+      username: actorName,
+      deleted: true,
+      updatedAt: now
+    };
+    db.schoolConfig.userSignatures[isolationKey] = entry;
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'RESET_USER_SIGNATURE',
+      targetDatabase: 'schoolConfig.userSignatures',
+      targetId: isolationKey,
+      status: 'SUCCESS',
+      detail: `Mengembalikan Lembar Pengesahan pribadi @${actorName} ke Template Bawaan Sistem.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      isolationKey,
+      entry,
+      lastUpdated: db.lastUpdated,
+      message: 'Lembar pengesahan Anda dikembalikan ke Template Bawaan Sistem.'
+    });
+  }
+
+  if (actionType === 'SAVE_TUPOKSI') {
+    const incoming = body.payload && typeof body.payload === 'object' ? body.payload : {};
+    const role = VALID_ROLES.includes(incoming.role) ? incoming.role : (VALID_ROLES.includes(actorRole) ? actorRole : 'TU');
+    const tupoksiList = Array.isArray(incoming.tupoksiList)
+      ? incoming.tupoksiList.map(x => String(x || '').trim()).filter(Boolean).slice(0, 100)
+      : [];
+    const tugasTambahanList = Array.isArray(incoming.tugasTambahanList)
+      ? incoming.tugasTambahanList.map(x => String(x || '').trim()).filter(Boolean).slice(0, 100)
+      : [];
+
+    if (!db.userTupoksiDefinitions || typeof db.userTupoksiDefinitions !== 'object') {
+      db.userTupoksiDefinitions = {};
+    }
+    const prevUserMap = db.userTupoksiDefinitions[isolationKey] || {};
+    db.userTupoksiDefinitions[isolationKey] = {
+      ...prevUserMap,
+      [role]: { tupoksiList, tugasTambahanList },
+      updatedAt: now
+    };
+
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'SAVE_USER_TUPOKSI',
+      targetDatabase: 'userTupoksiDefinitions',
+      targetId: `${isolationKey}:${role}`,
+      status: 'SUCCESS',
+      detail: `Menyimpan daftar Tupoksi (${role}) terisolasi untuk @${actorName}.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      isolationKey,
+      role,
+      entry: { tupoksiList, tugasTambahanList },
+      lastUpdated: db.lastUpdated,
+      message: 'Pembaruan daftar Tupoksi Anda tersimpan permanen tanpa memengaruhi pengguna lain.'
+    });
+  }
+
+  if (actionType === 'SAVE_LIBRARY_MEMBER_STATS') {
+    const incoming = body.payload && typeof body.payload === 'object' ? body.payload : {};
+    const guruLaki = Math.max(0, Number(incoming.guruLaki) || 0);
+    const guruPerempuan = Math.max(0, Number(incoming.guruPerempuan) || 0);
+    const staffLaki = Math.max(0, Number(incoming.staffLaki) || 0);
+    const staffPerempuan = Math.max(0, Number(incoming.staffPerempuan) || 0);
+    const siswaLaki = Math.max(0, Number(incoming.siswaLaki) || 0);
+    const siswaPerempuan = Math.max(0, Number(incoming.siswaPerempuan) || 0);
+
+    const statsEntry = {
+      siswaLaki,
+      siswaPerempuan,
+      guruLaki,
+      guruPerempuan,
+      guruPendidik: guruLaki + guruPerempuan > 0 ? guruLaki + guruPerempuan : Math.max(0, Number(incoming.guruPendidik) || 0),
+      staffLaki,
+      staffPerempuan,
+      staffTendik: staffLaki + staffPerempuan > 0 ? staffLaki + staffPerempuan : Math.max(0, Number(incoming.staffTendik) || 0),
+      isManualOverride: incoming.isManualOverride !== undefined ? Boolean(incoming.isManualOverride) : true,
+      lastUpdated: now.slice(0, 10),
+      userId: isolationKey,
+      username: actorName,
+      updatedAt: now
+    };
+
+    if (!db.userLibraryMemberStats || typeof db.userLibraryMemberStats !== 'object') {
+      db.userLibraryMemberStats = {};
+    }
+    db.userLibraryMemberStats[isolationKey] = statsEntry;
+
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'SAVE_USER_MEMBER_STATS',
+      targetDatabase: 'userLibraryMemberStats',
+      targetId: isolationKey,
+      status: 'SUCCESS',
+      detail: `Menyimpan rekapitulasi jumlah anggota perpustakaan untuk @${actorName}.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      isolationKey,
+      stats: statsEntry,
+      lastUpdated: db.lastUpdated,
+      message: 'Rekap jumlah anggota perpustakaan tersimpan permanen untuk akun Anda.'
+    });
+  }
+
+  if (actionType === 'SAVE_RECORD') {
+    const collection = String(body.collection || '').trim();
+    if (!VALID_COLLECTIONS.includes(collection)) {
+      return res.status(400).json({ ok: false, error: `Koleksi "${collection}" tidak valid.` });
+    }
+    const result = upsertUserIsolatedRecord(db, collection, body.payload, {
+      isolationKey,
+      actorName,
+      userShortHash,
+      isAdminRoot,
+      now
+    });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ ok: false, error: result.error });
+    }
+
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: result.replacedId ? 'USER_FORK_OR_SAVE_RECORD' : 'USER_SAVE_RECORD',
+      targetDatabase: collection,
+      targetId: result.savedRecord.id,
+      status: 'SUCCESS',
+      detail: `Menyimpan permanen data pada ${collection} untuk @${actorName} (terisolasi).`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      collection,
+      savedRecord: result.savedRecord,
+      replacedId: result.replacedId,
+      databaseMetrics: computeDatabaseMetrics(db),
+      lastUpdated: db.lastUpdated,
+      message: 'Perubahan tersimpan permanen secara otomatis dan terisolasi untuk akun Anda.'
+    });
+  }
+
+  if (actionType === 'SAVE_RECORDS_BATCH') {
+    const collection = String(body.collection || '').trim();
+    const records = Array.isArray(body.records) ? body.records.slice(0, 500) : [];
+    if (!VALID_COLLECTIONS.includes(collection) || records.length === 0) {
+      return res.status(400).json({ ok: false, error: 'Koleksi atau daftar data impor tidak valid.' });
+    }
+    const savedRecords = [];
+    for (const rec of records) {
+      const result = upsertUserIsolatedRecord(db, collection, rec, {
+        isolationKey,
+        actorName,
+        userShortHash,
+        isAdminRoot,
+        now
+      });
+      if (!result.ok) {
+        return res.status(result.status || 400).json({ ok: false, error: result.error });
+      }
+      savedRecords.push(result.savedRecord);
+    }
+
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'USER_BATCH_SAVE_RECORDS',
+      targetDatabase: collection,
+      targetId: `${savedRecords.length} items`,
+      status: 'SUCCESS',
+      detail: `Menyimpan permanen ${savedRecords.length} data ke ${collection} untuk @${actorName}.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      collection,
+      savedRecords,
+      databaseMetrics: computeDatabaseMetrics(db),
+      lastUpdated: db.lastUpdated,
+      message: `${savedRecords.length} data berhasil disimpan permanen ke akun Anda.`
+    });
+  }
+
+  return res.status(400).json({ ok: false, error: `Jenis aksi penyimpanan "${actionType}" tidak dikenali.` });
+}
+
+// =====================================================================
 // 4. ADMIN AUTH, DATABASE MANAGEMENT, CAPACITY, BACKUP, MIGRATION
 // =====================================================================
 
@@ -705,66 +1288,22 @@ export async function handleAdminRoute(segments, req, res) {
     const envPass = getAdminPasscodeEnv();
     return res.status(200).json({
       envOverrideActive: Boolean(envPass),
-      isClaimed: Boolean(db.adminCredentialHash),
-      setupRequired: !envPass && !db.adminCredentialHash
+      isClaimed: Boolean(db.adminAccount?.passwordHash || db.adminCredentialHash),
+      setupRequired: false,
+      isDefaultCredentials: Boolean(db.adminAccount?.isDefaultCredentials && !envPass)
     });
   }
 
   if (pathJoined === 'auth/claim' && req.method === 'POST') {
-    const envPass = getAdminPasscodeEnv();
-    if (envPass || db.adminCredentialHash) {
-      return res.status(409).json({
-        ok: false,
-        error: 'Sandi Admin Utama sudah ditetapkan dan dikunci. Silakan masuk menggunakan sandi Admin.'
-      });
-    }
-    const bodyCheck = sanitizeAndInspectPayload(parseJsonBody(req.body));
-    if (!bodyCheck.valid) {
-      return res.status(400).json({ ok: false, error: bodyCheck.error });
-    }
-    const password = String(bodyCheck.value?.password || '').trim();
-    if (password.length < 6 || password.length > 100) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Sandi Admin Utama pertama kali wajib minimal 6 karakter.'
-      });
-    }
-
-    db.adminCredentialHash = hashSecret(password);
-    delete db.adminPassword;
-    appendAuditLog(db, {
-      actor: 'ADMIN_UTAMA',
-      actorRole: 'ADMIN',
-      action: 'ADMIN_BOOTSTRAP_CLAIM',
-      targetDatabase: 'system',
-      status: 'SUCCESS',
-      detail: 'Sandi Admin Utama berhasil diinisialisasi dan dikunci pada server.'
-    });
-    await writeDb(db);
-
-    const issued = signSessionToken(
-      {
-        sub: 'admin-root',
-        username: 'admin',
-        namaLengkap: 'Administrator Utama',
-        role: 'ADMIN',
-        sessionType: 'admin'
-      },
-      undefined,
-      db.serverSecurityPepper
-    );
-
-    return res.status(201).json({
-      ok: true,
-      token: issued.token,
-      expiresAt: issued.expiresAt,
-      message: 'Sandi Admin Utama berhasil ditetapkan dan sesi Admin aktif!'
+    return res.status(409).json({
+      ok: false,
+      error: 'Akun Admin default sudah tersedia otomatis. Silakan masuk menggunakan username & sandi Admin.'
     });
   }
 
   if (pathJoined === 'auth/login' && req.method === 'POST') {
     const ipKey = `admin:${getClientIpKey(req)}`;
-    const rate = checkLoginRateLimit(ipKey, 8, 5 * 60 * 1000);
+    const rate = checkLoginRateLimit(ipKey, 12, 5 * 60 * 1000);
     if (!rate.allowed) {
       return res.status(429).json({
         ok: false,
@@ -776,28 +1315,50 @@ export async function handleAdminRoute(segments, req, res) {
     if (!bodyCheck.valid) {
       return res.status(400).json({ ok: false, error: bodyCheck.error });
     }
+    const rawUsername = String(bodyCheck.value?.username || '').trim();
     const password = String(bodyCheck.value?.password || '').trim();
     if (!password) {
-      return res.status(400).json({ ok: false, error: 'Masukkan sandi Admin.' });
+      return res.status(400).json({ ok: false, error: 'Masukkan username dan sandi Admin.' });
+    }
+
+    const adminAcc = db.adminAccount;
+    if (adminAcc && adminAcc.status !== 'ACTIVE') {
+      return res.status(403).json({ ok: false, error: 'Akun Admin sedang berstatus nonaktif.' });
+    }
+
+    if (rawUsername && adminAcc) {
+      const idLower = rawUsername.toLowerCase();
+      const validIds = [
+        String(adminAcc.username || 'admin').toLowerCase(),
+        ...(adminAcc.email ? [String(adminAcc.email).toLowerCase()] : [])
+      ];
+      if (!validIds.includes(idLower)) {
+        appendAuditLog(db, {
+          actor: rawUsername,
+          actorRole: 'PUBLIC',
+          action: 'ADMIN_LOGIN_FAILED',
+          targetDatabase: 'system',
+          status: 'DENIED',
+          detail: `Username Admin tidak cocok saat login (@${rawUsername}).`
+        });
+        await writeDb(db);
+        return res.status(401).json({ ok: false, error: 'Username atau sandi Admin tidak sesuai!' });
+      }
     }
 
     const envPass = getAdminPasscodeEnv();
     let verified = false;
     if (envPass) {
       verified = timingSafeEqualStr(password, envPass);
+    } else if (adminAcc?.passwordHash) {
+      verified = verifySecret(password, adminAcc.passwordHash);
     } else if (db.adminCredentialHash) {
       verified = verifySecret(password, db.adminCredentialHash);
-    } else {
-      return res.status(428).json({
-        ok: false,
-        setupRequired: true,
-        error: 'Sandi Admin belum ditetapkan. Silakan lengkapi formulir penetapan sandi Admin pertama kali.'
-      });
     }
 
     if (!verified) {
       appendAuditLog(db, {
-        actor: getClientIpKey(req),
+        actor: rawUsername || getClientIpKey(req),
         actorRole: 'PUBLIC',
         action: 'ADMIN_LOGIN_FAILED',
         targetDatabase: 'system',
@@ -805,26 +1366,28 @@ export async function handleAdminRoute(segments, req, res) {
         detail: 'Sandi Admin salah saat mencoba membuka Panel Database Admin.'
       });
       await writeDb(db);
-      return res.status(401).json({ ok: false, error: 'Sandi Admin tidak sesuai!' });
+      return res.status(401).json({ ok: false, error: 'Username atau sandi Admin tidak sesuai!' });
     }
 
     resetLoginRateLimit(ipKey);
     maybeRunScheduledBackup(db);
+    const activeAdminUsername = adminAcc?.username || 'admin';
+    const activeAdminName = adminAcc?.namaLengkap || 'Administrator Utama';
     appendAuditLog(db, {
-      actor: 'ADMIN_UTAMA',
+      actor: activeAdminUsername,
       actorRole: 'ADMIN',
       action: 'ADMIN_LOGIN_SUCCESS',
       targetDatabase: 'system',
       status: 'SUCCESS',
-      detail: 'Admin berhasil terautentikasi membuka Database Satu Pintu.'
+      detail: `Admin @${activeAdminUsername} berhasil terautentikasi membuka Database Satu Pintu.`
     });
     await writeDb(db);
 
     const issued = signSessionToken(
       {
-        sub: 'admin-root',
-        username: 'admin',
-        namaLengkap: 'Administrator Utama',
+        sub: adminAcc?.id || 'admin-root',
+        username: activeAdminUsername,
+        namaLengkap: activeAdminName,
         role: 'ADMIN',
         sessionType: 'admin'
       },
@@ -836,7 +1399,8 @@ export async function handleAdminRoute(segments, req, res) {
       ok: true,
       token: issued.token,
       expiresAt: issued.expiresAt,
-      message: 'Autentikasi Admin berhasil.'
+      adminProfile: sanitizeAdminProfile(adminAcc),
+      message: `Autentikasi Admin (@${activeAdminUsername}) berhasil.`
     });
   }
 
@@ -845,11 +1409,12 @@ export async function handleAdminRoute(segments, req, res) {
   if (!adminCtx) return;
 
   if (pathJoined === 'auth/refresh' && req.method === 'POST') {
+    const adminAcc = db.adminAccount;
     const issued = signSessionToken(
       {
-        sub: 'admin-root',
-        username: 'admin',
-        namaLengkap: 'Administrator Utama',
+        sub: adminAcc?.id || 'admin-root',
+        username: adminAcc?.username || 'admin',
+        namaLengkap: adminAcc?.namaLengkap || 'Administrator Utama',
         role: 'ADMIN',
         sessionType: 'admin'
       },
@@ -857,6 +1422,120 @@ export async function handleAdminRoute(segments, req, res) {
       db.serverSecurityPepper
     );
     return res.status(200).json({ ok: true, token: issued.token, expiresAt: issued.expiresAt });
+  }
+
+  if (pathJoined === 'auth/profile' && req.method === 'PUT') {
+    const bodyCheck = sanitizeAndInspectPayload(parseJsonBody(req.body));
+    if (!bodyCheck.valid) return res.status(400).json({ ok: false, error: bodyCheck.error });
+
+    const payload = bodyCheck.value || {};
+    const adminAcc = db.adminAccount;
+    const currentPassword = String(payload.currentPassword || '').trim();
+    const newUsername = String(payload.newUsername ?? adminAcc?.username ?? 'admin').trim();
+    const newEmail = String(payload.newEmail ?? adminAcc?.email ?? '').trim();
+    const newNamaLengkap = String(payload.newNamaLengkap ?? adminAcc?.namaLengkap ?? 'Administrator Utama').trim();
+    const newPassword = String(payload.newPassword || '').trim();
+
+    if (!newUsername || newUsername.length < 3 || newUsername.length > 50) {
+      return res.status(400).json({ ok: false, error: 'Username Admin wajib 3 sampai 50 karakter.' });
+    }
+    if (!/^[a-zA-Z0-9._@-]+$/.test(newUsername)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Username Admin hanya boleh berisi huruf, angka, titik (.), garis bawah (_), hubung (-), atau @.'
+      });
+    }
+    if (!newNamaLengkap) {
+      return res.status(400).json({ ok: false, error: 'Nama lengkap Admin tidak boleh kosong.' });
+    }
+    if (
+      (db.accessUsers || []).some(
+        u => u && u.username.toLowerCase() === newUsername.toLowerCase() && u.status !== 'REJECTED'
+      )
+    ) {
+      return res.status(409).json({
+        ok: false,
+        error: `Username "@${newUsername}" sudah digunakan oleh akun operator layanan.`
+      });
+    }
+
+    const envPass = getAdminPasscodeEnv();
+    const usernameChanged = newUsername.toLowerCase() !== String(adminAcc?.username || 'admin').toLowerCase();
+    const passwordChanged = Boolean(newPassword);
+
+    if (passwordChanged && envPass) {
+      return res.status(409).json({
+        ok: false,
+        error: 'Sandi Admin saat ini dikelola melalui environment variable ADMIN_PASSCODE di server.'
+      });
+    }
+    if (passwordChanged && (newPassword.length < 6 || newPassword.length > 100)) {
+      return res.status(400).json({ ok: false, error: 'Sandi Admin baru minimal 6 karakter.' });
+    }
+
+    if (usernameChanged || passwordChanged) {
+      if (!currentPassword) {
+        return res.status(400).json({
+          ok: false,
+          error: 'Masukkan sandi Admin saat ini untuk mengonfirmasi perubahan username/sandi.'
+        });
+      }
+      const currentValid = envPass
+        ? timingSafeEqualStr(currentPassword, envPass)
+        : verifySecret(currentPassword, adminAcc?.passwordHash || db.adminCredentialHash);
+      if (!currentValid) {
+        return res.status(401).json({ ok: false, error: 'Sandi Admin saat ini tidak sesuai.' });
+      }
+    }
+
+    const now = new Date().toISOString();
+    const updatedHash = passwordChanged
+      ? hashSecret(newPassword)
+      : adminAcc?.passwordHash || db.adminCredentialHash;
+
+    db.adminAccount = {
+      ...(adminAcc || { id: 'admin-root', role: 'ADMIN', status: 'ACTIVE', createdAt: now }),
+      username: newUsername,
+      email: newEmail,
+      namaLengkap: newNamaLengkap,
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      passwordHash: updatedHash,
+      isDefaultCredentials:
+        usernameChanged || passwordChanged ? false : Boolean(adminAcc?.isDefaultCredentials),
+      updatedAt: now
+    };
+    db.adminCredentialHash = updatedHash;
+
+    appendAuditLog(db, {
+      actor: newUsername,
+      actorRole: 'ADMIN',
+      action: 'ADMIN_UPDATE_PROFILE',
+      targetDatabase: 'system',
+      status: 'SUCCESS',
+      detail: `Profil/kredensial Admin diperbarui (@${newUsername}${passwordChanged ? ', sandi diubah' : ''}).`
+    });
+    await writeDb(db);
+
+    const issued = signSessionToken(
+      {
+        sub: db.adminAccount.id,
+        username: db.adminAccount.username,
+        namaLengkap: db.adminAccount.namaLengkap,
+        role: 'ADMIN',
+        sessionType: 'admin'
+      },
+      undefined,
+      db.serverSecurityPepper
+    );
+
+    return res.status(200).json({
+      ok: true,
+      token: issued.token,
+      expiresAt: issued.expiresAt,
+      adminProfile: sanitizeAdminProfile(db.adminAccount),
+      message: 'Profil dan kredensial Admin berhasil diperbarui dan disimpan permanen!'
+    });
   }
 
   if (pathJoined === 'auth/change-password' && req.method === 'POST') {
@@ -873,9 +1552,18 @@ export async function handleAdminRoute(segments, req, res) {
     if (newPassword.length < 6) {
       return res.status(400).json({ ok: false, error: 'Sandi Admin baru minimal 6 karakter.' });
     }
-    db.adminCredentialHash = hashSecret(newPassword);
+    const nextHash = hashSecret(newPassword);
+    db.adminCredentialHash = nextHash;
+    if (db.adminAccount) {
+      db.adminAccount = {
+        ...db.adminAccount,
+        passwordHash: nextHash,
+        isDefaultCredentials: false,
+        updatedAt: new Date().toISOString()
+      };
+    }
     appendAuditLog(db, {
-      actor: 'ADMIN_UTAMA',
+      actor: db.adminAccount?.username || 'ADMIN_UTAMA',
       actorRole: 'ADMIN',
       action: 'ADMIN_CHANGE_PASSWORD',
       targetDatabase: 'system',
@@ -1380,11 +2068,13 @@ export async function handleAdminRoute(segments, req, res) {
     });
 
     const preservedBackups = db.backups;
+    const preservedAdminAccount = db.adminAccount;
     const preservedAdminHash = db.adminCredentialHash;
     const preservedPepper = db.serverSecurityPepper;
 
     Object.assign(db, targetSnapData, {
       backups: preservedBackups,
+      adminAccount: preservedAdminAccount,
       adminCredentialHash: preservedAdminHash,
       serverSecurityPepper: preservedPepper
     });
@@ -1881,7 +2571,8 @@ export async function handleProtectedBackupDownload(req, res) {
   const adminCtx = await requireAdminOrReject(req, res, db, 'backup');
   if (!adminCtx) return;
 
-  const { serverSecurityPepper: _p, adminCredentialHash: _h, ...safeExport } = db;
+  const { serverSecurityPepper: _p, adminCredentialHash: _h, adminAccount: _acc, ...safeExport } = db;
+  safeExport.adminAccount = sanitizeAdminProfile(_acc);
   appendAuditLog(db, {
     actor: 'ADMIN_UTAMA',
     actorRole: 'ADMIN',

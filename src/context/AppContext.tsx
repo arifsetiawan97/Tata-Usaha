@@ -18,6 +18,7 @@ import {
   RoleSubTab,
   RegisteredAccessUser,
   AccessSecurityRules,
+  AdminProfile,
   UserAccountStatus,
   AuthActionResult,
   SiteSettings,
@@ -75,6 +76,7 @@ export interface AdminAuthStatusState {
   envOverrideActive: boolean;
   isClaimed: boolean;
   setupRequired: boolean;
+  isDefaultCredentials?: boolean;
 }
 
 export interface AdminDashboardState {
@@ -205,6 +207,13 @@ interface AppContextType {
   }) => Promise<AuthActionResult>;
   updateAccessRules: (updates: Partial<AccessSecurityRules>) => Promise<AuthActionResult>;
   updateAdminPassword: (newPassword: string) => Promise<AuthActionResult>;
+  updateAdminProfile: (payload: {
+    currentPassword: string;
+    newUsername: string;
+    newEmail?: string;
+    newNamaLengkap?: string;
+    newPassword?: string;
+  }) => Promise<AuthActionResult>;
   requestPasswordReset: (payload: { username: string; note?: string }) => Promise<AuthActionResult>;
   issueResetPasswordByAdmin: (userId: string, tempResetPassword: string) => Promise<AuthActionResult>;
   completePasswordResetWithNewPassword: (userId: string, newPassword: string) => Promise<AuthActionResult>;
@@ -225,11 +234,12 @@ interface AppContextType {
   customDatabaseRecords: Record<string, any[]>;
   staffSubmissions: StaffSubmissionItem[];
   isAdminAuthenticated: boolean;
+  adminProfile: AdminProfile | null;
   adminAuthStatus: AdminAuthStatusState;
   adminDashboardData: AdminDashboardState;
   refreshAdminAuthStatus: () => Promise<AdminAuthStatusState>;
   claimAdminPassword: (password: string) => Promise<AuthActionResult>;
-  loginAdminSession: (password: string) => Promise<AuthActionResult>;
+  loginAdminSession: (username: string, password: string) => Promise<AuthActionResult>;
   logoutAdminSession: () => void;
   refreshAdminDashboard: () => Promise<boolean>;
   actionFeedback: { ok: boolean; text: string } | null;
@@ -416,10 +426,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Admin Authentication & Console Dashboard State
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+  const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
   const [adminAuthStatus, setAdminAuthStatus] = useState<AdminAuthStatusState>({
     envOverrideActive: false,
-    isClaimed: false,
-    setupRequired: true
+    isClaimed: true,
+    setupRequired: false,
+    isDefaultCredentials: false
   });
   const [adminDashboardData, setAdminDashboardData] = useState<AdminDashboardState>({
     databaseMetrics: null,
@@ -458,6 +470,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const schoolConfigRef = useRef<SchoolConfig>(schoolConfig);
   schoolConfigRef.current = schoolConfig;
+  const currentUserRef = useRef<RegisteredAccessUser | null>(currentUser);
+  currentUserRef.current = currentUser;
   const accessUsersRef = useRef<RegisteredAccessUser[]>(accessUsers);
   accessUsersRef.current = accessUsers;
   const adminAuthStatusRef = useRef<AdminAuthStatusState>(adminAuthStatus);
@@ -523,71 +537,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (Array.isArray(serverData.annualReports)) setAnnualReports(serverData.annualReports);
       if (Array.isArray(serverData.archives)) setArchives(serverData.archives);
       if (Array.isArray(serverData.beritaAcaraHistory)) setBeritaAcaraHistory(serverData.beritaAcaraHistory);
-      if (serverData.tupoksiDefinitions) {
-        setTupoksiDefinitions({
-          ...OFFICIAL_TUPOKSI_DEFINITIONS,
-          ...serverData.tupoksiDefinitions
-        });
+    if (serverData.tupoksiDefinitions) {
+      const baseTupoksi: any = {
+        ...OFFICIAL_TUPOKSI_DEFINITIONS,
+        ...serverData.tupoksiDefinitions
+      };
+      const userTupoksiMap = serverData.userTupoksiDefinitions;
+      const activeUserKey = getUserIsolationKey(currentUserRef.current);
+      const userOverlay = activeUserKey && userTupoksiMap ? userTupoksiMap[activeUserKey] : null;
+      if (userOverlay && typeof userOverlay === 'object') {
+        for (const rKey of ['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'] as RoleType[]) {
+          if (userOverlay[rKey]) baseTupoksi[rKey] = userOverlay[rKey];
+        }
       }
-      if (Array.isArray(serverData.customCategories)) setCustomCategories(serverData.customCategories);
-      if (Array.isArray(serverData.libraryBooks)) setLibraryBooks(serverData.libraryBooks);
-      if (Array.isArray(serverData.libraryMembers)) setLibraryMembers(serverData.libraryMembers);
-      if (serverData.libraryMemberStats && typeof serverData.libraryMemberStats === 'object') {
+      setTupoksiDefinitions(baseTupoksi);
+    }
+    if (Array.isArray(serverData.customCategories)) setCustomCategories(serverData.customCategories);
+    if (Array.isArray(serverData.libraryBooks)) setLibraryBooks(serverData.libraryBooks);
+    if (Array.isArray(serverData.libraryMembers)) setLibraryMembers(serverData.libraryMembers);
+    {
+      const activeUserKey = getUserIsolationKey(currentUserRef.current);
+      const userStats =
+        activeUserKey && serverData.userLibraryMemberStats
+          ? serverData.userLibraryMemberStats[activeUserKey]
+          : null;
+      if (userStats && typeof userStats === 'object') {
+        setLibraryMemberStats(userStats);
+      } else if (serverData.libraryMemberStats && typeof serverData.libraryMemberStats === 'object') {
         setLibraryMemberStats(serverData.libraryMemberStats);
       }
-      if (Array.isArray(serverData.customDatabases)) {
-        setCustomDatabases(serverData.customDatabases);
-      }
-      if (serverData.customDatabaseRecords && typeof serverData.customDatabaseRecords === 'object') {
-        setCustomDatabaseRecords(serverData.customDatabaseRecords);
-      }
-      if (Array.isArray(serverData.staffSubmissions)) {
-        setStaffSubmissions(serverData.staffSubmissions);
-      }
-      if (Array.isArray(serverData.accessUsers)) {
-        const merged = mergeRegisteredUsers(
-          serverData.accessUsers,
-          [],
-          Array.isArray(serverData.deletedAccessUserIds) ? serverData.deletedAccessUserIds : []
-        );
-        setAccessUsers(merged);
-
-        // Compute approved counts if not provided
-        if (!serverData.approvedRoleCounts) {
-          const counts = { ...EMPTY_ROLE_COUNTS };
-          merged.forEach(u => {
-            if (u.status === 'APPROVED' && counts[u.role] !== undefined) {
-              counts[u.role] += 1;
-            }
-          });
-          setApprovedRoleCounts(counts);
-        }
-
-        setCurrentUserState(prevUser => {
-          if (!prevUser) return prevUser;
-          const freshMatch = merged.find(u => u.id === prevUser.id);
-          return freshMatch || prevUser;
-        });
-      }
     }
+    if (Array.isArray(serverData.customDatabases)) {
+      setCustomDatabases(serverData.customDatabases);
+    }
+    if (serverData.customDatabaseRecords && typeof serverData.customDatabaseRecords === 'object') {
+      setCustomDatabaseRecords(serverData.customDatabaseRecords);
+    }
+    if (Array.isArray(serverData.staffSubmissions)) {
+      setStaffSubmissions(serverData.staffSubmissions);
+    }
+    if (Array.isArray(serverData.accessUsers)) {
+      const merged = mergeRegisteredUsers(
+        serverData.accessUsers,
+        [],
+        Array.isArray(serverData.deletedAccessUserIds) ? serverData.deletedAccessUserIds : []
+      );
+      setAccessUsers(merged);
 
-    if (serverData.isAdminView) {
-      setAdminDashboardData({
-        databaseMetrics: serverData.databaseMetrics || null,
-        databaseRegistry: serverData.databaseRegistry || [],
-        customDatabases: serverData.customDatabases || [],
-        customDatabaseRecords: serverData.customDatabaseRecords || {},
-        databaseQuotaBytes: serverData.databaseQuotaBytes || 5 * 1024 * 1024,
-        softDeletedItems: serverData.softDeletedItems || [],
-        backups: serverData.backups || [],
-        backupSchedule: serverData.backupSchedule || { enabled: true, intervalHours: 24, lastBackupAt: '' },
-        auditLogs: serverData.auditLogs || [],
-        staffSubmissions: serverData.staffSubmissions || [],
-        migrationLogs: serverData.migrationLogs || []
+      // Compute approved counts if not provided
+      if (!serverData.approvedRoleCounts) {
+        const counts = { ...EMPTY_ROLE_COUNTS };
+        merged.forEach(u => {
+          if (u.status === 'APPROVED' && counts[u.role] !== undefined) {
+            counts[u.role] += 1;
+          }
+        });
+        setApprovedRoleCounts(counts);
+      }
+
+      setCurrentUserState(prevUser => {
+        if (!prevUser) return prevUser;
+        const freshMatch = merged.find(u => u.id === prevUser.id);
+        return freshMatch || prevUser;
       });
     }
+  }
 
-    hasHydratedFromServerRef.current = true;
+  if (serverData.isAdminView) {
+    if (serverData.adminProfile !== undefined) {
+      setAdminProfile(serverData.adminProfile || null);
+    }
+    setAdminDashboardData({
+      databaseMetrics: serverData.databaseMetrics || null,
+      databaseRegistry: serverData.databaseRegistry || [],
+      customDatabases: serverData.customDatabases || [],
+      customDatabaseRecords: serverData.customDatabaseRecords || {},
+      databaseQuotaBytes: serverData.databaseQuotaBytes || 5 * 1024 * 1024,
+      softDeletedItems: serverData.softDeletedItems || [],
+      backups: serverData.backups || [],
+      backupSchedule: serverData.backupSchedule || { enabled: true, intervalHours: 24, lastBackupAt: '' },
+      auditLogs: serverData.auditLogs || [],
+      staffSubmissions: serverData.staffSubmissions || [],
+      migrationLogs: serverData.migrationLogs || []
+    });
+  }
+
+  hasHydratedFromServerRef.current = true;
   }, []);
 
   const refreshAdminAuthStatus = useCallback(async (): Promise<AdminAuthStatusState> => {
@@ -598,7 +633,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (
           prev.envOverrideActive === next.envOverrideActive &&
           prev.isClaimed === next.isClaimed &&
-          prev.setupRequired === next.setupRequired
+          prev.setupRequired === next.setupRequired &&
+          prev.isDefaultCredentials === next.isDefaultCredentials
         ) {
           return prev;
         }
@@ -783,21 +819,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [applyServerStatePayload, showActionFeedback]
   );
 
-  const persistAdminOrStaffRecord = useCallback(
+  const persistRecordPermanent = useCallback(
     async (
       collection: string,
       operationType: 'CREATE' | 'UPDATE',
       record: any,
-      fallbackLabel: string
-    ): Promise<boolean> => {
-      if (storageService.getAdminToken()) {
+      fallbackLabel: string,
+      options?: { silent?: boolean }
+    ): Promise<{ ok: boolean; savedRecord?: any; replacedId?: string | null; message?: string }> => {
+      const hasStaffSession = Boolean(storageService.getStaffToken());
+      const hasAdminSession = Boolean(storageService.getAdminToken());
+
+      if (hasStaffSession || (hasAdminSession && currentUserRef.current)) {
+        setSyncStatus('saving');
+        const res = await storageService.staffSelfSave({
+          actionType: 'SAVE_RECORD',
+          collection,
+          payload: record
+        });
+        setSyncStatus('synced');
+        if (res.ok && res.data?.savedRecord) {
+          if (res.data.databaseMetrics) {
+            setDatabaseCapacitySummary({
+              totalUsedBytes: res.data.databaseMetrics.totalUsedBytes,
+              totalQuotaBytes: res.data.databaseMetrics.totalQuotaBytes,
+              totalPercentUsed: res.data.databaseMetrics.totalPercentUsed,
+              effectiveAlertLevel: res.data.databaseMetrics.effectiveAlertLevel
+            });
+          }
+          const msg = formatApiErrorMessage(
+            res.data.message,
+            `${fallbackLabel} tersimpan permanen untuk akun Anda.`
+          );
+          if (!options?.silent) showActionFeedback(true, msg);
+          return {
+            ok: true,
+            savedRecord: res.data.savedRecord,
+            replacedId: res.data.replacedId || null,
+            message: msg
+          };
+        }
+        const errMsg = formatApiErrorMessage(res.error, `Gagal menyimpan ${fallbackLabel}.`);
+        if (!options?.silent) showActionFeedback(false, errMsg);
+        return { ok: false, message: errMsg };
+      }
+
+      if (hasAdminSession) {
         setSyncStatus('saving');
         const res =
           operationType === 'CREATE'
             ? await storageService.adminCreateRecord(collection, record)
             : await storageService.adminUpdateRecord(collection, record.id, record);
+        setSyncStatus('synced');
         if (res.ok) {
-          setSyncStatus('synced');
           if (res.data?.databaseMetrics) {
             setDatabaseCapacitySummary({
               totalUsedBytes: res.data.databaseMetrics.totalUsedBytes,
@@ -806,41 +880,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               effectiveAlertLevel: res.data.databaseMetrics.effectiveAlertLevel
             });
           }
-          return true;
+          const savedRecord = (res.data as any)?.created || (res.data as any)?.updated || record;
+          if (!options?.silent) showActionFeedback(true, `${fallbackLabel} tersimpan permanen di Database Admin.`);
+          return { ok: true, savedRecord };
         }
-        setSyncStatus('synced');
-        showActionFeedback(false, formatApiErrorMessage(res.error, `Gagal menyimpan ${fallbackLabel}.`));
-        return false;
+        const errMsg = formatApiErrorMessage(res.error, `Gagal menyimpan ${fallbackLabel}.`);
+        if (!options?.silent) showActionFeedback(false, errMsg);
+        return { ok: false, message: errMsg };
       }
 
-      if (storageService.getStaffToken()) {
-        setSyncStatus('saving');
-        const res = await storageService.submitStaffProposal({
-          targetCollection: collection,
-          operationType,
-          payload: record,
-          note: `${operationType === 'CREATE' ? 'Tambah' : 'Perbarui'} ${fallbackLabel}`
-        });
-        setSyncStatus('synced');
-        if (res.ok) {
-          showActionFeedback(
-            true,
-            formatApiErrorMessage(res.data?.message, `${fallbackLabel} dikirim ke antrean validasi Admin Database.`)
-          );
-          if (res.data?.submission) {
-            setStaffSubmissions(prev => [res.data!.submission, ...prev]);
-          }
-          return true;
-        }
-        showActionFeedback(false, formatApiErrorMessage(res.error, `Pengajuan ${fallbackLabel} ditolak server.`));
-        return false;
-      }
-
-      showActionFeedback(false, 'Silakan masuk terlebih dahulu untuk menyimpan data.');
-      return false;
+      const authMsg = 'Silakan masuk terlebih dahulu agar perubahan tersimpan permanen.';
+      if (!options?.silent) showActionFeedback(false, authMsg);
+      return { ok: false, message: authMsg };
     },
     [showActionFeedback]
   );
+
+  const upsertIntoStateList = <T extends { id: string }>(
+    prev: T[],
+    saved: T,
+    replacedId?: string | null,
+    prependIfNew = true
+  ): T[] => {
+    const filtered = prev.filter(item => item.id !== saved.id && (!replacedId || item.id !== replacedId));
+    const existed = prev.some(item => item.id === saved.id || (replacedId && item.id === replacedId));
+    if (existed) {
+      return prev.map(item => (item.id === saved.id || (replacedId && item.id === replacedId) ? saved : item));
+    }
+    return prependIfNew ? [saved, ...filtered] : [...filtered, saved];
+  };
 
   const performAdminOnlySoftDelete = useCallback(
     async (collection: string, id: string, label: string): Promise<boolean> => {
@@ -1043,11 +1111,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       SERVICE: `Kinerja Layanan Operasional Kebersihan (Service) pada bulan ${monthName} ${year} telah menuntaskan ${completed.length} dari ${roleTasks.length > 0 ? roleTasks.length : 25} kegiatan sanitasi (${completionRate}%).`
     };
 
-    const existing = existingList.find(r => r.role === role && r.month === month && r.year === year);
+    const activeUserKey = getUserIsolationKey(currentUserRef.current);
+    const existing =
+      (activeUserKey
+        ? existingList.find(
+            r => r.role === role && r.month === month && r.year === year && r.ownerUserId === activeUserKey
+          )
+        : undefined) ||
+      existingList.find(r => r.role === role && r.month === month && r.year === year);
     const defaultKPIs = (ROLE_OPERATIONAL_SPECS[role]?.operationalKPIs || []).map(k => ({ ...k }));
+    const userSuffix = activeUserKey ? `-${activeUserKey.replace(/[^a-zA-Z0-9_-]/g, '').slice(-8)}` : '';
 
     return {
-      id: existing?.id || `m-rep-${role.toLowerCase()}-${month}-${year}`,
+      id: existing?.id || `m-rep-${role.toLowerCase()}-${month}-${year}${userSuffix}`,
       role,
       month,
       year,
@@ -1063,7 +1139,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? existing.solutions
           : ['Koordinasi berkala bersama pimpinan sekolah dan wali kelas/guru terkait.'],
       customKPIs: existing?.customKPIs && existing.customKPIs.length > 0 ? existing.customKPIs : defaultKPIs,
-      approvalStatus: existing?.approvalStatus || 'diajukan'
+      approvalStatus: existing?.approvalStatus || 'diajukan',
+      ...(currentUserRef.current?.id
+        ? { ownerUserId: currentUserRef.current.id, ownerUsername: currentUserRef.current.username }
+        : {})
     };
   };
 
@@ -1075,8 +1154,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLastAddedTaskMonthYear({ month, year });
 
     setMonthlyReports(prev => {
-      const updatedReport = buildMonthlyReportObject(allTasks, task.role, month, year, schoolConfig, prev, true);
-      const idx = prev.findIndex(r => r.role === task.role && r.month === month && r.year === year);
+      const updatedReport = buildMonthlyReportObject(allTasks, task.role, month, year, effectiveSchoolConfig, prev, true);
+      const exists = prev.some(r => r.id === updatedReport.id || (r.role === task.role && r.month === month && r.year === year));
+      persistRecordPermanent('monthlyReports', exists ? 'UPDATE' : 'CREATE', updatedReport, 'Laporan Bulanan', {
+        silent: true
+      }).then(res => {
+        if (res.ok && res.savedRecord) {
+          setMonthlyReports(latest => upsertIntoStateList(latest, res.savedRecord, res.replacedId, false));
+        }
+      });
+      const idx = prev.findIndex(r => r.id === updatedReport.id || (r.role === task.role && r.month === month && r.year === year));
       if (idx >= 0) {
         const copy = [...prev];
         copy[idx] = updatedReport;
@@ -1087,16 +1174,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // =========================================================================
-  // CRUD OPERATIONS (SINGLE-DOOR ADMIN DB OR STAFF PROPOSAL QUEUE)
+  // CRUD OPERATIONS (PERMANENT AUTO-SAVE + PER-USER ISOLATION)
   // =========================================================================
 
   const addTask = (newTask: Omit<TaskLog, 'id'>) => {
-    const created: TaskLog = { ...newTask, id: `tsk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
-    persistAdminOrStaffRecord('tasks', 'CREATE', created, 'Jurnal Tugas').then(ok => {
-      if (ok) {
+    const created: TaskLog = {
+      ...newTask,
+      id: `tsk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
+    };
+    persistRecordPermanent('tasks', 'CREATE', created, 'Jurnal Tugas').then(res => {
+      if (res.ok) {
+        const finalRec = (res.savedRecord as TaskLog) || created;
         setTasks(prev => {
-          const next = [created, ...prev];
-          setTimeout(() => autoSyncMonthlyReport(created, next), 0);
+          const next = upsertIntoStateList(prev, finalRec, res.replacedId, true);
+          setTimeout(() => autoSyncMonthlyReport(finalRec, next), 0);
           return next;
         });
       }
@@ -1106,30 +1198,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const importTasks = (newTasks: Omit<TaskLog, 'id'>[]) => {
     const withIds: TaskLog[] = newTasks.map((t, idx) => ({
       ...t,
-      id: `tsk-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`
+      id: `tsk-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
     }));
-    if (storageService.getAdminToken()) {
+    if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+      setSyncStatus('saving');
+      storageService.staffSelfSave({ actionType: 'SAVE_RECORDS_BATCH', collection: 'tasks', records: withIds }).then(res => {
+        setSyncStatus('synced');
+        if (res.ok && Array.isArray(res.data?.savedRecords)) {
+          setTasks(prev => [...res.data!.savedRecords!, ...prev]);
+          showActionFeedback(true, `${res.data.savedRecords.length} tugas berhasil diimpor & disimpan permanen.`);
+        } else {
+          showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal mengimpor data tugas.'));
+        }
+      });
+    } else if (storageService.getAdminToken()) {
       const next = [...withIds, ...tasks];
       persistDirectAdminState({ tasks: next }, 'Impor Tugas').then(ok => {
         if (ok) setTasks(next);
       });
-    } else {
-      withIds.forEach(item => {
-        persistAdminOrStaffRecord('tasks', 'CREATE', item, 'Impor Tugas');
-      });
-      setTasks(prev => [...withIds, ...prev]);
     }
   };
 
   const updateTask = (id: string, updated: Partial<TaskLog>) => {
     const target = tasks.find(t => t.id === id);
     if (!target) return;
-    const merged = { ...target, ...updated };
-    persistAdminOrStaffRecord('tasks', 'UPDATE', merged, 'Pembaruan Tugas').then(ok => {
-      if (ok) {
+    const merged: TaskLog = { ...target, ...updated };
+    persistRecordPermanent('tasks', 'UPDATE', merged, 'Pembaruan Tugas').then(res => {
+      if (res.ok) {
+        const finalRec = (res.savedRecord as TaskLog) || merged;
         setTasks(prev => {
-          const next = prev.map(t => (t.id === id ? merged : t));
-          setTimeout(() => autoSyncMonthlyReport(merged, next), 0);
+          const next = upsertIntoStateList(prev, finalRec, res.replacedId, true);
+          setTimeout(() => autoSyncMonthlyReport(finalRec, next), 0);
           return next;
         });
       }
@@ -1161,34 +1261,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addInventory = (newItem: Omit<InventoryItem, 'id'>) => {
-    const created: InventoryItem = { ...newItem, id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
-    persistAdminOrStaffRecord('inventories', 'CREATE', created, 'Inventaris').then(ok => {
-      if (ok) setInventories(prev => [created, ...prev]);
+    const created: InventoryItem = {
+      ...newItem,
+      id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
+    };
+    persistRecordPermanent('inventories', 'CREATE', created, 'Inventaris').then(res => {
+      if (res.ok) setInventories(prev => upsertIntoStateList(prev, (res.savedRecord as InventoryItem) || created, res.replacedId, true));
     });
   };
 
   const importInventories = (newItems: Omit<InventoryItem, 'id'>[]) => {
     const withIds: InventoryItem[] = newItems.map((item, idx) => ({
       ...item,
-      id: `inv-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`
+      id: `inv-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
     }));
-    if (storageService.getAdminToken()) {
+    if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+      setSyncStatus('saving');
+      storageService.staffSelfSave({ actionType: 'SAVE_RECORDS_BATCH', collection: 'inventories', records: withIds }).then(res => {
+        setSyncStatus('synced');
+        if (res.ok && Array.isArray(res.data?.savedRecords)) {
+          setInventories(prev => [...res.data!.savedRecords!, ...prev]);
+          showActionFeedback(true, `${res.data.savedRecords.length} inventaris diimpor & tersimpan permanen.`);
+        } else {
+          showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal mengimpor inventaris.'));
+        }
+      });
+    } else if (storageService.getAdminToken()) {
       const next = [...withIds, ...inventories];
       persistDirectAdminState({ inventories: next }, 'Impor Inventaris').then(ok => {
         if (ok) setInventories(next);
       });
-    } else {
-      withIds.forEach(item => persistAdminOrStaffRecord('inventories', 'CREATE', item, 'Impor Inventaris'));
-      setInventories(prev => [...withIds, ...prev]);
     }
   };
 
   const updateInventory = (id: string, updated: Partial<InventoryItem>) => {
     const target = inventories.find(i => i.id === id);
     if (!target) return;
-    const merged = { ...target, ...updated };
-    persistAdminOrStaffRecord('inventories', 'UPDATE', merged, 'Pembaruan Inventaris').then(ok => {
-      if (ok) setInventories(prev => prev.map(i => (i.id === id ? merged : i)));
+    const merged: InventoryItem = { ...target, ...updated };
+    persistRecordPermanent('inventories', 'UPDATE', merged, 'Pembaruan Inventaris').then(res => {
+      if (res.ok) setInventories(prev => upsertIntoStateList(prev, (res.savedRecord as InventoryItem) || merged, res.replacedId, true));
     });
   };
 
@@ -1216,22 +1329,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...book,
       id: `bk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       bulanPengadaan:
-        book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7))
+        book.bulanPengadaan || (book.tanggalMasuk ? book.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7)),
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
     };
-    persistAdminOrStaffRecord('libraryBooks', 'CREATE', newBook, 'Koleksi Buku').then(ok => {
-      if (ok) setLibraryBooks(prev => [newBook, ...prev]);
+    persistRecordPermanent('libraryBooks', 'CREATE', newBook, 'Koleksi Buku').then(res => {
+      if (res.ok) setLibraryBooks(prev => upsertIntoStateList(prev, (res.savedRecord as LibraryBookItem) || newBook, res.replacedId, true));
     });
   };
 
   const updateLibraryBook = (id: string, updated: Partial<LibraryBookItem>) => {
     const target = libraryBooks.find(b => b.id === id);
     if (!target) return;
-    const combined = { ...target, ...updated };
+    const combined: LibraryBookItem = { ...target, ...updated };
     if (updated.tanggalMasuk && !updated.bulanPengadaan) {
       combined.bulanPengadaan = updated.tanggalMasuk.substring(0, 7);
     }
-    persistAdminOrStaffRecord('libraryBooks', 'UPDATE', combined, 'Pembaruan Buku').then(ok => {
-      if (ok) setLibraryBooks(prev => prev.map(b => (b.id === id ? combined : b)));
+    persistRecordPermanent('libraryBooks', 'UPDATE', combined, 'Pembaruan Buku').then(res => {
+      if (res.ok) setLibraryBooks(prev => upsertIntoStateList(prev, (res.savedRecord as LibraryBookItem) || combined, res.replacedId, true));
     });
   };
 
@@ -1259,16 +1373,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...b,
       id: `bk-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
       bulanPengadaan:
-        b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7))
+        b.bulanPengadaan || (b.tanggalMasuk ? b.tanggalMasuk.substring(0, 7) : new Date().toISOString().substring(0, 7)),
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
     }));
-    if (storageService.getAdminToken()) {
+    if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+      setSyncStatus('saving');
+      storageService.staffSelfSave({ actionType: 'SAVE_RECORDS_BATCH', collection: 'libraryBooks', records: withIds }).then(res => {
+        setSyncStatus('synced');
+        if (res.ok && Array.isArray(res.data?.savedRecords)) {
+          setLibraryBooks(prev => [...res.data!.savedRecords!, ...prev]);
+          showActionFeedback(true, `${res.data.savedRecords.length} buku perpustakaan diimpor & tersimpan permanen.`);
+        } else {
+          showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal mengimpor koleksi buku.'));
+        }
+      });
+    } else if (storageService.getAdminToken()) {
       const next = [...withIds, ...libraryBooks];
       persistDirectAdminState({ libraryBooks: next }, 'Impor Buku').then(ok => {
         if (ok) setLibraryBooks(next);
       });
-    } else {
-      withIds.forEach(item => persistAdminOrStaffRecord('libraryBooks', 'CREATE', item, 'Impor Buku'));
-      setLibraryBooks(prev => [...withIds, ...prev]);
     }
   };
 
@@ -1278,11 +1401,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...member,
       id: `mem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       tanggalBergabung: member.tanggalBergabung || today,
-      tanggalTerdaftar: member.tanggalTerdaftar || member.tanggalBergabung || today
+      tanggalTerdaftar: member.tanggalTerdaftar || member.tanggalBergabung || today,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
     };
-    persistAdminOrStaffRecord('libraryMembers', 'CREATE', newMember, 'Anggota Perpustakaan').then(ok => {
-      if (!ok) return;
-      setLibraryMembers(prev => [newMember, ...prev]);
+    persistRecordPermanent('libraryMembers', 'CREATE', newMember, 'Anggota Perpustakaan').then(res => {
+      if (!res.ok) return;
+      const savedMember = (res.savedRecord as LibraryMemberItem) || newMember;
+      setLibraryMembers(prev => upsertIntoStateList(prev, savedMember, res.replacedId, true));
       const t = String(member.tipeAnggota || 'SISWA').toUpperCase();
       const isP = member.jenisKelamin === 'P';
       setLibraryMemberStats(prev => {
@@ -1309,7 +1434,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (isP) next.siswaPerempuan += 1;
           else next.siswaLaki += 1;
         }
-        if (storageService.getAdminToken()) {
+        if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+          storageService.staffSelfSave({ actionType: 'SAVE_LIBRARY_MEMBER_STATS', payload: next });
+        } else if (storageService.getAdminToken()) {
           persistDirectAdminState({ libraryMemberStats: next }, 'Statistik Anggota');
         }
         return next;
@@ -1320,9 +1447,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateLibraryMember = (id: string, updated: Partial<LibraryMemberItem>) => {
     const target = libraryMembers.find(m => m.id === id);
     if (!target) return;
-    const merged = { ...target, ...updated };
-    persistAdminOrStaffRecord('libraryMembers', 'UPDATE', merged, 'Pembaruan Anggota').then(ok => {
-      if (ok) setLibraryMembers(prev => prev.map(m => (m.id === id ? merged : m)));
+    const merged: LibraryMemberItem = { ...target, ...updated };
+    persistRecordPermanent('libraryMembers', 'UPDATE', merged, 'Pembaruan Anggota').then(res => {
+      if (res.ok) setLibraryMembers(prev => upsertIntoStateList(prev, (res.savedRecord as LibraryMemberItem) || merged, res.replacedId, true));
     });
   };
 
@@ -1351,16 +1478,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...m,
       id: `mem-imp-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
       tanggalBergabung: m.tanggalBergabung || m.tanggalTerdaftar || today,
-      tanggalTerdaftar: m.tanggalTerdaftar || m.tanggalBergabung || today
+      tanggalTerdaftar: m.tanggalTerdaftar || m.tanggalBergabung || today,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
     }));
-    if (storageService.getAdminToken()) {
+    if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+      setSyncStatus('saving');
+      storageService.staffSelfSave({ actionType: 'SAVE_RECORDS_BATCH', collection: 'libraryMembers', records: withIds }).then(res => {
+        setSyncStatus('synced');
+        if (res.ok && Array.isArray(res.data?.savedRecords)) {
+          setLibraryMembers(prev => [...res.data!.savedRecords!, ...prev]);
+          showActionFeedback(true, `${res.data.savedRecords.length} anggota diimpor & tersimpan permanen.`);
+        } else {
+          showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal mengimpor data anggota.'));
+        }
+      });
+    } else if (storageService.getAdminToken()) {
       const next = [...withIds, ...libraryMembers];
       persistDirectAdminState({ libraryMembers: next }, 'Impor Anggota').then(ok => {
         if (ok) setLibraryMembers(next);
       });
-    } else {
-      withIds.forEach(item => persistAdminOrStaffRecord('libraryMembers', 'CREATE', item, 'Impor Anggota'));
-      setLibraryMembers(prev => [...withIds, ...prev]);
     }
   };
 
@@ -1387,7 +1523,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isManualOverride: stats.isManualOverride !== undefined ? stats.isManualOverride : true,
         lastUpdated: new Date().toISOString().split('T')[0]
       };
-      if (storageService.getAdminToken()) {
+      if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+        setSyncStatus('saving');
+        storageService.staffSelfSave({ actionType: 'SAVE_LIBRARY_MEMBER_STATS', payload: next }).then(res => {
+          setSyncStatus('synced');
+          if (res.ok && res.data?.stats) {
+            setLibraryMemberStats(res.data.stats);
+            showActionFeedback(true, formatApiErrorMessage(res.data.message, 'Rekap jumlah anggota tersimpan permanen.'));
+          } else if (!res.ok) {
+            showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal menyimpan rekap jumlah anggota.'));
+          }
+        });
+      } else if (storageService.getAdminToken()) {
         persistDirectAdminState({ libraryMemberStats: next }, 'Rekap Jumlah Anggota');
       }
       return next;
@@ -1395,53 +1542,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const saveMonthlyReport = (report: MonthlyReport) => {
-    const exists = monthlyReports.some(r => r.id === report.id || (r.role === report.role && r.month === report.month && r.year === report.year));
-    persistAdminOrStaffRecord('monthlyReports', exists ? 'UPDATE' : 'CREATE', report, 'Laporan Bulanan').then(ok => {
-      if (!ok) return;
-      setMonthlyReports(prev => {
-        const idx = prev.findIndex(r => r.id === report.id || (r.role === report.role && r.month === report.month && r.year === report.year));
-        if (idx >= 0) {
-          const copy = [...prev];
-          copy[idx] = report;
-          return copy;
-        }
-        return [...prev, report];
-      });
+    const payload: MonthlyReport = {
+      ...report,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
+    };
+    const exists = monthlyReports.some(r => r.id === payload.id || (r.role === payload.role && r.month === payload.month && r.year === payload.year));
+    persistRecordPermanent('monthlyReports', exists ? 'UPDATE' : 'CREATE', payload, 'Laporan Bulanan').then(res => {
+      if (!res.ok) return;
+      const saved = (res.savedRecord as MonthlyReport) || payload;
+      setMonthlyReports(prev => upsertIntoStateList(prev, saved, res.replacedId, false));
     });
   };
 
   const saveAnnualReport = (report: AnnualReport) => {
-    const exists = annualReports.some(r => r.id === report.id || (r.role === report.role && r.year === report.year));
-    persistAdminOrStaffRecord('annualReports', exists ? 'UPDATE' : 'CREATE', report, 'Laporan Tahunan').then(ok => {
-      if (!ok) return;
-      setAnnualReports(prev => {
-        const idx = prev.findIndex(r => r.id === report.id || (r.role === report.role && r.year === report.year));
-        if (idx >= 0) {
-          const copy = [...prev];
-          copy[idx] = report;
-          return copy;
-        }
-        return [...prev, report];
-      });
+    const payload: AnnualReport = {
+      ...report,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
+    };
+    const exists = annualReports.some(r => r.id === payload.id || (r.role === payload.role && r.year === payload.year));
+    persistRecordPermanent('annualReports', exists ? 'UPDATE' : 'CREATE', payload, 'Laporan Tahunan').then(res => {
+      if (!res.ok) return;
+      const saved = (res.savedRecord as AnnualReport) || payload;
+      setAnnualReports(prev => upsertIntoStateList(prev, saved, res.replacedId, false));
     });
   };
 
   const addArchive = (doc: Omit<ArchiveDocument, 'id'>) => {
     const newDoc: ArchiveDocument = {
       ...doc,
-      id: `arch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+      id: `arch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
     };
-    persistAdminOrStaffRecord('archives', 'CREATE', newDoc, 'Arsip Dokumen').then(ok => {
-      if (ok) setArchives(prev => [newDoc, ...prev]);
+    persistRecordPermanent('archives', 'CREATE', newDoc, 'Arsip Dokumen').then(res => {
+      if (res.ok) setArchives(prev => upsertIntoStateList(prev, (res.savedRecord as ArchiveDocument) || newDoc, res.replacedId, true));
     });
   };
 
   const updateArchive = (id: string, updated: Partial<ArchiveDocument>) => {
     const target = archives.find(a => a.id === id);
     if (!target) return;
-    const merged = { ...target, ...updated };
-    persistAdminOrStaffRecord('archives', 'UPDATE', merged, 'Pembaruan Arsip').then(ok => {
-      if (ok) setArchives(prev => prev.map(a => (a.id === id ? merged : a)));
+    const merged: ArchiveDocument = { ...target, ...updated };
+    persistRecordPermanent('archives', 'UPDATE', merged, 'Pembaruan Arsip').then(res => {
+      if (res.ok) setArchives(prev => upsertIntoStateList(prev, (res.savedRecord as ArchiveDocument) || merged, res.replacedId, true));
     });
   };
 
@@ -1496,11 +1638,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         hasPhotos: roleTasksWithPhotos.length > 0,
         photoCount: roleTasksWithPhotos.length
       },
-      reportData: data
+      reportData: data,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
     };
 
-    persistAdminOrStaffRecord('archives', 'CREATE', newDoc, 'Arsip Laporan').then(ok => {
-      if (ok) setArchives(prev => [newDoc, ...prev]);
+    persistRecordPermanent('archives', 'CREATE', newDoc, 'Arsip Laporan').then(res => {
+      if (res.ok) setArchives(prev => upsertIntoStateList(prev, (res.savedRecord as ArchiveDocument) || newDoc, res.replacedId, true));
     });
     return newDoc;
   };
@@ -1509,12 +1652,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveBeritaAcaraRecord = async (
     record: SavedBeritaAcaraRecord
   ): Promise<{ ok: boolean; message?: string }> => {
-    const ok = await persistAdminOrStaffRecord('beritaAcaraHistory', 'CREATE', record, 'Berita Acara');
-    if (ok) {
-      setBeritaAcaraHistory(prev => [record, ...prev.filter(r => r.id !== record.id)]);
-      return { ok: true, message: `"${record.templateTitle}" diproses ke Database Admin.` };
+    const payload: SavedBeritaAcaraRecord = {
+      ...record,
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
+    };
+    const exists = beritaAcaraHistory.some(r => r.id === payload.id);
+    const res = await persistRecordPermanent('beritaAcaraHistory', exists ? 'UPDATE' : 'CREATE', payload, 'Berita Acara');
+    if (res.ok) {
+      const saved = (res.savedRecord as SavedBeritaAcaraRecord) || payload;
+      setBeritaAcaraHistory(prev => upsertIntoStateList(prev, saved, res.replacedId, true));
+      return {
+        ok: true,
+        message: res.message || `"${saved.templateTitle}" tersimpan permanen di Database untuk akun Anda.`
+      };
     }
-    return { ok: false, message: 'Gagal memproses penyimpanan Berita Acara.' };
+    return { ok: false, message: res.message || 'Gagal memproses penyimpanan Berita Acara.' };
   };
 
   const deleteBeritaAcaraRecord = async (id: string): Promise<{ ok: boolean; message?: string }> => {
@@ -1526,17 +1678,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { ok: false, message: 'Penghapusan hanya dapat dilakukan melalui otorisasi Admin Database.' };
   };
 
-  // Multi-Tenant Letterhead & Signature
-  const updateSchoolConfig = (config: Partial<SchoolConfig>) => {
-    setSchoolConfig(prev => {
-      const next = { ...prev, ...config };
-      if (storageService.getAdminToken()) {
-        persistDirectAdminState({ schoolConfig: next }, 'Konfigurasi Sekolah');
-      }
-      return next;
-    });
-  };
-
+  // Multi-Tenant Letterhead & Signature (Permanent Auto-Save & Isolated Per User)
   const saveUserLetterhead = (kop: Partial<UserLetterheadConfig> & { logoAplikasiUrl?: string }) => {
     const userKey = getUserIsolationKey(currentUser);
     if (!userKey) {
@@ -1568,47 +1710,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setSchoolConfig(nextConfig);
 
-    if (storageService.getAdminToken()) {
-      persistDirectAdminState({ schoolConfig: nextConfig }, 'Kop Surat Pengguna');
-    } else if (storageService.getStaffToken()) {
+    if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+      setSyncStatus('saving');
       storageService
-        .submitStaffProposal({
-          targetCollection: 'schoolConfigLetterhead',
-          operationType: 'UPDATE',
-          payload: { isolationKey: userKey, data: nextEntry },
-          note: `Pengajuan pembaruan kop surat pribadi @${currentUser?.username}`
+        .staffSelfSave({
+          actionType: 'SAVE_LETTERHEAD',
+          payload: nextEntry
         })
         .then(res => {
-          showActionFeedback(
-            res.ok,
-            formatApiErrorMessage(res.data?.message ?? res.error, 'Kop surat diajukan ke Admin Database.')
-          );
+          setSyncStatus('synced');
+          if (res.ok && res.data?.entry) {
+            const keyFromServer = res.data.isolationKey || userKey;
+            setSchoolConfig(prev => ({
+              ...prev,
+              userLetterheads: { ...(prev.userLetterheads || {}), [keyFromServer]: res.data!.entry }
+            }));
+            showActionFeedback(
+              true,
+              formatApiErrorMessage(res.data.message, `Kop surat akun @${currentUser?.username} tersimpan permanen.`)
+            );
+          } else {
+            showActionFeedback(
+              false,
+              formatApiErrorMessage(res.error, 'Gagal menyimpan kop surat secara permanen ke server.')
+            );
+          }
         });
+    } else if (storageService.getAdminToken()) {
+      persistDirectAdminState({ schoolConfig: nextConfig }, 'Kop Surat Pengguna');
+    } else {
+      showActionFeedback(false, 'Sesi masuk tidak ditemukan. Silakan masuk ulang agar perubahan tersimpan permanen.');
     }
   };
 
   const resetUserLetterhead = () => {
     const userKey = getUserIsolationKey(currentUser);
     if (!userKey) return;
-    if (!storageService.getAdminToken()) {
-      showActionFeedback(false, 'Penghapusan kop surat tersimpan hanya diizinkan melalui Database Admin.');
+    if (!storageService.getStaffToken() && !storageService.getAdminToken()) {
+      showActionFeedback(false, 'Masuk terlebih dahulu untuk mengatur ulang kop surat pribadi Anda.');
       return;
     }
     const now = new Date().toISOString();
+    const fallbackEntry: UserLetterheadConfig = {
+      userId: currentUser?.id,
+      username: currentUser?.username,
+      deleted: true,
+      updatedAt: now
+    };
     const nextConfig: SchoolConfig = {
       ...schoolConfig,
       userLetterheads: {
         ...(schoolConfig.userLetterheads || {}),
-        [userKey]: {
-          userId: currentUser?.id,
-          username: currentUser?.username,
-          deleted: true,
-          updatedAt: now
-        }
+        [userKey]: fallbackEntry
       }
     };
     setSchoolConfig(nextConfig);
-    persistDirectAdminState({ schoolConfig: nextConfig }, 'Reset Kop Surat Pengguna');
+
+    if (storageService.getStaffToken() || currentUser) {
+      setSyncStatus('saving');
+      storageService.staffSelfSave({ actionType: 'RESET_LETTERHEAD' }).then(res => {
+        setSyncStatus('synced');
+        if (res.ok) {
+          showActionFeedback(true, formatApiErrorMessage(res.data?.message, 'Kop surat dikembalikan ke Template Bawaan Sistem.'));
+        } else {
+          showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal mengatur ulang kop surat pribadi.'));
+        }
+      });
+    } else if (storageService.getAdminToken()) {
+      persistDirectAdminState({ schoolConfig: nextConfig }, 'Reset Kop Surat Pengguna');
+    }
   };
 
   const saveUserSignature = (payload: {
@@ -1662,48 +1832,111 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setSchoolConfig(nextConfig);
 
-    if (storageService.getAdminToken()) {
-      persistDirectAdminState({ schoolConfig: nextConfig }, 'Lembar Pengesahan Pengguna');
-    } else if (storageService.getStaffToken()) {
+    if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+      setSyncStatus('saving');
       storageService
-        .submitStaffProposal({
-          targetCollection: 'schoolConfigSignature',
-          operationType: 'UPDATE',
-          payload: { isolationKey: userKey, data: nextEntry },
-          note: `Pengajuan pembaruan tanda tangan/pengesahan @${currentUser?.username}`
+        .staffSelfSave({
+          actionType: 'SAVE_SIGNATURE',
+          payload: nextEntry
         })
         .then(res => {
-          showActionFeedback(
-            res.ok,
-            formatApiErrorMessage(res.data?.message ?? res.error, 'Pengesahan diajukan ke Admin Database.')
-          );
+          setSyncStatus('synced');
+          if (res.ok && res.data?.entry) {
+            const keyFromServer = res.data.isolationKey || userKey;
+            setSchoolConfig(prev => ({
+              ...prev,
+              userSignatures: { ...(prev.userSignatures || {}), [keyFromServer]: res.data!.entry }
+            }));
+            showActionFeedback(
+              true,
+              formatApiErrorMessage(res.data.message, `Lembar pengesahan akun @${currentUser?.username} tersimpan permanen.`)
+            );
+          } else {
+            showActionFeedback(
+              false,
+              formatApiErrorMessage(res.error, 'Gagal menyimpan lembar pengesahan secara permanen.')
+            );
+          }
         });
+    } else if (storageService.getAdminToken()) {
+      persistDirectAdminState({ schoolConfig: nextConfig }, 'Lembar Pengesahan Pengguna');
+    } else {
+      showActionFeedback(false, 'Sesi masuk tidak ditemukan. Silakan masuk ulang agar perubahan tersimpan permanen.');
     }
   };
 
   const resetUserSignature = () => {
     const userKey = getUserIsolationKey(currentUser);
     if (!userKey) return;
-    if (!storageService.getAdminToken()) {
-      showActionFeedback(false, 'Penghapusan lembar pengesahan hanya diizinkan oleh Admin Database.');
+    if (!storageService.getStaffToken() && !storageService.getAdminToken()) {
+      showActionFeedback(false, 'Masuk terlebih dahulu untuk mengatur ulang lembar pengesahan Anda.');
       return;
     }
     const now = new Date().toISOString();
+    const fallbackEntry: UserSignatureConfig = {
+      role: currentUser?.role || currentRole || 'TU',
+      userId: currentUser?.id,
+      username: currentUser?.username,
+      deleted: true,
+      updatedAt: now
+    };
     const nextConfig: SchoolConfig = {
       ...schoolConfig,
       userSignatures: {
         ...(schoolConfig.userSignatures || {}),
-        [userKey]: {
-          role: currentUser?.role || currentRole || 'TU',
-          userId: currentUser?.id,
-          username: currentUser?.username,
-          deleted: true,
-          updatedAt: now
-        }
+        [userKey]: fallbackEntry
       }
     };
     setSchoolConfig(nextConfig);
-    persistDirectAdminState({ schoolConfig: nextConfig }, 'Reset Pengesahan Pengguna');
+
+    if (storageService.getStaffToken() || currentUser) {
+      setSyncStatus('saving');
+      storageService.staffSelfSave({ actionType: 'RESET_SIGNATURE' }).then(res => {
+        setSyncStatus('synced');
+        if (res.ok) {
+          showActionFeedback(true, formatApiErrorMessage(res.data?.message, 'Lembar pengesahan dikembalikan ke Template Bawaan Sistem.'));
+        } else {
+          showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal mengatur ulang lembar pengesahan.'));
+        }
+      });
+    } else if (storageService.getAdminToken()) {
+      persistDirectAdminState({ schoolConfig: nextConfig }, 'Reset Pengesahan Pengguna');
+    }
+  };
+
+  const updateSchoolConfig = (config: Partial<SchoolConfig>) => {
+    if (currentUser) {
+      // Route non-global edits through the logged-in user's isolated stores so other users are unaffected
+      const hasSigFields =
+        config.stempelEnabled !== undefined ||
+        config.stempelTextLine1 !== undefined ||
+        config.stempelTextLine2 !== undefined ||
+        config.customStempelUrl !== undefined ||
+        config.kepalaSekolah !== undefined ||
+        config.wakilKepalaSekolah !== undefined;
+      if (hasSigFields) {
+        saveUserSignature({
+          ...(config.kepalaSekolah ? { kepalaSekolah: config.kepalaSekolah } : {}),
+          ...(config.wakilKepalaSekolah ? { wakilKepalaSekolah: config.wakilKepalaSekolah } : {}),
+          ...(config.stempelEnabled !== undefined ? { stempelEnabled: config.stempelEnabled } : {}),
+          ...(config.stempelTextLine1 !== undefined ? { stempelTextLine1: config.stempelTextLine1 } : {}),
+          ...(config.stempelTextLine2 !== undefined ? { stempelTextLine2: config.stempelTextLine2 } : {}),
+          ...(config.customStempelUrl !== undefined ? { customStempelUrl: config.customStempelUrl } : {})
+        });
+      }
+      if (config.logoAplikasiUrl !== undefined) {
+        saveUserLetterhead({ logoAplikasiUrl: config.logoAplikasiUrl });
+      }
+      return;
+    }
+
+    setSchoolConfig(prev => {
+      const next = { ...prev, ...config };
+      if (storageService.getAdminToken()) {
+        persistDirectAdminState({ schoolConfig: next }, 'Konfigurasi Sekolah');
+      }
+      return next;
+    });
   };
 
   // Custom Categories & Tupoksi
@@ -1725,10 +1958,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       slug: finalSlug,
       classification: cat.classification,
       description: cat.description?.trim(),
-      createdAt: new Date().toISOString().split('T')[0]
+      createdAt: new Date().toISOString().split('T')[0],
+      ...(currentUser?.id ? { ownerUserId: currentUser.id, ownerUsername: currentUser.username } : {})
     };
-    persistAdminOrStaffRecord('customCategories', 'CREATE', newCategory, 'Kategori Tugas').then(ok => {
-      if (ok) setCustomCategories(prev => [...prev, newCategory]);
+    persistRecordPermanent('customCategories', 'CREATE', newCategory, 'Kategori Tugas').then(res => {
+      if (res.ok) setCustomCategories(prev => upsertIntoStateList(prev, (res.savedRecord as CustomCategory) || newCategory, res.replacedId, false));
     });
     return newCategory;
   };
@@ -1736,9 +1970,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateCustomCategory = (id: string, updated: Partial<CustomCategory>) => {
     const target = customCategories.find(c => c.id === id);
     if (!target) return;
-    const merged = { ...target, ...updated };
-    persistAdminOrStaffRecord('customCategories', 'UPDATE', merged, 'Pembaruan Kategori').then(ok => {
-      if (ok) setCustomCategories(prev => prev.map(c => (c.id === id ? merged : c)));
+    const merged: CustomCategory = { ...target, ...updated };
+    persistRecordPermanent('customCategories', 'UPDATE', merged, 'Pembaruan Kategori').then(res => {
+      if (res.ok) setCustomCategories(prev => upsertIntoStateList(prev, (res.savedRecord as CustomCategory) || merged, res.replacedId, false));
     });
   };
 
@@ -1751,47 +1985,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', text: string) => {
     if (!text.trim()) return;
     const currentRoleObj = tupoksiDefinitions[role] || { tupoksiList: [], tugasTambahanList: [] };
+    const updatedRoleObj = {
+      ...currentRoleObj,
+      tupoksiList: type === 'pokok' ? [...currentRoleObj.tupoksiList, text.trim()] : currentRoleObj.tupoksiList,
+      tugasTambahanList:
+        type === 'tambahan' ? [...currentRoleObj.tugasTambahanList, text.trim()] : currentRoleObj.tugasTambahanList
+    };
     const next: TupoksiDefinitionsMap = {
       ...tupoksiDefinitions,
-      [role]: {
-        ...currentRoleObj,
-        tupoksiList: type === 'pokok' ? [...currentRoleObj.tupoksiList, text.trim()] : currentRoleObj.tupoksiList,
-        tugasTambahanList:
-          type === 'tambahan' ? [...currentRoleObj.tugasTambahanList, text.trim()] : currentRoleObj.tugasTambahanList
-      }
+      [role]: updatedRoleObj
     };
     setTupoksiDefinitions(next);
-    if (storageService.getAdminToken()) {
+    if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+      setSyncStatus('saving');
+      storageService
+        .staffSelfSave({
+          actionType: 'SAVE_TUPOKSI',
+          payload: { role, ...updatedRoleObj }
+        })
+        .then(res => {
+          setSyncStatus('synced');
+          if (res.ok) showActionFeedback(true, 'Butir Tupoksi baru tersimpan permanen untuk akun Anda.');
+          else showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal menyimpan Tupoksi.'));
+        });
+    } else if (storageService.getAdminToken()) {
       persistDirectAdminState({ tupoksiDefinitions: next }, 'Daftar Tupoksi');
-    } else if (storageService.getStaffToken()) {
-      storageService.submitStaffProposal({
-        targetCollection: 'tupoksiDefinitions',
-        operationType: 'UPDATE',
-        payload: next,
-        note: `Ajuan tambah item Tupoksi (${role})`
-      });
     }
   };
 
   const updateTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', index: number, newText: string) => {
     if (!newText.trim()) return;
     const currentRoleObj = tupoksiDefinitions[role] || { tupoksiList: [], tugasTambahanList: [] };
+    const updatedRoleObj = {
+      ...currentRoleObj,
+      tupoksiList:
+        type === 'pokok'
+          ? currentRoleObj.tupoksiList.map((item, i) => (i === index ? newText.trim() : item))
+          : currentRoleObj.tupoksiList,
+      tugasTambahanList:
+        type === 'tambahan'
+          ? currentRoleObj.tugasTambahanList.map((item, i) => (i === index ? newText.trim() : item))
+          : currentRoleObj.tugasTambahanList
+    };
     const next: TupoksiDefinitionsMap = {
       ...tupoksiDefinitions,
-      [role]: {
-        ...currentRoleObj,
-        tupoksiList:
-          type === 'pokok'
-            ? currentRoleObj.tupoksiList.map((item, i) => (i === index ? newText.trim() : item))
-            : currentRoleObj.tupoksiList,
-        tugasTambahanList:
-          type === 'tambahan'
-            ? currentRoleObj.tugasTambahanList.map((item, i) => (i === index ? newText.trim() : item))
-            : currentRoleObj.tugasTambahanList
-      }
+      [role]: updatedRoleObj
     };
     setTupoksiDefinitions(next);
-    if (storageService.getAdminToken()) {
+    if (storageService.getStaffToken() || (storageService.getAdminToken() && currentUser)) {
+      setSyncStatus('saving');
+      storageService
+        .staffSelfSave({
+          actionType: 'SAVE_TUPOKSI',
+          payload: { role, ...updatedRoleObj }
+        })
+        .then(res => {
+          setSyncStatus('synced');
+          if (res.ok) showActionFeedback(true, 'Pembaruan butir Tupoksi tersimpan permanen untuk akun Anda.');
+          else showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal memperbarui Tupoksi.'));
+        });
+    } else if (storageService.getAdminToken()) {
       persistDirectAdminState({ tupoksiDefinitions: next }, 'Pembaruan Tupoksi');
     }
   };
@@ -1855,7 +2108,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     year: number,
     forceFresh: boolean = false
   ): AnnualReport => {
-    const existing = annualReports.find(r => r.role === role && r.year === year);
+    const activeUserKey = getUserIsolationKey(currentUserRef.current);
+    const existing =
+      (activeUserKey
+        ? annualReports.find(r => r.role === role && r.year === year && r.ownerUserId === activeUserKey)
+        : undefined) || annualReports.find(r => r.role === role && r.year === year);
     if (existing && !forceFresh) return existing;
 
     const formattedManualDate = `${effectiveSchoolConfig.kabupatenKota || 'Teluk'}, 31 Desember ${year}`;
@@ -1869,9 +2126,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       libraryMemberStats,
       schoolConfig: effectiveSchoolConfig
     });
+    const userSuffix = activeUserKey ? `-${activeUserKey.replace(/[^a-zA-Z0-9_-]/g, '').slice(-8)}` : '';
 
     return {
-      id: existing?.id || `ann-rep-${role.toLowerCase()}-${year}`,
+      id: existing?.id || `ann-rep-${role.toLowerCase()}-${year}${userSuffix}`,
       role,
       year,
       manualDocDate: existing?.manualDocDate || formattedManualDate,
@@ -1881,7 +2139,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       solutions: bundle.solutions,
       strategicRecommendations: bundle.strategicRecommendations,
       approvalStatus: existing?.approvalStatus || 'diajukan',
-      ...(existing?.approvedByKepsekDate ? { approvedByKepsekDate: existing.approvedByKepsekDate } : {})
+      ...(existing?.approvedByKepsekDate ? { approvedByKepsekDate: existing.approvedByKepsekDate } : {}),
+      ...(currentUserRef.current?.id
+        ? { ownerUserId: currentUserRef.current.id, ownerUsername: currentUserRef.current.username }
+        : {})
     };
   };
 
@@ -1991,7 +2252,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     expectedRole?: RoleType;
   }): Promise<AuthActionResult> => {
     const res = await storageService.authLogin(payload);
-    if (!res.ok || !res.data?.user) {
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: formatApiErrorMessage(res.error ?? res.data?.message, 'Gagal masuk ke sistem.')
+      };
+    }
+    if (res.data?.isAdmin) {
+      setIsAdminAuthenticated(true);
+      if (res.data.adminProfile) {
+        setAdminProfile(res.data.adminProfile);
+      }
+      setSessionExpiredNotice(null);
+      await refreshAdminDashboard();
+      return {
+        ok: true,
+        isAdmin: true,
+        adminProfile: res.data.adminProfile || null,
+        message: formatApiErrorMessage(res.data.message, 'Autentikasi Admin berhasil.')
+      };
+    }
+    if (!res.data?.user) {
       return {
         ok: false,
         message: formatApiErrorMessage(res.error ?? res.data?.message, 'Gagal masuk ke sistem.')
@@ -2021,6 +2302,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentRole(null);
     setActiveNavTab('dashboard');
     setSessionExpiredNotice(null);
+    // Clear previous user's scoped workspace data cleanly before re-hydrating
+    setTasks(initialTasks);
+    setInventories(initialInventories);
+    setMonthlyReports(initialMonthlyReports);
+    setAnnualReports(initialAnnualReports);
+    setArchives(initialArchives);
+    setBeritaAcaraHistory([]);
+    setSchoolConfig(initialSchoolConfig);
+    setTupoksiDefinitions(JSON.parse(JSON.stringify(OFFICIAL_TUPOKSI_DEFINITIONS)));
+    setCustomCategories(initialCustomCategories);
+    setLibraryBooks(initialLibraryBooks);
+    setLibraryMembers(initialLibraryMembers);
+    setLibraryMemberStats(initialLibraryMemberStats);
     fetchLatestState();
   };
 
@@ -2114,19 +2408,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { ok: true, message: formatApiErrorMessage(res.data?.message, 'Sandi Admin Utama aktif!') };
   };
 
-  const loginAdminSession = async (password: string): Promise<AuthActionResult> => {
-    const res = await storageService.adminAuthLogin(password);
+  const loginAdminSession = async (username: string, password: string): Promise<AuthActionResult> => {
+    const res = await storageService.adminAuthLogin(username, password);
     if (!res.ok) {
       if (res.data?.setupRequired) {
         setAdminAuthStatus(prev => ({ ...prev, setupRequired: true, isClaimed: false }));
       }
-      return { ok: false, message: formatApiErrorMessage(res.error, 'Sandi Admin tidak sesuai!') };
+      return { ok: false, message: formatApiErrorMessage(res.error, 'Username atau sandi Admin tidak sesuai!') };
     }
     setIsAdminAuthenticated(true);
+    if (res.data?.adminProfile) {
+      setAdminProfile(res.data.adminProfile);
+    }
     setSessionExpiredNotice(null);
     await refreshAdminDashboard();
     return {
       ok: true,
+      adminProfile: res.data?.adminProfile || null,
       message: formatApiErrorMessage(res.data?.message, 'Berhasil masuk ke Database Admin Satu Pintu.')
     };
   };
@@ -2134,6 +2432,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logoutAdminSession = () => {
     storageService.setAdminToken(null);
     setIsAdminAuthenticated(false);
+    setAdminProfile(null);
     fetchLatestState();
   };
 
@@ -2205,12 +2504,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const res = await storageService.adminAuthChangePassword(newPassword);
     if (res.ok) {
       await refreshAdminDashboard();
+      await refreshAdminAuthStatus();
       return {
         ok: true,
         message: formatApiErrorMessage(res.data?.message, 'Sandi Admin berhasil diperbarui.')
       };
     }
     return { ok: false, message: formatApiErrorMessage(res.error, 'Gagal memperbarui sandi Admin.') };
+  };
+
+  const updateAdminProfile = async (payload: {
+    currentPassword: string;
+    newUsername: string;
+    newEmail?: string;
+    newNamaLengkap?: string;
+    newPassword?: string;
+  }): Promise<AuthActionResult> => {
+    const res = await storageService.adminAuthUpdateProfile(payload);
+    if (res.ok) {
+      if (res.data?.adminProfile) {
+        setAdminProfile(res.data.adminProfile);
+      }
+      await refreshAdminDashboard();
+      await refreshAdminAuthStatus();
+      return {
+        ok: true,
+        adminProfile: res.data?.adminProfile || null,
+        message: formatApiErrorMessage(
+          res.data?.message,
+          'Profil dan kredensial Admin berhasil diperbarui.'
+        )
+      };
+    }
+    return {
+      ok: false,
+      message: formatApiErrorMessage(res.error, 'Gagal memperbarui profil dan kredensial Admin.')
+    };
   };
 
   const issueResetPasswordByAdmin = async (
@@ -2321,6 +2650,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createAccessUserByAdmin,
         updateAccessRules,
         updateAdminPassword,
+        updateAdminProfile,
         requestPasswordReset,
         issueResetPasswordByAdmin,
         completePasswordResetWithNewPassword,
@@ -2341,6 +2671,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         customDatabaseRecords,
         staffSubmissions,
         isAdminAuthenticated,
+        adminProfile,
         adminAuthStatus,
         adminDashboardData,
         refreshAdminAuthStatus,

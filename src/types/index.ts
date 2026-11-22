@@ -47,6 +47,10 @@ export interface LibraryBookItem {
   kondisi: 'Baik' | 'Rusak Ringan' | 'Rusak Berat' | 'baik' | 'rusak_ringan' | 'rusak_berat';
   lokasiRak: string;
   keterangan?: string;
+  ownerUserId?: string;
+  ownerUsername?: string;
+  forkedFromId?: string;
+  updatedAt?: string;
 }
 
 export interface LibraryMemberStats {
@@ -75,6 +79,10 @@ export interface LibraryMemberItem {
   status: 'aktif' | 'nonaktif' | 'tamat' | 'alumni' | string;
   telepon?: string;
   keterangan?: string;
+  ownerUserId?: string;
+  ownerUsername?: string;
+  forkedFromId?: string;
+  updatedAt?: string;
 }
 
 export type TaskCategoryPenjaga = 
@@ -164,6 +172,10 @@ export interface CustomCategory {
   classification: 'pokok' | 'tambahan';
   description?: string;
   createdAt: string;
+  ownerUserId?: string;
+  ownerUsername?: string;
+  forkedFromId?: string;
+  updatedAt?: string;
 }
 
 export interface TaskLog {
@@ -182,6 +194,10 @@ export interface TaskLog {
   photoUrl?: string;
   petugas: string;
   notes?: string;
+  ownerUserId?: string;
+  ownerUsername?: string;
+  forkedFromId?: string;
+  updatedAt?: string;
 }
 
 export interface TupoksiDefinitionItem {
@@ -204,6 +220,10 @@ export interface InventoryItem {
   lokasiPenyimpanan: string;
   tahunPengadaan: number;
   keterangan: string;
+  ownerUserId?: string;
+  ownerUsername?: string;
+  forkedFromId?: string;
+  updatedAt?: string;
 }
 
 export interface MonthlyReport {
@@ -219,6 +239,10 @@ export interface MonthlyReport {
   solutions: string[];
   customKPIs?: OperationalKPI[];
   approvalStatus: 'draft' | 'diajukan' | 'disetujui_kasubag' | 'disahkan_kepsek';
+  ownerUserId?: string;
+  ownerUsername?: string;
+  forkedFromId?: string;
+  updatedAt?: string;
 }
 
 export interface AnnualReport {
@@ -234,6 +258,10 @@ export interface AnnualReport {
   solutions?: string[];
   approvalStatus: 'draft' | 'diajukan' | 'disetujui_kasubag' | 'disahkan_kepsek';
   approvedByKepsekDate?: string;
+  ownerUserId?: string;
+  ownerUsername?: string;
+  forkedFromId?: string;
+  updatedAt?: string;
 }
 
 export interface OperationalKPI {
@@ -277,6 +305,7 @@ export interface UserLetterheadConfig {
   logoSekolahUrl?: string;
   logoKopKiri?: string;
   logoKopKanan?: string;
+  logoAplikasiUrl?: string;
   kopBorderStyle?: KopBorderStyle;
   updatedAt: string;
   deleted?: boolean;
@@ -353,6 +382,10 @@ export interface ArchiveDocument {
     photoCount: number;
   };
   reportData: any; // Complete snapshot for inspection preview/print
+  ownerUserId?: string;
+  ownerUsername?: string;
+  forkedFromId?: string;
+  updatedAt?: string;
 }
 
 export type BeritaAcaraTemplateId =
@@ -432,6 +465,9 @@ export interface SavedBeritaAcaraRecord {
   formValues: Record<string, any>;
   createdAt: string;
   updatedAt: string;
+  ownerUserId?: string;
+  ownerUsername?: string;
+  forkedFromId?: string;
 }
 
 export type UserAccountStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -478,6 +514,8 @@ export interface AuthActionResult {
   message: string;
   user?: RegisteredAccessUser;
   requiresPasswordChange?: boolean;
+  isAdmin?: boolean;
+  adminProfile?: AdminProfile | null;
 }
 
 export interface SiteSettings {
@@ -610,3 +648,13 @@ export interface MigrationReport {
   executedBy: string;
 }
 
+export interface AdminProfile {
+  id: string;
+  username: string;
+  email?: string;
+  namaLengkap: string;
+  role: 'ADMIN';
+  status: 'ACTIVE';
+  isDefaultCredentials?: boolean;
+  updatedAt?: string;
+}

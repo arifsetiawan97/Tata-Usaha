@@ -344,9 +344,8 @@ export const BeritaAcaraManager: React.FC = () => {
       const res = await saveBeritaAcaraRecord(record);
       if (res.ok) {
         showToast(
-          isAdminAuthenticated
-            ? `"${activeTemplate.shortTitle}" tersimpan ke Database Admin.`
-            : `"${activeTemplate.shortTitle}" dikirim ke antrean Database Admin untuk persetujuan.`
+          res.message ||
+            `"${activeTemplate.shortTitle}" tersimpan permanen di Database untuk akun Anda.`
         );
       } else {
         showToast(res.message || 'Gagal menyimpan Berita Acara.');

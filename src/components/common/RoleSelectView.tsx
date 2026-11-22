@@ -68,8 +68,7 @@ export const RoleSelectView: React.FC = () => {
     connectionError,
     retryConnection,
     isAdminAuthenticated,
-    loginAdminSession,
-    refreshAdminAuthStatus
+    loginAdminSession
   } = useApp();
 
   // Modal state: 'login' | 'register' | 'forgot' | 'check_status' | null
@@ -221,15 +220,8 @@ export const RoleSelectView: React.FC = () => {
     setIsSubmitting(true);
     try {
       const normalizedUser = loginUsername.trim().toLowerCase();
-      if (normalizedUser === 'admin' || normalizedUser === 'administrator') {
-        const status = await refreshAdminAuthStatus();
-        if (status.setupRequired && !status.envOverrideActive) {
-          setAuthModalMode(null);
-          setAuthFeedback(null);
-          window.dispatchEvent(new CustomEvent('siops-open-owner-panel'));
-          return;
-        }
-        const adminRes = await loginAdminSession(loginPassword);
+      if (!selectedCardRole && (normalizedUser === 'admin' || normalizedUser === 'administrator')) {
+        const adminRes = await loginAdminSession(loginUsername.trim(), loginPassword);
         if (adminRes.ok) {
           setAuthModalMode(null);
           setAuthFeedback(null);
@@ -237,7 +229,7 @@ export const RoleSelectView: React.FC = () => {
         } else {
           setAuthFeedback({
             ok: false,
-            text: formatApiErrorMessage(adminRes.message, 'Sandi Admin tidak sesuai.')
+            text: formatApiErrorMessage(adminRes.message, 'Username atau sandi Admin tidak sesuai.')
           });
         }
         return;
@@ -251,6 +243,9 @@ export const RoleSelectView: React.FC = () => {
       if (res.ok) {
         setAuthModalMode(null);
         setAuthFeedback(null);
+        if (res.isAdmin) {
+          window.dispatchEvent(new CustomEvent('siops-open-owner-panel'));
+        }
       } else {
         setAuthFeedback({
           ok: false,

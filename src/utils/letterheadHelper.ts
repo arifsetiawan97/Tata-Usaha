@@ -119,8 +119,13 @@ export function getEffectiveSchoolConfigForUser(
   activeRole?: RoleType | null
 ): SchoolConfig {
   const key = getUserIsolationKey(currentUser);
-  const customKop = key ? baseConfig.userLetterheads?.[key] : undefined;
-  const customSig = key ? baseConfig.userSignatures?.[key] : undefined;
+  const altUsernameKey = currentUser?.username ? `user:${currentUser.username.trim().toLowerCase()}` : null;
+  const customKop = key
+    ? baseConfig.userLetterheads?.[key] || (altUsernameKey ? baseConfig.userLetterheads?.[altUsernameKey] : undefined)
+    : undefined;
+  const customSig = key
+    ? baseConfig.userSignatures?.[key] || (altUsernameKey ? baseConfig.userSignatures?.[altUsernameKey] : undefined)
+    : undefined;
 
   let resolved: SchoolConfig = { ...baseConfig };
 
@@ -144,6 +149,7 @@ export function getEffectiveSchoolConfigForUser(
       logoSekolahUrl: customKop.logoKopKanan ?? customKop.logoSekolahUrl ?? resolved.logoSekolahUrl,
       logoKopKiri: customKop.logoKopKiri ?? customKop.logoKabupatenUrl ?? resolved.logoKopKiri,
       logoKopKanan: customKop.logoKopKanan ?? customKop.logoSekolahUrl ?? resolved.logoKopKanan,
+      logoAplikasiUrl: customKop.logoAplikasiUrl !== undefined ? customKop.logoAplikasiUrl : resolved.logoAplikasiUrl,
       kopBorderStyle: customKop.kopBorderStyle || resolved.kopBorderStyle || 'double_thick'
     };
   }

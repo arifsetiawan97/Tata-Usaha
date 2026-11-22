@@ -15,6 +15,7 @@ import {
   handleProtectedBackupDownload,
   handleProtectedCrud,
   handleProtectedDeleteAccessUser,
+  handleStaffSelfSave,
   handleStaffSubmission,
   parseJsonBody,
   requireAdminOrReject
@@ -118,6 +119,16 @@ app.post('/api/staff/submissions', async (req, res) => {
   } catch (err) {
     console.error('POST /api/staff/submissions error:', err);
     res.status(500).json({ ok: false, error: 'Gagal mengirim ajuan operasional ke server.' });
+  }
+});
+
+// Authenticated User Permanent Self-Save (Multi-User Isolated Kop, Pengesahan & Records)
+app.post('/api/staff/self-save', async (req, res) => {
+  try {
+    await handleStaffSelfSave(req, res);
+  } catch (err) {
+    console.error('POST /api/staff/self-save error:', err);
+    res.status(500).json({ ok: false, error: 'Gagal menyimpan perubahan secara permanen ke server.' });
   }
 });
 
