@@ -62,6 +62,7 @@ export const RoleSelectView: React.FC = () => {
     trackedUsername,
     setTrackedUsername,
     trackedUserAccount,
+    approvedSchoolHeader,
     refreshAccessState,
     siteSettings,
     isInitialLoading,
@@ -105,6 +106,11 @@ export const RoleSelectView: React.FC = () => {
   const [regUsername, setRegUsername] = useState('');
   const [regRole, setRegRole] = useState<RoleType>('TU');
   const [regPassword, setRegPassword] = useState('');
+  const [regNamaSekolah, setRegNamaSekolah] = useState('');
+  const [regPemda, setRegPemda] = useState('');
+  const [regDinas, setRegDinas] = useState('');
+  const [regKabKota, setRegKabKota] = useState('');
+  const [regNpsn, setRegNpsn] = useState('');
   const [showRegPass, setShowRegPass] = useState(false);
 
   // Forgot password form state
@@ -156,6 +162,11 @@ export const RoleSelectView: React.FC = () => {
     setRegUsername('');
     setRegRole(defaultRole);
     setRegPassword('');
+    setRegNamaSekolah('');
+    setRegPemda('');
+    setRegDinas('');
+    setRegKabKota('');
+    setRegNpsn('');
     setShowRegPass(false);
     setAuthFeedback(null);
     setAuthModalMode('register');
@@ -262,11 +273,23 @@ export const RoleSelectView: React.FC = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const cleanSchoolName = regNamaSekolah.trim();
       const res = await registerAccessUser({
         namaLengkap: regNama,
         username: regUsername,
         role: regRole,
-        password: regPassword
+        password: regPassword,
+        ...(cleanSchoolName
+          ? {
+              schoolIdentity: {
+                namaSekolah: cleanSchoolName,
+                ...(regPemda.trim() ? { pemerintahDaerah: regPemda.trim() } : {}),
+                ...(regDinas.trim() ? { dinasPendidikan: regDinas.trim() } : {}),
+                ...(regKabKota.trim() ? { kabupatenKota: regKabKota.trim() } : {}),
+                ...(regNpsn.trim() ? { npsn: regNpsn.trim() } : {})
+              }
+            }
+          : {})
       });
       setAuthFeedback({
         ok: res.ok,
@@ -276,6 +299,11 @@ export const RoleSelectView: React.FC = () => {
         setRegNama('');
         setRegUsername('');
         setRegPassword('');
+        setRegNamaSekolah('');
+        setRegPemda('');
+        setRegDinas('');
+        setRegKabKota('');
+        setRegNpsn('');
       }
     } finally {
       setIsSubmitting(false);
@@ -366,6 +394,44 @@ export const RoleSelectView: React.FC = () => {
   const isRoleVisible = (role: RoleType) =>
     !allowedRolesForView || allowedRolesForView.includes(role);
 
+  const isApprovedTrackedUser = primaryTrackedAccount?.status === 'APPROVED';
+  const canShowSchoolIdentity = isApprovedTrackedUser || isAdminAuthenticated;
+  const resolvedDisplaySchool = isApprovedTrackedUser
+    ? {
+        pemerintahDaerah:
+          approvedSchoolHeader?.pemerintahDaerah ?? primaryTrackedAccount?.schoolIdentity?.pemerintahDaerah ?? '',
+        dinasPendidikan:
+          approvedSchoolHeader?.dinasPendidikan ?? primaryTrackedAccount?.schoolIdentity?.dinasPendidikan ?? '',
+        namaSekolah:
+          approvedSchoolHeader?.namaSekolah ||
+          primaryTrackedAccount?.schoolIdentity?.namaSekolah ||
+          schoolConfig.namaSekolah ||
+          '',
+        kabupatenKota:
+          approvedSchoolHeader?.kabupatenKota ?? primaryTrackedAccount?.schoolIdentity?.kabupatenKota ?? '',
+        npsn: approvedSchoolHeader?.npsn ?? primaryTrackedAccount?.schoolIdentity?.npsn ?? '',
+        logoAplikasiUrl: approvedSchoolHeader?.logoAplikasiUrl || '',
+        logoKabupatenUrl: approvedSchoolHeader?.logoKabupatenUrl || ''
+      }
+    : isAdminAuthenticated
+    ? {
+        pemerintahDaerah: schoolConfig.pemerintahDaerah || '',
+        dinasPendidikan: schoolConfig.dinasPendidikan || '',
+        namaSekolah: schoolConfig.namaSekolah || '',
+        kabupatenKota: schoolConfig.kabupatenKota || '',
+        npsn: schoolConfig.npsn || '',
+        logoAplikasiUrl: schoolConfig.logoAplikasiUrl || '',
+        logoKabupatenUrl: schoolConfig.logoKabupatenUrl || ''
+      }
+    : null;
+
+  const agencyLine = resolvedDisplaySchool
+    ? [resolvedDisplaySchool.pemerintahDaerah, resolvedDisplaySchool.dinasPendidikan]
+        .map(s => (s || '').trim())
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-850 to-slate-950 text-slate-100 flex flex-col justify-between p-4 sm:p-8">
       {/* Header Info */}
@@ -376,32 +442,54 @@ export const RoleSelectView: React.FC = () => {
             className="flex items-center gap-4 select-none touch-manipulation"
           >
             <div className="w-14 h-16 shrink-0 flex items-center justify-center bg-slate-800/80 rounded-xl p-1.5 border border-slate-700">
-              {schoolConfig.logoAplikasiUrl ? (
-                <img
-                  src={schoolConfig.logoAplikasiUrl}
-                  alt="Logo Aplikasi"
-                  className="max-h-13 max-w-full object-contain rounded"
-                />
-              ) : schoolConfig.logoKabupatenUrl ? (
-                <img
-                  src={schoolConfig.logoKabupatenUrl}
-                  alt="Logo Kabupaten"
-                  className="max-h-13 max-w-full object-contain"
-                />
+              {canShowSchoolIdentity && resolvedDisplaySchool ? (
+                resolvedDisplaySchool.logoAplikasiUrl ? (
+                  <img
+                    src={resolvedDisplaySchool.logoAplikasiUrl}
+                    alt="Logo Aplikasi"
+                    className="max-h-13 max-w-full object-contain rounded"
+                  />
+                ) : resolvedDisplaySchool.logoKabupatenUrl ? (
+                  <img
+                    src={resolvedDisplaySchool.logoKabupatenUrl}
+                    alt="Logo Kabupaten"
+                    className="max-h-13 max-w-full object-contain"
+                  />
+                ) : (
+                  <LogoKabupatenDefault className="w-11 h-14" />
+                )
               ) : (
-                <LogoKabupatenDefault className="w-11 h-14" />
+                <School className="w-7 h-7 text-sky-400" />
               )}
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                {schoolConfig.pemerintahDaerah} · {schoolConfig.dinasPendidikan}
-              </p>
-              <h1 className="text-lg sm:text-xl font-extrabold text-white">
-                {schoolConfig.namaSekolah}
-              </h1>
-              <p className="text-xs text-blue-400 font-medium">
-                Sistem Informasi Operator Layanan Operasional Sekolah (SI-OPS)
-              </p>
+              {canShowSchoolIdentity && resolvedDisplaySchool ? (
+                <>
+                  {agencyLine && (
+                    <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                      {agencyLine}
+                    </p>
+                  )}
+                  <h1 className="text-lg sm:text-xl font-extrabold text-white">
+                    {resolvedDisplaySchool.namaSekolah || 'Satuan Pendidikan Terdaftar'}
+                  </h1>
+                  <p className="text-xs text-blue-400 font-medium">
+                    Sistem Informasi Operator Layanan Operasional Sekolah (SI-OPS)
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                    PORTAL LAYANAN OPERASIONAL SEKOLAH
+                  </p>
+                  <h1 className="text-lg sm:text-xl font-extrabold text-white">
+                    SI-OPS SEKOLAH
+                  </h1>
+                  <p className="text-xs text-blue-400 font-medium">
+                    Identitas sekolah tampil otomatis setelah pendaftaran disetujui Admin
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -416,12 +504,18 @@ export const RoleSelectView: React.FC = () => {
                 <span>Buka Konsol Admin</span>
               </button>
             )}
-            <div className="flex items-center gap-3 bg-slate-800/60 px-3.5 py-2 rounded-xl border border-slate-700/80 text-xs text-slate-300">
-              <School className="w-4 h-4 text-amber-400" />
-              <span>NPSN: {schoolConfig.npsn}</span>
-              <span>·</span>
-              <span>Kota: {schoolConfig.kabupatenKota}</span>
-            </div>
+            {canShowSchoolIdentity &&
+              resolvedDisplaySchool &&
+              (resolvedDisplaySchool.npsn || resolvedDisplaySchool.kabupatenKota) && (
+                <div className="flex items-center gap-3 bg-slate-800/60 px-3.5 py-2 rounded-xl border border-slate-700/80 text-xs text-slate-300">
+                  <School className="w-4 h-4 text-amber-400" />
+                  {resolvedDisplaySchool.npsn && <span>NPSN: {resolvedDisplaySchool.npsn}</span>}
+                  {resolvedDisplaySchool.npsn && resolvedDisplaySchool.kabupatenKota && <span>·</span>}
+                  {resolvedDisplaySchool.kabupatenKota && (
+                    <span>Kota/Kab: {resolvedDisplaySchool.kabupatenKota}</span>
+                  )}
+                </div>
+              )}
           </div>
         </div>
 
@@ -1094,8 +1188,8 @@ export const RoleSelectView: React.FC = () => {
 
       {/* Register Modal */}
       {authModalMode === 'register' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
-          <div className="bg-slate-900 border border-slate-750 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-750 text-white rounded-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto p-6 shadow-2xl relative space-y-4">
             <button
               type="button"
               onClick={() => setAuthModalMode(null)}
@@ -1111,90 +1205,176 @@ export const RoleSelectView: React.FC = () => {
               <div>
                 <h3 className="font-bold text-base text-white">Daftar / Ajukan Akun Pengguna</h3>
                 <p className="text-xs text-slate-400">
-                  Pilih satu layanan yang sesuai dan buat sandi pribadi Anda
+                  Pilih layanan, isi identitas sekolah Anda, dan buat sandi pribadi
                 </p>
               </div>
             </div>
 
             <form onSubmit={handleRegisterSubmit} className="space-y-3.5 pt-1">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Nama Lengkap:</label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={regNama}
-                  onChange={e => {
-                    setRegNama(e.target.value);
-                    if (authFeedback) setAuthFeedback(null);
-                  }}
-                  placeholder="Nama lengkap petugas..."
-                  className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Nama Pengguna (Username Unik):
-                </label>
-                <input
-                  type="text"
-                  required
-                  minLength={3}
-                  value={regUsername}
-                  onChange={e => {
-                    setRegUsername(e.target.value);
-                    if (authFeedback) setAuthFeedback(null);
-                  }}
-                  placeholder="Contoh: andi_tu (tanpa spasi)"
-                  className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Pilih Layanan Operasional {accessRules.enforceSingleServicePerUser ? '(Maks. 1 Layanan)' : ''}:
-                </label>
-                <select
-                  value={regRole}
-                  onChange={e => {
-                    setRegRole(e.target.value as RoleType);
-                    if (authFeedback) setAuthFeedback(null);
-                  }}
-                  className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-                >
-                  {SERVICE_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Buat Sandi {accessRules.enforceUniquePassword ? '(Harus Unik / Belum Dipakai Pengguna Lain)' : ''}:
-                </label>
-                <div className="relative">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nama Lengkap:</label>
                   <input
-                    type={showRegPass ? 'text' : 'password'}
+                    type="text"
                     required
-                    minLength={4}
-                    value={regPassword}
+                    autoFocus
+                    value={regNama}
                     onChange={e => {
-                      setRegPassword(e.target.value);
+                      setRegNama(e.target.value);
                       if (authFeedback) setAuthFeedback(null);
                     }}
-                    placeholder="Minimal 4 karakter..."
-                    className="w-full pl-3.5 pr-10 py-2 text-sm font-mono bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Nama lengkap petugas..."
+                    className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowRegPass(!showRegPass)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Nama Pengguna (Username Unik):
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    minLength={3}
+                    value={regUsername}
+                    onChange={e => {
+                      setRegUsername(e.target.value);
+                      if (authFeedback) setAuthFeedback(null);
+                    }}
+                    placeholder="Contoh: andi_tu"
+                    className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Pilih Layanan {accessRules.enforceSingleServicePerUser ? '(Maks. 1)' : ''}:
+                  </label>
+                  <select
+                    value={regRole}
+                    onChange={e => {
+                      setRegRole(e.target.value as RoleType);
+                      if (authFeedback) setAuthFeedback(null);
+                    }}
+                    className="w-full px-3.5 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                   >
-                    {showRegPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                    {SERVICE_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Buat Sandi {accessRules.enforceUniquePassword ? '(Unik)' : ''}:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showRegPass ? 'text' : 'password'}
+                      required
+                      minLength={4}
+                      value={regPassword}
+                      onChange={e => {
+                        setRegPassword(e.target.value);
+                        if (authFeedback) setAuthFeedback(null);
+                      }}
+                      placeholder="Minimal 4 karakter..."
+                      className="w-full pl-3.5 pr-10 py-2 text-sm font-mono bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPass(!showRegPass)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      {showRegPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Per-user School Identity Section */}
+              <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/80 space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-sky-300">
+                  <School className="w-4 h-4" />
+                  <span>Identitas Sekolah / Instansi Tujuan</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Nama sekolah dan instansi baru akan tampil di halaman pembuka sesuai isian Anda setelah akun disetujui Admin.
+                </p>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Nama Sekolah / Instansi <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={regNamaSekolah}
+                    onChange={e => {
+                      setRegNamaSekolah(e.target.value);
+                      if (authFeedback) setAuthFeedback(null);
+                    }}
+                    placeholder="Contoh: SMP Negeri 1 Harapan Bangsa"
+                    className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      Pemerintah Daerah / Yayasan
+                    </label>
+                    <input
+                      type="text"
+                      value={regPemda}
+                      onChange={e => setRegPemda(e.target.value)}
+                      placeholder="Contoh: Pemerintah Kabupaten..."
+                      className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      Dinas Pendidikan / Naungan
+                    </label>
+                    <input
+                      type="text"
+                      value={regDinas}
+                      onChange={e => setRegDinas(e.target.value)}
+                      placeholder="Contoh: Dinas Pendidikan dan Kebudayaan"
+                      className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      Kabupaten / Kota (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      value={regKabKota}
+                      onChange={e => setRegKabKota(e.target.value)}
+                      placeholder="Contoh: Batang Hari"
+                      className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      NPSN (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      value={regNpsn}
+                      onChange={e => setRegNpsn(e.target.value)}
+                      placeholder="Contoh: 1050xxxx"
+                      className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
                 </div>
               </div>
 

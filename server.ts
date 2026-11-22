@@ -133,7 +133,7 @@ app.post('/api/staff/self-save', async (req, res) => {
 });
 
 // Admin Database Management, Auth, Capacity, Backups, Migration, Soft-Delete & Audit Trail
-app.all('/api/admin/*', async (req, res) => {
+app.all(['/api/admin', '/api/admin/*'], async (req, res) => {
   try {
     const rawSub = req.path.replace(/^\/api\/admin\/?/, '');
     const subPath = rawSub.split('/').filter(Boolean);
@@ -171,6 +171,63 @@ app.get('/api/backup', async (req, res) => {
   } catch (err) {
     console.error('GET /api/backup error:', err);
     res.status(500).json({ error: 'Gagal mengunduh file backup.' });
+  }
+});
+
+// Unified /api/index dispatcher parity for Express & fallback ?__path= requests
+app.all('/api/index', async (req, res) => {
+  try {
+    const rawQ = req.query?.__path ?? req.query?.path ?? '';
+    const qStr = Array.isArray(rawQ) ? rawQ.join('/') : String(rawQ || '');
+    const segments = qStr.replace(/^\/?(?:api\/)?/, '').split('/').filter(Boolean);
+    const head = segments[0] || '';
+
+    if (head === '' || head === 'health') {
+      const info = getStorageInfo();
+      return res.status(200).json({ status: 'ok', ...info, timestamp: new Date().toISOString() });
+    }
+    if (head === 'state') {
+      if (req.method === 'GET') return await handleGetState(req, res);
+      if (req.method === 'POST') {
+        const db = await readDb();
+        const adminCtx = await requireAdminOrReject(req, res, db, 'state');
+        if (!adminCtx) return;
+        const safeCheck = sanitizeAndInspectPayload(parseJsonBody(req.body));
+        if (!safeCheck.valid) return res.status(400).json({ error: safeCheck.error });
+        const info = getStorageInfo();
+        const result = await applyStateUpdate(safeCheck.value, 'ADMIN_UTAMA');
+        if (result.ok) {
+          return res.json({
+            success: true,
+            lastUpdated: result.updated.lastUpdated,
+            data: buildAdminStateResponse(result.updated),
+            ...info
+          });
+        }
+        return res.status(500).json({ error: 'Gagal menyimpan basis data ke server' });
+      }
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+    if (head === 'auth') return await handleAuthAction(segments[1] || '', req, res);
+    if (head === 'staff') {
+      if (segments[1] === 'submissions') return await handleStaffSubmission(req, res);
+      if (segments[1] === 'self-save') return await handleStaffSelfSave(req, res);
+      return res.status(404).json({ error: `Endpoint staff tidak ditemukan: /api/staff/${segments[1] || ''}` });
+    }
+    if (head === 'admin') return await handleAdminRoute(segments.slice(1), req, res);
+    if (head === 'crud') return await handleProtectedCrud(segments[1] || '', segments[2] || '', req, res);
+    if (head === 'backup') {
+      if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+      return await handleProtectedBackupDownload(req, res);
+    }
+    if (head === 'access-users') {
+      if (req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' });
+      return await handleProtectedDeleteAccessUser(segments[1] || '', req, res);
+    }
+    return res.status(404).json({ error: `Endpoint API tidak ditemukan: /api/${segments.join('/')}` });
+  } catch (err) {
+    console.error('ALL /api/index error:', err);
+    return res.status(500).json({ ok: false, error: 'Terjadi kesalahan pada server Database Admin.' });
   }
 });
 

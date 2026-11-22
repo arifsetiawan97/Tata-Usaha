@@ -17,9 +17,11 @@ import {
   LibraryMemberStats,
   RoleSubTab,
   RegisteredAccessUser,
+  ApprovedSchoolHeader,
   AccessSecurityRules,
   AdminProfile,
   UserAccountStatus,
+  UserSchoolIdentity,
   AuthActionResult,
   SiteSettings,
   DatabaseCapacityQuickSummary,
@@ -187,6 +189,7 @@ interface AppContextType {
     username: string;
     role: RoleType;
     password: string;
+    schoolIdentity?: UserSchoolIdentity;
   }) => Promise<AuthActionResult>;
   loginAccessUser: (payload: {
     username: string;
@@ -204,6 +207,7 @@ interface AppContextType {
     role: RoleType;
     password: string;
     status?: UserAccountStatus;
+    schoolIdentity?: UserSchoolIdentity;
   }) => Promise<AuthActionResult>;
   updateAccessRules: (updates: Partial<AccessSecurityRules>) => Promise<AuthActionResult>;
   updateAdminPassword: (newPassword: string) => Promise<AuthActionResult>;
@@ -221,6 +225,7 @@ interface AppContextType {
   trackedUsername: string | null;
   setTrackedUsername: (username: string | null) => void;
   trackedUserAccount: RegisteredAccessUser | null;
+  approvedSchoolHeader: ApprovedSchoolHeader | null;
   refreshAccessState: (force?: boolean) => Promise<RegisteredAccessUser[]>;
   syncStatus: 'synced' | 'saving' | 'offline';
   serverStorageMode: ServerStorageMode;
@@ -365,6 +370,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved && saved.trim() ? saved.trim() : null;
   });
   const [trackedUserAccount, setTrackedUserAccount] = useState<RegisteredAccessUser | null>(null);
+  const [approvedSchoolHeader, setApprovedSchoolHeader] = useState<ApprovedSchoolHeader | null>(null);
 
   const setTrackedUsername = useCallback((username: string | null) => {
     const clean = username && username.trim() ? username.trim() : null;
@@ -374,6 +380,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       localStorage.removeItem(STORAGE_KEYS.TRACKED_USERNAME);
       setTrackedUserAccount(null);
+      setApprovedSchoolHeader(null);
     }
   }, []);
 
@@ -697,8 +704,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const lookup = await storageService.authStatusLookup(trackedUsername);
         if (lookup.ok && lookup.data?.user) {
           setTrackedUserAccount(lookup.data.user);
+          setApprovedSchoolHeader(
+            lookup.data.user.status === 'APPROVED' ? lookup.data.approvedSchoolHeader || null : null
+          );
         } else if (lookup.status === 404) {
           setTrackedUserAccount(null);
+          setApprovedSchoolHeader(null);
         }
       }
 
@@ -754,11 +765,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!trackedUsername) {
       setTrackedUserAccount(null);
+      setApprovedSchoolHeader(null);
       return;
     }
     storageService.authStatusLookup(trackedUsername).then(res => {
       if (res.ok && res.data?.user) {
         setTrackedUserAccount(res.data.user);
+        setApprovedSchoolHeader(
+          res.data.user.status === 'APPROVED' ? res.data.approvedSchoolHeader || null : null
+        );
       }
     });
   }, [trackedUsername]);
@@ -2225,6 +2240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     username: string;
     role: RoleType;
     password: string;
+    schoolIdentity?: UserSchoolIdentity;
   }): Promise<AuthActionResult> => {
     const res = await storageService.authRegister(payload);
     if (!res.ok) {
@@ -2237,6 +2253,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (registered) {
       setTrackedUsername(registered.username);
       setTrackedUserAccount(registered);
+      if (registered.status !== 'APPROVED') {
+        setApprovedSchoolHeader(null);
+      }
     }
     await fetchLatestState();
     return {
@@ -2281,6 +2300,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const loggedInUser = res.data.user;
     setTrackedUsername(loggedInUser.username);
     setTrackedUserAccount(loggedInUser);
+    setApprovedSchoolHeader((res.data as any).approvedSchoolHeader || null);
     setCurrentUser(loggedInUser);
     setCurrentRole(loggedInUser.role);
     setRoleSubTab(loggedInUser.role, 'tasks');
@@ -2291,6 +2311,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {
       ok: true,
       user: loggedInUser,
+      approvedSchoolHeader: (res.data as any).approvedSchoolHeader || null,
       requiresPasswordChange: Boolean(res.data.requiresPasswordChange),
       message: formatApiErrorMessage(res.data.message, `Selamat datang, ${loggedInUser.namaLengkap}!`)
     };
@@ -2342,11 +2363,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         message: formatApiErrorMessage(res.error, `Nama pengguna "@${clean}" belum terdaftar di sistem.`)
       };
     }
+    const header =
+      res.data.user.status === 'APPROVED' ? res.data.approvedSchoolHeader || null : null;
     setTrackedUsername(res.data.user.username);
     setTrackedUserAccount(res.data.user);
+    setApprovedSchoolHeader(header);
     return {
       ok: true,
       user: res.data.user,
+      approvedSchoolHeader: header,
       message: `Status akun "@${res.data.user.username}" ditemukan.`
     };
   };
@@ -2477,6 +2502,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     role: RoleType;
     password: string;
     status?: UserAccountStatus;
+    schoolIdentity?: UserSchoolIdentity;
   }): Promise<AuthActionResult> => {
     const res = await storageService.adminCreateUser(payload);
     if (res.ok) {
@@ -2658,6 +2684,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         trackedUsername,
         setTrackedUsername,
         trackedUserAccount,
+        approvedSchoolHeader,
         refreshAccessState,
         syncStatus,
         serverStorageMode,

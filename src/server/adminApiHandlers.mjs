@@ -25,8 +25,10 @@ import {
   deleteAccessUserFromDb,
   getStorageInfo,
   maybeRunScheduledBackup,
+  normalizeUserSchoolIdentity,
   purgeSoftDeletedRecord,
   readDb,
+  resolveApprovedSchoolHeader,
   restoreSoftDeletedRecord,
   rollbackMigration,
   runDataMigration,
@@ -262,11 +264,24 @@ export async function handleAuthAction(action, req, res) {
 
     const now = new Date().toISOString();
     const initialStatus = rules.requireAdminApproval ? 'PENDING' : 'APPROVED';
+    const schoolIdentity = normalizeUserSchoolIdentity(
+      body.schoolIdentity ||
+        (body.namaSekolah
+          ? {
+              namaSekolah: body.namaSekolah,
+              pemerintahDaerah: body.pemerintahDaerah,
+              dinasPendidikan: body.dinasPendidikan,
+              kabupatenKota: body.kabupatenKota,
+              npsn: body.npsn
+            }
+          : null)
+    );
     const newUser = {
       id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       namaLengkap,
       username,
       role,
+      ...(schoolIdentity ? { schoolIdentity } : {}),
       passwordHash: hashSecret(password),
       passwordFingerprint: fp,
       status: initialStatus,
@@ -499,6 +514,7 @@ export async function handleAuthAction(action, req, res) {
       expiresAt: issued.expiresAt,
       requiresPasswordChange: Boolean(updatedUser.mustChangePassword),
       user: sanitizeAccessUserForClient(updatedUser, { includeTempResetCode: true }),
+      approvedSchoolHeader: resolveApprovedSchoolHeader(db, updatedUser),
       message: updatedUser.mustChangePassword
         ? `Selamat datang, ${updatedUser.namaLengkap}! Anda masuk menggunakan sandi sementara. Segera buat sandi baru.`
         : `Selamat datang, ${updatedUser.namaLengkap}! Berhasil masuk ke layanan ${ROLE_LABELS_MAP[updatedUser.role]}.`
@@ -588,7 +604,8 @@ export async function handleAuthAction(action, req, res) {
     }
     return res.status(200).json({
       ok: true,
-      user: sanitizeAccessUserForClient(found, { includeTempResetCode: true })
+      user: sanitizeAccessUserForClient(found, { includeTempResetCode: true }),
+      approvedSchoolHeader: found.status === 'APPROVED' ? resolveApprovedSchoolHeader(db, found) : null
     });
   }
 
@@ -2274,11 +2291,13 @@ export async function handleAdminRoute(segments, req, res) {
     }
 
     const now = new Date().toISOString();
+    const schoolIdentity = normalizeUserSchoolIdentity(bodyCheck.value?.schoolIdentity);
     const created = {
       id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       namaLengkap: cleanName,
       username: cleanUsername,
       role,
+      ...(schoolIdentity ? { schoolIdentity } : {}),
       passwordHash: hashSecret(cleanPass),
       passwordFingerprint: fp,
       status: ['APPROVED', 'PENDING', 'REJECTED'].includes(status) ? status : 'APPROVED',

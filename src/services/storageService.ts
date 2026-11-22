@@ -10,6 +10,7 @@ import {
   AccessSecurityRules,
   AdminProfile,
   AnnualReport,
+  ApprovedSchoolHeader,
   ArchiveDocument,
   AuditLogEntry,
   BackupScheduleConfig,
@@ -34,7 +35,8 @@ import {
   StaffSubmissionItem,
   TaskLog,
   TupoksiDefinitionsMap,
-  UserAccountStatus
+  UserAccountStatus,
+  UserSchoolIdentity
 } from '../types';
 
 export type ServerStorageMode = 'upstash' | 'supabase' | 'local-file' | 'vercel-ephemeral' | 'offline';
@@ -280,9 +282,13 @@ class StorageService {
             this.staffToken = null;
             this.onAuthExpiredCallback?.('staff');
           }
+          const fallbackErrText =
+            res.status === 404 && !json
+              ? 'Endpoint Database Admin (/api) tidak ditemukan (404). Pastikan server Node / Vercel API aktif.'
+              : `Permintaan gagal (Kode ${res.status}).`;
           const safeError = formatApiErrorMessage(
             json?.error !== undefined ? json.error : json?.message,
-            `Permintaan gagal (Kode ${res.status}).`
+            fallbackErrText
           );
           const safeMessage = formatApiErrorMessage(
             json?.message !== undefined ? json.message : json?.error,
@@ -353,6 +359,36 @@ class StorageService {
           // ignore
         }
         return fallback;
+      }
+      if (fallback.status === 404) {
+        result = fallback;
+      }
+    }
+
+    // Fallback to unified /api/index dispatcher when host fails to match nested /api/* catch-all routes (404 non-JSON)
+    if (
+      !result.ok &&
+      result.status === 404 &&
+      !result.data &&
+      cleanPath.startsWith('/api/') &&
+      !cleanPath.startsWith('/api/index')
+    ) {
+      const subPath = cleanPath.replace(/^\/api\/?/, '');
+      const dispatcherPath = `/api/index?__path=${encodeURIComponent(subPath)}`;
+      const dispatched = await runAttempt(this.getApiUrl(dispatcherPath));
+      if (dispatched.ok || (dispatched.status > 0 && dispatched.status !== 404)) {
+        return dispatched;
+      }
+      if (primaryUrl !== cleanPath) {
+        const localDispatched = await runAttempt(dispatcherPath);
+        if (localDispatched.ok || (localDispatched.status > 0 && localDispatched.status !== 404)) {
+          try {
+            localStorage.removeItem('siops_central_api_base');
+          } catch {
+            // ignore
+          }
+          return localDispatched;
+        }
       }
     }
 
@@ -432,6 +468,7 @@ class StorageService {
     username: string;
     role: RoleType;
     password: string;
+    schoolIdentity?: UserSchoolIdentity;
   }): Promise<ApiResponse<{ ok: boolean; user?: RegisteredAccessUser; message: string }>> {
     return this.requestJson('/api/auth/register', {
       method: 'POST',
@@ -496,7 +533,9 @@ class StorageService {
     });
   }
 
-  async authStatusLookup(username: string): Promise<ApiResponse<{ ok: boolean; user: RegisteredAccessUser }>> {
+  async authStatusLookup(
+    username: string
+  ): Promise<ApiResponse<{ ok: boolean; user: RegisteredAccessUser; approvedSchoolHeader?: ApprovedSchoolHeader | null }>> {
     return this.requestJson('/api/auth/status-lookup', {
       method: 'POST',
       tokenType: 'none',
@@ -600,7 +639,7 @@ class StorageService {
   }
 
   async adminAuthLogin(username: string, password: string) {
-    const res = await this.requestJson<{
+    let res = await this.requestJson<{
       ok: boolean;
       token: string;
       expiresAt: string;
@@ -613,6 +652,20 @@ class StorageService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
+    if (!res.ok && res.status === 404) {
+      // Fallback to unified /api/auth/login endpoint if deep catch-all routing is unavailable on host
+      const alt = await this.requestJson<any>('/api/auth/login', {
+        method: 'POST',
+        tokenType: 'none',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      if (alt.ok && alt.data?.isAdmin && alt.data?.token) {
+        res = alt;
+      } else if (!alt.ok && alt.status !== 404) {
+        res = alt;
+      }
+    }
     if (res.ok && res.data?.token) {
       this.setAdminToken(res.data.token);
     }
@@ -863,6 +916,7 @@ class StorageService {
     role: RoleType;
     password: string;
     status?: UserAccountStatus;
+    schoolIdentity?: UserSchoolIdentity;
   }) {
     return this.requestJson('/api/admin/users', {
       method: 'POST',

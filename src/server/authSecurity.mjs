@@ -217,6 +217,9 @@ export function sanitizeAccessUserForClient(user, options = {}) {
     namaLengkap: user.namaLengkap,
     username: user.username,
     role: user.role,
+    ...(user.schoolIdentity && typeof user.schoolIdentity === 'object'
+      ? { schoolIdentity: user.schoolIdentity }
+      : {}),
     status: user.status,
     createdAt: user.createdAt,
     approvedAt: user.approvedAt,

@@ -152,6 +152,37 @@ export function getEffectiveSchoolConfigForUser(
       logoAplikasiUrl: customKop.logoAplikasiUrl !== undefined ? customKop.logoAplikasiUrl : resolved.logoAplikasiUrl,
       kopBorderStyle: customKop.kopBorderStyle || resolved.kopBorderStyle || 'double_thick'
     };
+  } else if (currentUser?.schoolIdentity?.namaSekolah) {
+    const regSchool = currentUser.schoolIdentity;
+    const isDifferentSchool =
+      regSchool.namaSekolah.trim().toLowerCase() !== (resolved.namaSekolah || '').trim().toLowerCase();
+    resolved = {
+      ...resolved,
+      pemerintahDaerah: regSchool.pemerintahDaerah ?? (isDifferentSchool ? '' : resolved.pemerintahDaerah),
+      dinasPendidikan: regSchool.dinasPendidikan ?? (isDifferentSchool ? '' : resolved.dinasPendidikan),
+      namaSekolah: regSchool.namaSekolah,
+      npsn: regSchool.npsn ?? (isDifferentSchool ? '' : resolved.npsn),
+      kabupatenKota: regSchool.kabupatenKota ?? (isDifferentSchool ? '' : resolved.kabupatenKota),
+      ...(isDifferentSchool
+        ? {
+            nss: '',
+            alamat: '',
+            desaKecamatan: '',
+            provinsi: '',
+            kodePos: '',
+            telepon: '',
+            email: '',
+            website: '',
+            logoKabupatenUrl: '',
+            logoSekolahUrl: '',
+            logoKopKiri: '',
+            logoKopKanan: '',
+            logoAplikasiUrl: '',
+            stempelTextLine1: regSchool.dinasPendidikan || regSchool.pemerintahDaerah || '',
+            stempelTextLine2: regSchool.namaSekolah
+          }
+        : {})
+    };
   }
 
   const targetRole = currentUser?.role || activeRole;

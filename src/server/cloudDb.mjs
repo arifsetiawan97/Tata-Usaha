@@ -86,6 +86,30 @@ function mergePasswordHistory(a, b) {
     .slice(0, 20);
 }
 
+export function normalizeUserSchoolIdentity(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const namaSekolah = typeof raw.namaSekolah === 'string' ? raw.namaSekolah.trim().slice(0, 140) : '';
+  const pemerintahDaerah =
+    typeof raw.pemerintahDaerah === 'string' ? raw.pemerintahDaerah.trim().slice(0, 140) : '';
+  const dinasPendidikan =
+    typeof raw.dinasPendidikan === 'string' ? raw.dinasPendidikan.trim().slice(0, 140) : '';
+  const kabupatenKota =
+    typeof raw.kabupatenKota === 'string' ? raw.kabupatenKota.trim().slice(0, 100) : '';
+  const npsn = typeof raw.npsn === 'string' ? raw.npsn.trim().slice(0, 30) : '';
+
+  if (!namaSekolah && !pemerintahDaerah && !dinasPendidikan && !kabupatenKota && !npsn) {
+    return undefined;
+  }
+
+  return {
+    namaSekolah,
+    ...(pemerintahDaerah ? { pemerintahDaerah } : {}),
+    ...(dinasPendidikan ? { dinasPendidikan } : {}),
+    ...(kabupatenKota ? { kabupatenKota } : {}),
+    ...(npsn ? { npsn } : {})
+  };
+}
+
 function normalizeRegisteredUser(raw, securityPepper) {
   if (!raw || typeof raw !== 'object') return null;
   const username = typeof raw.username === 'string' ? raw.username.trim() : '';
@@ -111,6 +135,8 @@ function normalizeRegisteredUser(raw, securityPepper) {
     passwordFingerprint = computePasswordFingerprint(rawPlainPassword, securityPepper);
   }
 
+  const schoolIdentity = normalizeUserSchoolIdentity(raw.schoolIdentity);
+
   return {
     id,
     namaLengkap:
@@ -119,6 +145,7 @@ function normalizeRegisteredUser(raw, securityPepper) {
         : username,
     username,
     role,
+    ...(schoolIdentity ? { schoolIdentity } : {}),
     passwordHash,
     passwordFingerprint,
     // Keep tempResetCode ONLY while awaiting user change after admin reset
@@ -1192,6 +1219,47 @@ export function sanitizeSchoolConfigForPublic(cfg) {
   };
 }
 
+export function resolveApprovedSchoolHeader(db, user) {
+  if (!user || user.status !== 'APPROVED') return null;
+  const baseCfg = db?.schoolConfig && typeof db.schoolConfig === 'object' ? db.schoolConfig : {};
+  const userIdKey = typeof user.id === 'string' ? user.id.trim() : '';
+  const altKey = user.username ? `user:${String(user.username).trim().toLowerCase()}` : '';
+  const customKop =
+    (userIdKey && baseCfg.userLetterheads?.[userIdKey]) ||
+    (altKey && baseCfg.userLetterheads?.[altKey]) ||
+    null;
+
+  if (customKop && !customKop.deleted) {
+    return {
+      pemerintahDaerah: customKop.pemerintahDaerah ?? '',
+      dinasPendidikan: customKop.dinasPendidikan ?? '',
+      namaSekolah: customKop.namaSekolah || user.schoolIdentity?.namaSekolah || '',
+      npsn: customKop.npsn ?? user.schoolIdentity?.npsn ?? '',
+      kabupatenKota: customKop.kabupatenKota ?? user.schoolIdentity?.kabupatenKota ?? '',
+      provinsi: customKop.provinsi || '',
+      logoKabupatenUrl: customKop.logoKopKiri || customKop.logoKabupatenUrl || '',
+      logoSekolahUrl: customKop.logoKopKanan || customKop.logoSekolahUrl || '',
+      logoAplikasiUrl: customKop.logoAplikasiUrl || ''
+    };
+  }
+
+  if (user.schoolIdentity && user.schoolIdentity.namaSekolah) {
+    return {
+      pemerintahDaerah: user.schoolIdentity.pemerintahDaerah || '',
+      dinasPendidikan: user.schoolIdentity.dinasPendidikan || '',
+      namaSekolah: user.schoolIdentity.namaSekolah,
+      npsn: user.schoolIdentity.npsn || '',
+      kabupatenKota: user.schoolIdentity.kabupatenKota || '',
+      provinsi: '',
+      logoKabupatenUrl: '',
+      logoSekolahUrl: '',
+      logoAplikasiUrl: ''
+    };
+  }
+
+  return sanitizeSchoolConfigForPublic(baseCfg);
+}
+
 export function buildPublicStateResponse(db) {
   const metrics = computeDatabaseMetrics(db);
   const approvedRoleCounts = { TU: 0, PENJAGA: 0, SERVICE: 0, PERPUS: 0, LAB_IPA: 0 };
@@ -1203,7 +1271,8 @@ export function buildPublicStateResponse(db) {
   return {
     publicOnly: true,
     siteSettings: db.siteSettings,
-    schoolConfig: sanitizeSchoolConfigForPublic(db.schoolConfig),
+    // Do NOT expose Batang Hari / specific school identity on public unauthenticated opening screen
+    schoolConfig: null,
     accessRules: db.accessRules,
     approvedRoleCounts,
     databaseCapacitySummary: {

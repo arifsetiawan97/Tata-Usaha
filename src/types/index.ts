@@ -487,11 +487,32 @@ export interface PasswordChangeLogEntry {
   maskedPreview?: string;
 }
 
+export interface UserSchoolIdentity {
+  namaSekolah: string;
+  pemerintahDaerah?: string;
+  dinasPendidikan?: string;
+  kabupatenKota?: string;
+  npsn?: string;
+}
+
+export interface ApprovedSchoolHeader {
+  pemerintahDaerah?: string;
+  dinasPendidikan?: string;
+  namaSekolah: string;
+  npsn?: string;
+  kabupatenKota?: string;
+  provinsi?: string;
+  logoKabupatenUrl?: string;
+  logoSekolahUrl?: string;
+  logoAplikasiUrl?: string;
+}
+
 export interface RegisteredAccessUser {
   id: string;
   namaLengkap: string;
   username: string;
   role: RoleType;
+  schoolIdentity?: UserSchoolIdentity;
   password?: string;
   tempResetCode?: string;
   hasPassword?: boolean;
@@ -513,6 +534,7 @@ export interface AuthActionResult {
   ok: boolean;
   message: string;
   user?: RegisteredAccessUser;
+  approvedSchoolHeader?: ApprovedSchoolHeader | null;
   requiresPasswordChange?: boolean;
   isAdmin?: boolean;
   adminProfile?: AdminProfile | null;

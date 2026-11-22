@@ -78,6 +78,7 @@ export const AdminUsersAuditTab: React.FC<AdminUsersAuditTabProps> = ({
   const [newUsername, setNewUsername] = useState('');
   const [newRole, setNewRole] = useState<RoleType>('TU');
   const [newPassword, setNewPassword] = useState('');
+  const [newSekolah, setNewSekolah] = useState('');
   const [newStatus, setNewStatus] = useState<UserAccountStatus>('APPROVED');
   const [creatingUser, setCreatingUser] = useState(false);
 
@@ -218,7 +219,10 @@ export const AdminUsersAuditTab: React.FC<AdminUsersAuditTabProps> = ({
       username: newUsername,
       role: newRole,
       password: newPassword,
-      status: newStatus
+      status: newStatus,
+      ...(newSekolah.trim()
+        ? { schoolIdentity: { namaSekolah: newSekolah.trim() } }
+        : {})
     });
     setCreatingUser(false);
     onNotice(res.ok, res.message);
@@ -226,6 +230,7 @@ export const AdminUsersAuditTab: React.FC<AdminUsersAuditTabProps> = ({
       setNewNama('');
       setNewUsername('');
       setNewPassword('');
+      setNewSekolah('');
       setShowAddForm(false);
       await onRefreshDashboard();
     }
@@ -587,7 +592,7 @@ export const AdminUsersAuditTab: React.FC<AdminUsersAuditTabProps> = ({
         {showAddForm && (
           <form
             onSubmit={handleCreateUser}
-            className="p-4 rounded-xl bg-slate-800/70 border border-emerald-500/30 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end"
+            className="p-4 rounded-xl bg-slate-800/70 border border-emerald-500/30 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 items-end"
           >
             <div>
               <label className="block text-[11px] font-semibold text-slate-300 mb-1">Nama Lengkap</label>
@@ -607,6 +612,16 @@ export const AdminUsersAuditTab: React.FC<AdminUsersAuditTabProps> = ({
                 minLength={3}
                 value={newUsername}
                 onChange={e => setNewUsername(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">Sekolah (Opsional)</label>
+              <input
+                type="text"
+                value={newSekolah}
+                onChange={e => setNewSekolah(e.target.value)}
+                placeholder="Nama sekolah..."
                 className="w-full px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
               />
             </div>
@@ -697,6 +712,12 @@ export const AdminUsersAuditTab: React.FC<AdminUsersAuditTabProps> = ({
                         <td className="px-4 py-3">
                           <p className="font-bold text-white">{user.namaLengkap}</p>
                           <p className="text-[11px] text-slate-400 font-mono">@{user.username}</p>
+                          {user.schoolIdentity?.namaSekolah && (
+                            <p className="text-[10.5px] text-sky-300 mt-1">
+                              Sekolah: <strong>{user.schoolIdentity.namaSekolah}</strong>
+                              {user.schoolIdentity.kabupatenKota ? ` (${user.schoolIdentity.kabupatenKota})` : ''}
+                            </p>
+                          )}
                           {user.resetRequestStatus === 'REQUESTED' && user.resetRequestNote && (
                             <p className="text-[10.5px] text-amber-300 mt-1 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-0.5 inline-block">
                               Catatan: {user.resetRequestNote}

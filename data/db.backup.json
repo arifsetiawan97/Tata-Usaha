@@ -1644,7 +1644,7 @@
       "createdAt": "2026-09-01"
     }
   ],
-  "lastUpdated": "2026-11-22T11:40:44.127Z",
+  "lastUpdated": "2026-11-21T16:54:43.101Z",
   "libraryBooks": [
     {
       "id": "bk-2026-07-01",
@@ -1963,7 +1963,7 @@
   },
   "deletedAccessUserIds": [],
   "serverSecurityPepper": "ccf853d4bdae8bb062dc419bb09426faf84fd06d4e461171892b3e9135d7a627",
-  "adminCredentialHash": "scrypt$adcad77021990dab378a20f95fd2c31b$1b687567bc545ab751b487244cd40f64a8915d81448053c7d02bf2b8e15f9be395751707429b49a851c9bb7ccd9b87beca7a7d7004959e0d19e32fda1ee4f1d6",
+  "adminCredentialHash": "scrypt$bc72707d4ed62fd94cc9162ed3f9a9f5$63791f3c401571e9a1f0b3cc4bf50f16efddb2cc4220dacf94fd2475883a95de464be2c89d9057393d67380e1dc3643bdcf7662868b6931bd6a73583ddf9af00",
   "beritaAcaraHistory": [],
   "customDatabaseRecords": {},
   "databaseRegistry": [
@@ -4374,72 +4374,6 @@
   },
   "auditLogs": [
     {
-      "id": "aud-1795347644127-kg5uu",
-      "timestamp": "2026-11-22T11:40:44.127Z",
-      "actor": "kepala_admin",
-      "actorRole": "ADMIN",
-      "action": "ADMIN_LOGIN_SUCCESS",
-      "targetDatabase": "system",
-      "targetId": "-",
-      "status": "SUCCESS",
-      "detail": "Admin @kepala_admin berhasil terautentikasi membuka Database Satu Pintu."
-    },
-    {
-      "id": "aud-1795347644053-kpg1e",
-      "timestamp": "2026-11-22T11:40:44.053Z",
-      "actor": "admin",
-      "actorRole": "PUBLIC",
-      "action": "ADMIN_LOGIN_FAILED",
-      "targetDatabase": "system",
-      "targetId": "-",
-      "status": "DENIED",
-      "detail": "Username Admin tidak cocok saat login (@admin)."
-    },
-    {
-      "id": "aud-1795347644022-vksb8",
-      "timestamp": "2026-11-22T11:40:44.022Z",
-      "actor": "kepala_admin",
-      "actorRole": "ADMIN",
-      "action": "ADMIN_UPDATE_PROFILE",
-      "targetDatabase": "system",
-      "targetId": "-",
-      "status": "SUCCESS",
-      "detail": "Profil/kredensial Admin diperbarui (@kepala_admin, sandi diubah)."
-    },
-    {
-      "id": "aud-1795347643873-nbvqh",
-      "timestamp": "2026-11-22T11:40:43.873Z",
-      "actor": "admin",
-      "actorRole": "ADMIN",
-      "action": "ADMIN_LOGIN_SUCCESS",
-      "targetDatabase": "system",
-      "targetId": "-",
-      "status": "SUCCESS",
-      "detail": "Admin @admin berhasil terautentikasi membuka Database Satu Pintu."
-    },
-    {
-      "id": "aud-1795347643788-jh7am",
-      "timestamp": "2026-11-22T11:40:43.788Z",
-      "actor": "bukan_admin",
-      "actorRole": "PUBLIC",
-      "action": "ADMIN_LOGIN_FAILED",
-      "targetDatabase": "system",
-      "targetId": "-",
-      "status": "DENIED",
-      "detail": "Username Admin tidak cocok saat login (@bukan_admin)."
-    },
-    {
-      "id": "aud-1795347643760-4tguy",
-      "timestamp": "2026-11-22T11:40:43.760Z",
-      "actor": "admin",
-      "actorRole": "PUBLIC",
-      "action": "ADMIN_LOGIN_FAILED",
-      "targetDatabase": "system",
-      "targetId": "-",
-      "status": "DENIED",
-      "detail": "Sandi Admin salah saat mencoba membuka Panel Database Admin."
-    },
-    {
       "id": "aud-1795280083101-y3a10",
       "timestamp": "2026-11-21T16:54:43.101Z",
       "actor": "SISTEM_TERJADWAL",
@@ -4589,14 +4523,14 @@
   "userLibraryMemberStats": {},
   "adminAccount": {
     "id": "admin-root",
-    "username": "kepala_admin",
-    "email": "kepala@sdn.sch.id",
-    "namaLengkap": "Kepala Admin Sekolah",
+    "username": "admin",
+    "email": "admin@sekolah.local",
+    "namaLengkap": "Administrator Utama",
     "role": "ADMIN",
     "status": "ACTIVE",
-    "passwordHash": "scrypt$adcad77021990dab378a20f95fd2c31b$1b687567bc545ab751b487244cd40f64a8915d81448053c7d02bf2b8e15f9be395751707429b49a851c9bb7ccd9b87beca7a7d7004959e0d19e32fda1ee4f1d6",
-    "isDefaultCredentials": false,
+    "passwordHash": "scrypt$bc72707d4ed62fd94cc9162ed3f9a9f5$63791f3c401571e9a1f0b3cc4bf50f16efddb2cc4220dacf94fd2475883a95de464be2c89d9057393d67380e1dc3643bdcf7662868b6931bd6a73583ddf9af00",
+    "isDefaultCredentials": true,
     "createdAt": "2026-11-22T11:40:12.633Z",
-    "updatedAt": "2026-11-22T11:40:43.975Z"
+    "updatedAt": "2026-11-22T11:40:12.633Z"
   }
 }
