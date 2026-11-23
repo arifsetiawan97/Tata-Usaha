@@ -264,11 +264,15 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
     }, 1000);
   };
 
+  const allInventoriesSelected =
+    roleInventories.length > 0 && roleInventories.every(i => selectedIds.includes(i.id));
+
   const handleToggleSelectAll = () => {
-    if (selectedIds.length === roleInventories.length && roleInventories.length > 0) {
-      setSelectedIds([]);
+    if (allInventoriesSelected) {
+      const visibleSet = new Set(roleInventories.map(i => i.id));
+      setSelectedIds(prev => prev.filter(id => !visibleSet.has(id)));
     } else {
-      setSelectedIds(roleInventories.map(i => i.id));
+      setSelectedIds(prev => Array.from(new Set([...prev, ...roleInventories.map(i => i.id)])));
     }
   };
 
@@ -521,7 +525,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                 <th className="py-2 px-2 text-center w-8 border-r border-slate-200 print:border-black no-print">
                   <input
                     type="checkbox"
-                    checked={roleInventories.length > 0 && selectedIds.length === roleInventories.length}
+                    checked={allInventoriesSelected}
                     onChange={handleToggleSelectAll}
                     title="Pilih semua barang inventaris"
                     className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -617,7 +621,10 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => deleteInventory(item.id)}
+                          onClick={() => {
+                            deleteInventory(item.id);
+                            setSelectedIds(prev => prev.filter(id => id !== item.id));
+                          }}
                           className="p-1 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded transition-colors"
                           title="Hapus barang"
                         >

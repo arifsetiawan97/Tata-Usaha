@@ -667,7 +667,9 @@ export const LibraryBookManager: React.FC = () => {
   // Confirm Delete Book
   const handleConfirmDelete = () => {
     if (activeBook) {
-      deleteLibraryBook(activeBook.id);
+      const deletedId = activeBook.id;
+      deleteLibraryBook(deletedId);
+      setSelectedBookIds(prev => prev.filter(id => id !== deletedId));
       setIsDeleteModalOpen(false);
       setActiveBook(null);
     }
@@ -934,11 +936,15 @@ export const LibraryBookManager: React.FC = () => {
   };
 
   // Bulk Selection Handlers
+  const allBooksSelected =
+    filteredBooks.length > 0 && filteredBooks.every(b => selectedBookIds.includes(b.id));
+
   const handleToggleSelectAllBooks = () => {
-    if (selectedBookIds.length === filteredBooks.length && filteredBooks.length > 0) {
-      setSelectedBookIds([]);
+    if (allBooksSelected) {
+      const visibleSet = new Set(filteredBooks.map(b => b.id));
+      setSelectedBookIds(prev => prev.filter(id => !visibleSet.has(id)));
     } else {
-      setSelectedBookIds(filteredBooks.map(b => b.id));
+      setSelectedBookIds(prev => Array.from(new Set([...prev, ...filteredBooks.map(b => b.id)])));
     }
   };
 
@@ -1705,7 +1711,7 @@ Ensiklopedia Sains: Mengenal Alam Semesta,Umum / Referensi,Tim Peneliti LIPI,Bal
                   <th className="py-3 px-3 w-9 text-center">
                     <input
                       type="checkbox"
-                      checked={filteredBooks.length > 0 && selectedBookIds.length === filteredBooks.length}
+                      checked={allBooksSelected}
                       onChange={handleToggleSelectAllBooks}
                       title="Pilih semua buku yang tampil"
                       className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"

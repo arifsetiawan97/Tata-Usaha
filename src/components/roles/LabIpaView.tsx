@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { DailyTaskModal } from '../reports/DailyTaskModal';
 import { InventoryTable } from '../common/InventoryTable';
@@ -48,11 +48,19 @@ export const LabIpaView: React.FC = () => {
     return t.category === activeCategory;
   });
 
+  useEffect(() => {
+    setSelectedTaskIds([]);
+  }, [activeCategory]);
+
+  const allFilteredSelected =
+    filteredTasks.length > 0 && filteredTasks.every(t => selectedTaskIds.includes(t.id));
+
   const handleToggleSelectAllTasks = () => {
-    if (selectedTaskIds.length === filteredTasks.length) {
-      setSelectedTaskIds([]);
+    if (allFilteredSelected) {
+      const filteredSet = new Set(filteredTasks.map(t => t.id));
+      setSelectedTaskIds(prev => prev.filter(id => !filteredSet.has(id)));
     } else {
-      setSelectedTaskIds(filteredTasks.map(t => t.id));
+      setSelectedTaskIds(prev => Array.from(new Set([...prev, ...filteredTasks.map(t => t.id)])));
     }
   };
 
@@ -300,7 +308,7 @@ export const LabIpaView: React.FC = () => {
             {filteredTasks.length > 0 && (
               <input
                 type="checkbox"
-                checked={selectedTaskIds.length > 0 && selectedTaskIds.length === filteredTasks.length}
+                checked={allFilteredSelected}
                 onChange={handleToggleSelectAllTasks}
                 className="w-4 h-4 rounded text-teal-600 border-slate-300 focus:ring-teal-500 cursor-pointer"
                 title="Pilih semua tugas pada filter ini"
@@ -319,7 +327,7 @@ export const LabIpaView: React.FC = () => {
         {selectedTaskIds.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl animate-fadeIn">
             <div className="flex items-center gap-2 text-xs font-bold text-rose-900">
-              <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+              <span className="w-2 h-2 rounded-full bg-rose-600"></span>
               <span>{selectedTaskIds.length} tugas lab IPA dipilih</span>
             </div>
             <div className="flex items-center gap-2">

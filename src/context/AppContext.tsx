@@ -103,7 +103,7 @@ interface AppContextType {
   addTask: (task: Omit<TaskLog, 'id'>) => void;
   updateTask: (id: string, updated: Partial<TaskLog>) => void;
   deleteTask: (id: string) => void;
-  deleteMultipleTasks: (ids: string[]) => void;
+  deleteMultipleTasks: (ids: string[]) => Promise<boolean>;
   importTasks: (newTasks: Omit<TaskLog, 'id'>[]) => void;
   inventories: InventoryItem[];
   addInventory: (item: Omit<InventoryItem, 'id'>) => void;
@@ -936,24 +936,121 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return prependIfNew ? [saved, ...filtered] : [...filtered, saved];
   };
 
-  const performAdminOnlySoftDelete = useCallback(
-    async (collection: string, id: string, label: string): Promise<boolean> => {
-      if (!storageService.getAdminToken()) {
-        showActionFeedback(
-          false,
-          `Penghapusan ${label} dinonaktifkan untuk non-admin! Semua penghapusan wajib melalui otorisasi Admin Database Satu Pintu (Soft-Delete).`
-        );
-        return false;
+  const performUserOrAdminSoftDelete = useCallback(
+    async (collection: string, id: string, label: string): Promise<{ ok: boolean; message?: string }> => {
+      const hasStaffSession = Boolean(storageService.getStaffToken());
+      const hasAdminSession = Boolean(storageService.getAdminToken());
+
+      if (hasStaffSession || (hasAdminSession && currentUserRef.current)) {
+        setSyncStatus('saving');
+        const res = await storageService.staffSelfSave({
+          actionType: 'DELETE_RECORD',
+          collection,
+          id
+        });
+        setSyncStatus('synced');
+        if (res.ok) {
+          if (res.data?.databaseMetrics) {
+            setDatabaseCapacitySummary({
+              totalUsedBytes: res.data.databaseMetrics.totalUsedBytes,
+              totalQuotaBytes: res.data.databaseMetrics.totalQuotaBytes,
+              totalPercentUsed: res.data.databaseMetrics.totalPercentUsed,
+              effectiveAlertLevel: res.data.databaseMetrics.effectiveAlertLevel
+            });
+          }
+          const msg = formatApiErrorMessage(res.data?.message, `${label} berhasil dihapus secara permanen.`);
+          showActionFeedback(true, msg);
+          return { ok: true, message: msg };
+        }
+        const errMsg = formatApiErrorMessage(res.error, `Gagal menghapus ${label}.`);
+        showActionFeedback(false, errMsg);
+        return { ok: false, message: errMsg };
       }
-      setSyncStatus('saving');
-      const res = await storageService.adminSoftDeleteRecord(collection, id);
-      setSyncStatus('synced');
-      if (res.ok) {
-        showActionFeedback(true, `${label} dipindahkan ke Arsip Sementara (Soft-Delete) Database Admin.`);
-        return true;
+
+      if (hasAdminSession) {
+        setSyncStatus('saving');
+        const res = await storageService.adminSoftDeleteRecord(collection, id);
+        setSyncStatus('synced');
+        if (res.ok) {
+          const msg = `${label} dipindahkan ke Arsip Sementara (Soft-Delete) Database Admin.`;
+          showActionFeedback(true, msg);
+          return { ok: true, message: msg };
+        }
+        const errMsg = formatApiErrorMessage(res.error, `Gagal menghapus ${label}.`);
+        showActionFeedback(false, errMsg);
+        return { ok: false, message: errMsg };
       }
-      showActionFeedback(false, formatApiErrorMessage(res.error, `Gagal menghapus ${label}.`));
-      return false;
+
+      const authMsg = 'Silakan masuk terlebih dahulu agar penghapusan data tersimpan permanen.';
+      showActionFeedback(false, authMsg);
+      return { ok: false, message: authMsg };
+    },
+    [showActionFeedback]
+  );
+
+  const performUserOrAdminBatchSoftDelete = useCallback(
+    async (
+      collection: string,
+      ids: string[],
+      label: string
+    ): Promise<{ ok: boolean; deletedIds: string[]; message?: string }> => {
+      const cleanIds = Array.from(new Set((ids || []).map(x => String(x || '').trim()).filter(Boolean)));
+      if (cleanIds.length === 0) {
+        return { ok: false, deletedIds: [], message: `Tidak ada ${label} yang dipilih.` };
+      }
+
+      const hasStaffSession = Boolean(storageService.getStaffToken());
+      const hasAdminSession = Boolean(storageService.getAdminToken());
+
+      if (hasStaffSession || (hasAdminSession && currentUserRef.current)) {
+        setSyncStatus('saving');
+        const res = await storageService.staffSelfSave({
+          actionType: 'DELETE_RECORDS_BATCH',
+          collection,
+          ids: cleanIds
+        });
+        setSyncStatus('synced');
+        if (res.ok) {
+          if (res.data?.databaseMetrics) {
+            setDatabaseCapacitySummary({
+              totalUsedBytes: res.data.databaseMetrics.totalUsedBytes,
+              totalQuotaBytes: res.data.databaseMetrics.totalQuotaBytes,
+              totalPercentUsed: res.data.databaseMetrics.totalPercentUsed,
+              effectiveAlertLevel: res.data.databaseMetrics.effectiveAlertLevel
+            });
+          }
+          const deletedIds = res.data?.deletedIds || cleanIds;
+          const msg = formatApiErrorMessage(
+            res.data?.message,
+            `${deletedIds.length} ${label} berhasil dihapus secara permanen.`
+          );
+          showActionFeedback(true, msg);
+          return { ok: true, deletedIds, message: msg };
+        }
+        const errMsg = formatApiErrorMessage(res.error, `Gagal menghapus pilihan ${label}.`);
+        showActionFeedback(false, errMsg);
+        return { ok: false, deletedIds: [], message: errMsg };
+      }
+
+      if (hasAdminSession) {
+        setSyncStatus('saving');
+        const results = await Promise.all(cleanIds.map(id => storageService.adminSoftDeleteRecord(collection, id)));
+        setSyncStatus('synced');
+        const succeededIds = cleanIds.filter((_, idx) => results[idx]?.ok);
+        if (succeededIds.length > 0) {
+          const msg = `${succeededIds.length} ${label} dipindahkan ke Arsip Sementara (Soft-Delete) Database Admin.`;
+          showActionFeedback(true, msg);
+          return { ok: true, deletedIds: succeededIds, message: msg };
+        }
+        const firstErr = results.find(r => !r.ok)?.error;
+        const errMsg = formatApiErrorMessage(firstErr, `Gagal menghapus pilihan ${label}.`);
+        showActionFeedback(false, errMsg);
+        return { ok: false, deletedIds: [], message: errMsg };
+      }
+
+      const authMsg = 'Silakan masuk terlebih dahulu agar penghapusan data tersimpan permanen.';
+      showActionFeedback(false, authMsg);
+      return { ok: false, deletedIds: [], message: authMsg };
     },
     [showActionFeedback]
   );
@@ -1263,27 +1360,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteTask = (id: string) => {
-    performAdminOnlySoftDelete('tasks', id, 'Jurnal Tugas').then(ok => {
-      if (ok) {
+    performUserOrAdminSoftDelete('tasks', id, 'Jurnal Tugas').then(res => {
+      if (res.ok) {
         setTasks(prev => prev.filter(t => t.id !== id));
       }
     });
   };
 
-  const deleteMultipleTasks = (ids: string[]) => {
-    if (!ids || ids.length === 0) return;
-    if (!storageService.getAdminToken()) {
-      showActionFeedback(
-        false,
-        'Hapus massal dinonaktifkan untuk non-admin! Penghapusan hanya bisa dilakukan melalui Database Admin Satu Pintu.'
-      );
-      return;
-    }
-    Promise.all(ids.map(id => storageService.adminSoftDeleteRecord('tasks', id))).then(() => {
-      const idSet = new Set(ids);
+  const deleteMultipleTasks = async (ids: string[]): Promise<boolean> => {
+    if (!ids || ids.length === 0) return false;
+    const res = await performUserOrAdminBatchSoftDelete('tasks', ids, 'Jurnal Tugas');
+    if (res.ok) {
+      const idSet = new Set(res.deletedIds);
       setTasks(prev => prev.filter(t => !idSet.has(t.id)));
-      showActionFeedback(true, `${ids.length} tugas dipindahkan ke Arsip Sementara (Soft-Delete).`);
-    });
+      return true;
+    }
+    return false;
   };
 
   const addInventory = (newItem: Omit<InventoryItem, 'id'>) => {
@@ -1332,21 +1424,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteInventory = (id: string) => {
-    performAdminOnlySoftDelete('inventories', id, 'Data Inventaris').then(ok => {
-      if (ok) setInventories(prev => prev.filter(i => i.id !== id));
+    performUserOrAdminSoftDelete('inventories', id, 'Data Inventaris').then(res => {
+      if (res.ok) setInventories(prev => prev.filter(i => i.id !== id));
     });
   };
 
   const deleteMultipleInventories = (ids: string[]) => {
     if (!ids || ids.length === 0) return;
-    if (!storageService.getAdminToken()) {
-      showActionFeedback(false, 'Penghapusan inventaris massal hanya diizinkan oleh Admin Database.');
-      return;
-    }
-    Promise.all(ids.map(id => storageService.adminSoftDeleteRecord('inventories', id))).then(() => {
-      const idSet = new Set(ids);
-      setInventories(prev => prev.filter(i => !idSet.has(i.id)));
-      showActionFeedback(true, `${ids.length} inventaris dipindahkan ke Arsip Sementara.`);
+    performUserOrAdminBatchSoftDelete('inventories', ids, 'Data Inventaris').then(res => {
+      if (res.ok) {
+        const idSet = new Set(res.deletedIds);
+        setInventories(prev => prev.filter(i => !idSet.has(i.id)));
+      }
     });
   };
 
@@ -1376,21 +1465,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteLibraryBook = (id: string) => {
-    performAdminOnlySoftDelete('libraryBooks', id, 'Koleksi Buku').then(ok => {
-      if (ok) setLibraryBooks(prev => prev.filter(b => b.id !== id));
+    performUserOrAdminSoftDelete('libraryBooks', id, 'Koleksi Buku').then(res => {
+      if (res.ok) setLibraryBooks(prev => prev.filter(b => b.id !== id));
     });
   };
 
   const deleteMultipleLibraryBooks = (ids: string[]) => {
     if (!ids || ids.length === 0) return;
-    if (!storageService.getAdminToken()) {
-      showActionFeedback(false, 'Penghapusan koleksi buku massal hanya diizinkan oleh Admin Database.');
-      return;
-    }
-    Promise.all(ids.map(id => storageService.adminSoftDeleteRecord('libraryBooks', id))).then(() => {
-      const idSet = new Set(ids);
-      setLibraryBooks(prev => prev.filter(b => !idSet.has(b.id)));
-      showActionFeedback(true, `${ids.length} buku dipindahkan ke Arsip Sementara.`);
+    performUserOrAdminBatchSoftDelete('libraryBooks', ids, 'Koleksi Buku').then(res => {
+      if (res.ok) {
+        const idSet = new Set(res.deletedIds);
+        setLibraryBooks(prev => prev.filter(b => !idSet.has(b.id)));
+      }
     });
   };
 
@@ -1480,21 +1566,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteLibraryMember = (id: string) => {
-    performAdminOnlySoftDelete('libraryMembers', id, 'Anggota Perpustakaan').then(ok => {
-      if (ok) setLibraryMembers(prev => prev.filter(m => m.id !== id));
+    performUserOrAdminSoftDelete('libraryMembers', id, 'Anggota Perpustakaan').then(res => {
+      if (res.ok) setLibraryMembers(prev => prev.filter(m => m.id !== id));
     });
   };
 
   const deleteMultipleLibraryMembers = (ids: string[]) => {
     if (!ids || ids.length === 0) return;
-    if (!storageService.getAdminToken()) {
-      showActionFeedback(false, 'Penghapusan anggota massal hanya diizinkan oleh Admin Database.');
-      return;
-    }
-    Promise.all(ids.map(id => storageService.adminSoftDeleteRecord('libraryMembers', id))).then(() => {
-      const idSet = new Set(ids);
-      setLibraryMembers(prev => prev.filter(m => !idSet.has(m.id)));
-      showActionFeedback(true, `${ids.length} anggota dipindahkan ke Arsip Sementara.`);
+    performUserOrAdminBatchSoftDelete('libraryMembers', ids, 'Anggota Perpustakaan').then(res => {
+      if (res.ok) {
+        const idSet = new Set(res.deletedIds);
+        setLibraryMembers(prev => prev.filter(m => !idSet.has(m.id)));
+      }
     });
   };
 
@@ -1614,8 +1697,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteArchive = (id: string) => {
-    performAdminOnlySoftDelete('archives', id, 'Arsip Dokumen').then(ok => {
-      if (ok) setArchives(prev => prev.filter(a => a.id !== id));
+    performUserOrAdminSoftDelete('archives', id, 'Arsip Dokumen').then(res => {
+      if (res.ok) setArchives(prev => prev.filter(a => a.id !== id));
     });
   };
 
@@ -1696,12 +1779,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteBeritaAcaraRecord = async (id: string): Promise<{ ok: boolean; message?: string }> => {
-    const ok = await performAdminOnlySoftDelete('beritaAcaraHistory', id, 'Riwayat Berita Acara');
-    if (ok) {
+    const res = await performUserOrAdminSoftDelete('beritaAcaraHistory', id, 'Riwayat Berita Acara');
+    if (res.ok) {
       setBeritaAcaraHistory(prev => prev.filter(r => r.id !== id));
-      return { ok: true };
+      return { ok: true, message: res.message };
     }
-    return { ok: false, message: 'Penghapusan hanya dapat dilakukan melalui otorisasi Admin Database.' };
+    return { ok: false, message: res.message || 'Gagal menghapus Riwayat Berita Acara.' };
   };
 
   // Multi-Tenant Letterhead & Signature (Permanent Auto-Save & Isolated Per User)
@@ -2003,8 +2086,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteCustomCategory = (id: string) => {
-    performAdminOnlySoftDelete('customCategories', id, 'Kategori Tugas').then(ok => {
-      if (ok) setCustomCategories(prev => prev.filter(c => c.id !== id));
+    performUserOrAdminSoftDelete('customCategories', id, 'Kategori Tugas').then(res => {
+      if (res.ok) setCustomCategories(prev => prev.filter(c => c.id !== id));
     });
   };
 
@@ -2076,8 +2159,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteTupoksiItem = (role: RoleType, type: 'pokok' | 'tambahan', indexOrText: number | string) => {
-    if (!storageService.getAdminToken()) {
-      showActionFeedback(false, 'Penghapusan butir Tupoksi hanya diizinkan melalui otorisasi Admin Database.');
+    const hasStaffSession = Boolean(storageService.getStaffToken());
+    const hasAdminSession = Boolean(storageService.getAdminToken());
+    if (!hasStaffSession && !hasAdminSession) {
+      showActionFeedback(false, 'Silakan masuk terlebih dahulu agar penghapusan butir Tupoksi tersimpan permanen.');
       return;
     }
     const currentRoleObj = tupoksiDefinitions[role] || OFFICIAL_TUPOKSI_DEFINITIONS[role];
@@ -2094,20 +2179,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? updatedTambahan.filter((_, i) => i !== indexOrText)
           : updatedTambahan.filter(item => item !== indexOrText);
     }
+    const updatedRoleObj = { tupoksiList: updatedPokok, tugasTambahanList: updatedTambahan };
     const next: TupoksiDefinitionsMap = {
       ...tupoksiDefinitions,
-      [role]: { tupoksiList: updatedPokok, tugasTambahanList: updatedTambahan }
+      [role]: updatedRoleObj
     };
     setTupoksiDefinitions(next);
-    persistDirectAdminState({ tupoksiDefinitions: next }, 'Hapus Butir Tupoksi');
+
+    if (hasStaffSession || (hasAdminSession && currentUser)) {
+      setSyncStatus('saving');
+      storageService
+        .staffSelfSave({
+          actionType: 'SAVE_TUPOKSI',
+          payload: { role, ...updatedRoleObj }
+        })
+        .then(res => {
+          setSyncStatus('synced');
+          if (res.ok) showActionFeedback(true, 'Butir Tupoksi berhasil dihapus dan tersimpan permanen untuk akun Anda.');
+          else showActionFeedback(false, formatApiErrorMessage(res.error, 'Gagal menghapus butir Tupoksi.'));
+        });
+    } else if (hasAdminSession) {
+      persistDirectAdminState({ tupoksiDefinitions: next }, 'Hapus Butir Tupoksi').then(ok => {
+        if (ok) showActionFeedback(true, 'Butir Tupoksi berhasil dihapus dari Database Admin.');
+      });
+    }
   };
 
   const resetTupoksiToDefault = (role?: RoleType) => {
-    if (!storageService.getAdminToken()) {
-      showActionFeedback(false, 'Reset Tupoksi ke default hanya dapat dijalankan oleh Admin Database.');
+    const hasStaffSession = Boolean(storageService.getStaffToken());
+    const hasAdminSession = Boolean(storageService.getAdminToken());
+    if (!hasStaffSession && !hasAdminSession) {
+      showActionFeedback(false, 'Silakan masuk terlebih dahulu untuk mengatur ulang Tupoksi.');
       return;
     }
-    const next = role
+    const next: TupoksiDefinitionsMap = role
       ? {
           ...tupoksiDefinitions,
           [role]: {
@@ -2117,7 +2222,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       : JSON.parse(JSON.stringify(OFFICIAL_TUPOKSI_DEFINITIONS));
     setTupoksiDefinitions(next);
-    persistDirectAdminState({ tupoksiDefinitions: next }, 'Reset Tupoksi');
+
+    if (hasStaffSession || (hasAdminSession && currentUser)) {
+      setSyncStatus('saving');
+      const rolesToReset: RoleType[] = role ? [role] : ['TU', 'PENJAGA', 'SERVICE', 'PERPUS', 'LAB_IPA'];
+      (async () => {
+        let allOk = true;
+        for (const r of rolesToReset) {
+          const res = await storageService.staffSelfSave({
+            actionType: 'SAVE_TUPOKSI',
+            payload: { role: r, ...next[r] }
+          });
+          if (!res.ok) allOk = false;
+        }
+        setSyncStatus('synced');
+        if (allOk) {
+          showActionFeedback(true, 'Daftar Tupoksi dikembalikan ke standar awal untuk akun Anda.');
+        } else {
+          showActionFeedback(false, 'Sebagian data Tupoksi gagal disimpan ulang ke server.');
+        }
+      })();
+    } else if (hasAdminSession) {
+      persistDirectAdminState({ tupoksiDefinitions: next }, 'Reset Tupoksi').then(ok => {
+        if (ok) showActionFeedback(true, 'Daftar Tupoksi dikembalikan ke standar awal.');
+      });
+    }
   };
 
   const generateMonthlyReportFromTasks = (

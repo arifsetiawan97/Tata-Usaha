@@ -1,6 +1,36 @@
 {
   "tasks": [
     {
+      "id": "tsk-shared-base-1",
+      "role": "TU",
+      "category": "kepegawaian",
+      "taskType": "pokok",
+      "title": "Base 1",
+      "description": "Desc",
+      "date": "2026-09-01",
+      "timeStart": "08:00",
+      "timeEnd": "09:00",
+      "status": "selesai",
+      "location": "TU",
+      "petugas": "Sys",
+      "volumeUnit": "1 Dok"
+    },
+    {
+      "id": "tsk-shared-base-2",
+      "role": "TU",
+      "category": "kepegawaian",
+      "taskType": "pokok",
+      "title": "Base 2",
+      "description": "Desc",
+      "date": "2026-09-02",
+      "timeStart": "08:00",
+      "timeEnd": "09:00",
+      "status": "selesai",
+      "location": "TU",
+      "petugas": "Sys",
+      "volumeUnit": "1 Dok"
+    },
+    {
       "id": "tsk-pjg-000",
       "role": "PENJAGA",
       "date": "2026-09-25",
@@ -1644,7 +1674,7 @@
       "createdAt": "2026-09-01"
     }
   ],
-  "lastUpdated": "2026-11-22T12:27:37.622Z",
+  "lastUpdated": "2026-11-23T13:31:32.426Z",
   "libraryBooks": [
     {
       "id": "bk-2026-07-01",
@@ -1914,6 +1944,32 @@
   },
   "accessUsers": [
     {
+      "id": "usr-deltest-1",
+      "namaLengkap": "Penguji Hapus A",
+      "username": "deltest_a",
+      "role": "TU",
+      "passwordHash": "scrypt$6bdd8eea236dbfdf6d7cf397a8e75078$8192f7508579d588fb9b53d76c3326164fa54b88f580dbb599f580152e546f015d1ca838d5349b80447b121e64ba423eec584928ef899519a7aac01794c85a0a",
+      "passwordFingerprint": "b52c26b607c1e90593b4104a9a6e5f8daae4f658f8063c78429ceb7c9d987836",
+      "status": "APPROVED",
+      "createdAt": "2026-11-23T13:31:31.395Z",
+      "lastLoginAt": "2026-11-23T13:31:31.619Z",
+      "mustChangePassword": false,
+      "passwordChangeHistory": []
+    },
+    {
+      "id": "usr-deltest-2",
+      "namaLengkap": "Penguji Hapus B",
+      "username": "deltest_b",
+      "role": "TU",
+      "passwordHash": "scrypt$a6edcbc62eccec9c9010d489adb4c06c$ace3139dc73057d3d89e7ce129592efff210eb9661dbaf56afdb769be7ee89251b71893cd61bcb33d80ba4b7261da6b79480aa7947e4ec04bee3364eeb8e2233",
+      "passwordFingerprint": "f1750ac90b2c699d170b9e43a14782bc8b93e9b2be1e35b0ace51a5dcdf7d0a7",
+      "status": "APPROVED",
+      "createdAt": "2026-11-23T13:31:31.395Z",
+      "lastLoginAt": "2026-11-23T13:31:31.757Z",
+      "mustChangePassword": false,
+      "passwordChangeHistory": []
+    },
+    {
       "id": "usr-legacy-1795134200714-abukf",
       "namaLengkap": "KHODIJAH, A.Ma.",
       "username": "khodijah",
@@ -2105,7 +2161,93 @@
     "updatedAt": "2026-11-21T15:54:06.803Z",
     "updatedBy": "Sistem"
   },
-  "softDeletedItems": [],
+  "softDeletedItems": [
+    {
+      "trashId": "trsh-1795440691963-9znz",
+      "sourceCollection": "tasks",
+      "isCustomDb": false,
+      "originalId": "tsk-shared-base-1__u_f7c8dc01",
+      "itemTitle": "Forked Base Task 1",
+      "itemSnapshot": {
+        "id": "tsk-shared-base-1__u_f7c8dc01",
+        "role": "TU",
+        "category": "kepegawaian",
+        "taskType": "pokok",
+        "title": "Forked Base Task 1",
+        "description": "Desc",
+        "date": "2026-09-01",
+        "timeStart": "08:00",
+        "timeEnd": "09:00",
+        "status": "selesai",
+        "location": "TU",
+        "petugas": "Sys",
+        "volumeUnit": "1 Dok",
+        "forkedFromId": "tsk-shared-base-1",
+        "ownerUserId": "usr-deltest-1",
+        "ownerUsername": "deltest_a",
+        "updatedAt": "2026-11-23T13:31:31.905Z"
+      },
+      "deletedAt": "2026-11-23T13:31:31.963Z",
+      "deletedBy": "deltest_a",
+      "reason": "Dihapus oleh pengguna @deltest_a"
+    },
+    {
+      "trashId": "trsh-1795440691963-9d8c",
+      "sourceCollection": "tasks",
+      "isCustomDb": false,
+      "originalId": "tsk-test-a2",
+      "itemTitle": "Test A2",
+      "itemSnapshot": {
+        "id": "tsk-test-a2",
+        "role": "TU",
+        "category": "kepegawaian",
+        "taskType": "pokok",
+        "title": "Test A2",
+        "description": "Desc",
+        "date": "2026-09-02",
+        "timeStart": "08:00",
+        "timeEnd": "09:00",
+        "status": "selesai",
+        "location": "TU",
+        "petugas": "A",
+        "volumeUnit": "1 Dok",
+        "ownerUserId": "usr-deltest-1",
+        "ownerUsername": "deltest_a",
+        "updatedAt": "2026-11-23T13:31:31.872Z"
+      },
+      "deletedAt": "2026-11-23T13:31:31.963Z",
+      "deletedBy": "deltest_a",
+      "reason": "Dihapus oleh pengguna @deltest_a"
+    },
+    {
+      "trashId": "trsh-1795440691936-by86",
+      "sourceCollection": "tasks",
+      "isCustomDb": false,
+      "originalId": "tsk-test-a1",
+      "itemTitle": "Test A1",
+      "itemSnapshot": {
+        "id": "tsk-test-a1",
+        "role": "TU",
+        "category": "kepegawaian",
+        "taskType": "pokok",
+        "title": "Test A1",
+        "description": "Desc",
+        "date": "2026-09-01",
+        "timeStart": "08:00",
+        "timeEnd": "09:00",
+        "status": "selesai",
+        "location": "TU",
+        "petugas": "A",
+        "volumeUnit": "1 Dok",
+        "ownerUserId": "usr-deltest-1",
+        "ownerUsername": "deltest_a",
+        "updatedAt": "2026-11-23T13:31:31.835Z"
+      },
+      "deletedAt": "2026-11-23T13:31:31.936Z",
+      "deletedBy": "deltest_a",
+      "reason": "Dihapus oleh pengguna @deltest_a"
+    }
+  ],
   "backups": [
     {
       "id": "bkp-1795280083100-gad5",
@@ -4374,6 +4516,237 @@
   },
   "auditLogs": [
     {
+      "id": "aud-1795440692426-eweiv",
+      "timestamp": "2026-11-23T13:31:32.426Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_HIDE_OR_DELETE_RECORD",
+      "targetDatabase": "customCategories",
+      "targetId": "id-test-del",
+      "status": "SUCCESS",
+      "detail": "Menghapus/menyembunyikan data (not-found-idempotent) pada customCategories untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692390-om826",
+      "timestamp": "2026-11-23T13:31:32.390Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_BATCH_DELETE_RECORDS",
+      "targetDatabase": "beritaAcaraHistory",
+      "targetId": "2 items",
+      "status": "SUCCESS",
+      "detail": "Menghapus permanen 2 data terpilih dari beritaAcaraHistory untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692367-82r2i",
+      "timestamp": "2026-11-23T13:31:32.367Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_HIDE_OR_DELETE_RECORD",
+      "targetDatabase": "beritaAcaraHistory",
+      "targetId": "id-test-del",
+      "status": "SUCCESS",
+      "detail": "Menghapus/menyembunyikan data (not-found-idempotent) pada beritaAcaraHistory untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692332-av8h8",
+      "timestamp": "2026-11-23T13:31:32.332Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_BATCH_DELETE_RECORDS",
+      "targetDatabase": "archives",
+      "targetId": "2 items",
+      "status": "SUCCESS",
+      "detail": "Menghapus permanen 2 data terpilih dari archives untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692306-zwsn1",
+      "timestamp": "2026-11-23T13:31:32.306Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_HIDE_OR_DELETE_RECORD",
+      "targetDatabase": "archives",
+      "targetId": "id-test-del",
+      "status": "SUCCESS",
+      "detail": "Menghapus/menyembunyikan data (not-found-idempotent) pada archives untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692272-hz4ky",
+      "timestamp": "2026-11-23T13:31:32.272Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_BATCH_DELETE_RECORDS",
+      "targetDatabase": "libraryMembers",
+      "targetId": "2 items",
+      "status": "SUCCESS",
+      "detail": "Menghapus permanen 2 data terpilih dari libraryMembers untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692250-54jqv",
+      "timestamp": "2026-11-23T13:31:32.250Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_HIDE_OR_DELETE_RECORD",
+      "targetDatabase": "libraryMembers",
+      "targetId": "id-test-del",
+      "status": "SUCCESS",
+      "detail": "Menghapus/menyembunyikan data (not-found-idempotent) pada libraryMembers untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692218-fzrer",
+      "timestamp": "2026-11-23T13:31:32.218Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_BATCH_DELETE_RECORDS",
+      "targetDatabase": "libraryBooks",
+      "targetId": "2 items",
+      "status": "SUCCESS",
+      "detail": "Menghapus permanen 2 data terpilih dari libraryBooks untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692185-yl5by",
+      "timestamp": "2026-11-23T13:31:32.185Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_HIDE_OR_DELETE_RECORD",
+      "targetDatabase": "libraryBooks",
+      "targetId": "id-test-del",
+      "status": "SUCCESS",
+      "detail": "Menghapus/menyembunyikan data (not-found-idempotent) pada libraryBooks untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692151-8z49a",
+      "timestamp": "2026-11-23T13:31:32.151Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_BATCH_DELETE_RECORDS",
+      "targetDatabase": "inventories",
+      "targetId": "2 items",
+      "status": "SUCCESS",
+      "detail": "Menghapus permanen 2 data terpilih dari inventories untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692124-obs1y",
+      "timestamp": "2026-11-23T13:31:32.124Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_HIDE_OR_DELETE_RECORD",
+      "targetDatabase": "inventories",
+      "targetId": "id-test-del",
+      "status": "SUCCESS",
+      "detail": "Menghapus/menyembunyikan data (not-found-idempotent) pada inventories untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440692047-fuefk",
+      "timestamp": "2026-11-23T13:31:32.047Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "SAVE_USER_TUPOKSI",
+      "targetDatabase": "userTupoksiDefinitions",
+      "targetId": "usr-deltest-1:TU",
+      "status": "SUCCESS",
+      "detail": "Menyimpan daftar Tupoksi (TU) terisolasi untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440691964-smcy2",
+      "timestamp": "2026-11-23T13:31:31.964Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_BATCH_DELETE_RECORDS",
+      "targetDatabase": "tasks",
+      "targetId": "3 items",
+      "status": "SUCCESS",
+      "detail": "Menghapus permanen 3 data terpilih dari tasks untuk @deltest_a."
+    },
+    {
+      "id": "aud-1795440691963-bu2m7",
+      "timestamp": "2026-11-23T13:31:31.963Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "SOFT_DELETE",
+      "targetDatabase": "tasks",
+      "targetId": "tsk-shared-base-1__u_f7c8dc01",
+      "status": "SUCCESS",
+      "detail": "Memindahkan \"Forked Base Task 1\" ke Arsip Sementara (Soft Delete)."
+    },
+    {
+      "id": "aud-1795440691963-0kpw0",
+      "timestamp": "2026-11-23T13:31:31.963Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "SOFT_DELETE",
+      "targetDatabase": "tasks",
+      "targetId": "tsk-test-a2",
+      "status": "SUCCESS",
+      "detail": "Memindahkan \"Test A2\" ke Arsip Sementara (Soft Delete)."
+    },
+    {
+      "id": "aud-1795440691936-xhymn",
+      "timestamp": "2026-11-23T13:31:31.936Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "SOFT_DELETE",
+      "targetDatabase": "tasks",
+      "targetId": "tsk-test-a1",
+      "status": "SUCCESS",
+      "detail": "Memindahkan \"Test A1\" ke Arsip Sementara (Soft Delete)."
+    },
+    {
+      "id": "aud-1795440691908-znwu1",
+      "timestamp": "2026-11-23T13:31:31.908Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_FORK_OR_SAVE_RECORD",
+      "targetDatabase": "tasks",
+      "targetId": "tsk-shared-base-1__u_f7c8dc01",
+      "status": "SUCCESS",
+      "detail": "Menyimpan permanen data pada tasks untuk @deltest_a (terisolasi)."
+    },
+    {
+      "id": "aud-1795440691875-cfz5z",
+      "timestamp": "2026-11-23T13:31:31.875Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_SAVE_RECORD",
+      "targetDatabase": "tasks",
+      "targetId": "tsk-test-a2",
+      "status": "SUCCESS",
+      "detail": "Menyimpan permanen data pada tasks untuk @deltest_a (terisolasi)."
+    },
+    {
+      "id": "aud-1795440691840-5801y",
+      "timestamp": "2026-11-23T13:31:31.840Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "USER_SAVE_RECORD",
+      "targetDatabase": "tasks",
+      "targetId": "tsk-test-a1",
+      "status": "SUCCESS",
+      "detail": "Menyimpan permanen data pada tasks untuk @deltest_a (terisolasi)."
+    },
+    {
+      "id": "aud-1795440691757-pjwy9",
+      "timestamp": "2026-11-23T13:31:31.757Z",
+      "actor": "deltest_b",
+      "actorRole": "TU",
+      "action": "LOGIN_SUCCESS",
+      "targetDatabase": "accessUsers",
+      "targetId": "usr-deltest-2",
+      "status": "SUCCESS",
+      "detail": "Berhasil masuk ke layanan Tata Usaha (TU)."
+    },
+    {
+      "id": "aud-1795440691620-56vv5",
+      "timestamp": "2026-11-23T13:31:31.620Z",
+      "actor": "deltest_a",
+      "actorRole": "TU",
+      "action": "LOGIN_SUCCESS",
+      "targetDatabase": "accessUsers",
+      "targetId": "usr-deltest-1",
+      "status": "SUCCESS",
+      "detail": "Berhasil masuk ke layanan Tata Usaha (TU)."
+    },
+    {
       "id": "aud-1795350457622-ic7e7",
       "timestamp": "2026-11-22T12:27:37.622Z",
       "actor": "admin",
@@ -4530,7 +4903,17 @@
   ],
   "staffSubmissions": [],
   "migrationLogs": [],
-  "userTupoksiDefinitions": {},
+  "userTupoksiDefinitions": {
+    "usr-deltest-1": {
+      "TU": {
+        "tupoksiList": [
+          "Tupoksi Satu"
+        ],
+        "tugasTambahanList": []
+      },
+      "updatedAt": "2026-11-23T13:31:32.047Z"
+    }
+  },
   "userLibraryMemberStats": {},
   "adminAccount": {
     "id": "admin-root",
@@ -4543,5 +4926,42 @@
     "isDefaultCredentials": true,
     "createdAt": "2026-11-22T11:40:12.633Z",
     "updatedAt": "2026-11-22T11:40:12.633Z"
+  },
+  "userServiceBackgrounds": {},
+  "userHiddenRecords": {
+    "usr-deltest-1": {
+      "tasks": [
+        "tsk-shared-base-1",
+        "tsk-shared-base-2"
+      ],
+      "inventories": [
+        "id-test-del",
+        "id-test-batch-1",
+        "id-test-batch-2"
+      ],
+      "libraryBooks": [
+        "id-test-del",
+        "id-test-batch-1",
+        "id-test-batch-2"
+      ],
+      "libraryMembers": [
+        "id-test-del",
+        "id-test-batch-1",
+        "id-test-batch-2"
+      ],
+      "archives": [
+        "id-test-del",
+        "id-test-batch-1",
+        "id-test-batch-2"
+      ],
+      "beritaAcaraHistory": [
+        "id-test-del",
+        "id-test-batch-1",
+        "id-test-batch-2"
+      ],
+      "customCategories": [
+        "id-test-del"
+      ]
+    }
   }
 }

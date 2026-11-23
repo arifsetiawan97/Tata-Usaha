@@ -586,10 +586,14 @@ class StorageService {
       | 'SAVE_LIBRARY_MEMBER_STATS'
       | 'SAVE_RECORD'
       | 'SAVE_RECORDS_BATCH'
+      | 'DELETE_RECORD'
+      | 'DELETE_RECORDS_BATCH'
       | 'SAVE_SERVICE_BACKGROUND'
       | 'RESET_SERVICE_BACKGROUND';
     collection?: string;
     role?: RoleType;
+    id?: string;
+    ids?: string[];
     payload?: any;
     records?: any[];
   }) {
@@ -604,6 +608,7 @@ class StorageService {
       collection?: string;
       savedRecord?: any;
       savedRecords?: any[];
+      deletedIds?: string[];
       replacedId?: string | null;
       databaseMetrics?: DatabaseMetricsSummary;
       lastUpdated?: string;

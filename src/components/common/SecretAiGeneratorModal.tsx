@@ -741,7 +741,7 @@ export const SecretAiGeneratorModal: React.FC<SecretAiGeneratorModalProps> = ({
         }).map(t => t.id);
 
         if (existingTaskIds.length > 0) {
-          deleteMultipleTasks(existingTaskIds);
+          await deleteMultipleTasks(existingTaskIds);
         }
       }
 

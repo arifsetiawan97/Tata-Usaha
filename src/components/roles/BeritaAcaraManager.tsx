@@ -371,9 +371,9 @@ export const BeritaAcaraManager: React.FC = () => {
     try {
       const res = await deleteBeritaAcaraRecord(id);
       if (res.ok) {
-        showToast('Riwayat Berita Acara dipindahkan ke Arsip Sementara (Soft-Delete) Database Admin.');
+        showToast(res.message || 'Riwayat Berita Acara berhasil dihapus.');
       } else {
-        showToast(res.message || 'Penghapusan dinonaktifkan untuk non-admin. Hubungi Admin Database.');
+        showToast(res.message || 'Gagal menghapus Riwayat Berita Acara.');
       }
     } finally {
       setIsSavingHistory(false);
@@ -585,10 +585,10 @@ export const BeritaAcaraManager: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            disabled={!isAdminAuthenticated || isSavingHistory}
+                            disabled={isSavingHistory}
                             onClick={() => handleDeleteHistory(rec.id)}
                             className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-md cursor-pointer"
-                            title={isAdminAuthenticated ? 'Hapus ke Arsip Sementara (Admin)' : 'Penghapusan hanya melalui Admin Database'}
+                            title="Hapus Riwayat Berita Acara"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

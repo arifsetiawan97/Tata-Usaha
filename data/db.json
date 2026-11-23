@@ -4544,5 +4544,6 @@
     "createdAt": "2026-11-22T11:40:12.633Z",
     "updatedAt": "2026-11-22T11:40:12.633Z"
   },
-  "userServiceBackgrounds": {}
+  "userServiceBackgrounds": {},
+  "userHiddenRecords": {}
 }

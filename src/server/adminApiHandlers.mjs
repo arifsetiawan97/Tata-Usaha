@@ -925,6 +925,84 @@ function upsertUserIsolatedRecord(db, collection, rawRecord, { isolationKey, act
   return { ok: true, savedRecord, replacedId };
 }
 
+function deleteUserIsolatedRecord(db, collection, rawId, { isolationKey, actorName, actorRole, isAdminRoot }) {
+  const cleanId = String(rawId || '').trim();
+  if (!cleanId) {
+    return { ok: false, status: 400, error: 'ID data yang akan dihapus tidak valid.' };
+  }
+
+  if (!Array.isArray(db[collection])) db[collection] = [];
+  const list = db[collection];
+
+  const belongsToCaller = (item) => {
+    if (!item || typeof item !== 'object') return false;
+    if (item.ownerUserId) return item.ownerUserId === isolationKey;
+    if (item.ownerUsername) return String(item.ownerUsername).trim().toLowerCase() === String(actorName).toLowerCase();
+    return false;
+  };
+
+  const markHiddenForCaller = (targetId) => {
+    if (!targetId) return;
+    if (!db.userHiddenRecords || typeof db.userHiddenRecords !== 'object') {
+      db.userHiddenRecords = {};
+    }
+    if (!db.userHiddenRecords[isolationKey] || typeof db.userHiddenRecords[isolationKey] !== 'object') {
+      db.userHiddenRecords[isolationKey] = {};
+    }
+    const existingArr = Array.isArray(db.userHiddenRecords[isolationKey][collection])
+      ? db.userHiddenRecords[isolationKey][collection]
+      : [];
+    const nextSet = new Set(existingArr);
+    nextSet.add(targetId);
+    db.userHiddenRecords[isolationKey][collection] = Array.from(nextSet).slice(-2000);
+  };
+
+  // Case 1: Direct ID match owned by caller OR Admin Root
+  const directItem = list.find(item => item && item.id === cleanId);
+  if (directItem && (belongsToCaller(directItem) || isAdminRoot)) {
+    const delRes = softDeleteRecord(db, {
+      collection,
+      id: directItem.id,
+      actor: actorName,
+      actorRole,
+      reason: isAdminRoot ? 'Dihapus Admin' : `Dihapus oleh pengguna @${actorName}`
+    });
+    if (!delRes.ok) return delRes;
+    if (directItem.forkedFromId && !isAdminRoot) {
+      markHiddenForCaller(directItem.forkedFromId);
+    }
+    return { ok: true, mode: 'soft-delete', deletedId: cleanId };
+  }
+
+  // Case 2: Caller owns forked copy(s) of this base ID
+  const callerForks = list.filter(item => item && item.forkedFromId === cleanId && belongsToCaller(item));
+  if (callerForks.length > 0) {
+    for (const forkItem of callerForks) {
+      softDeleteRecord(db, {
+        collection,
+        id: forkItem.id,
+        actor: actorName,
+        actorRole,
+        reason: `Dihapus oleh pengguna @${actorName}`
+      });
+    }
+    if (!isAdminRoot) {
+      markHiddenForCaller(cleanId);
+    }
+    return { ok: true, mode: 'soft-delete', deletedId: cleanId };
+  }
+
+  // Case 3 & 4: Shared unowned base record (hide only for this caller), foreign record, or already deleted
+  if (!isAdminRoot) {
+    markHiddenForCaller(cleanId);
+  }
+  return {
+    ok: true,
+    mode: directItem ? 'hide-shared' : 'not-found-idempotent',
+    deletedId: cleanId
+  };
+}
+
 export async function handleStaffSelfSave(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
@@ -1397,6 +1475,94 @@ export async function handleStaffSelfSave(req, res) {
       entry: deletedEntry,
       lastUpdated: db.lastUpdated,
       message: `Background layanan ${ROLE_LABELS_MAP[targetRole] || targetRole} dikembalikan ke tampilan standar.`
+    });
+  }
+
+  if (actionType === 'DELETE_RECORD') {
+    const collection = String(body.collection || '').trim();
+    if (!VALID_COLLECTIONS.includes(collection)) {
+      return res.status(400).json({ ok: false, error: `Koleksi "${collection}" tidak valid.` });
+    }
+    const targetId = body.id !== undefined ? body.id : body.payload?.id;
+    const result = deleteUserIsolatedRecord(db, collection, targetId, {
+      isolationKey,
+      actorName,
+      actorRole,
+      isAdminRoot
+    });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ ok: false, error: result.error });
+    }
+    if (result.mode !== 'soft-delete') {
+      appendAuditLog(db, {
+        actor: actorName,
+        actorRole,
+        action: 'USER_HIDE_OR_DELETE_RECORD',
+        targetDatabase: collection,
+        targetId: result.deletedId,
+        status: 'SUCCESS',
+        detail: `Menghapus/menyembunyikan data (${result.mode}) pada ${collection} untuk @${actorName}.`
+      });
+    }
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      collection,
+      deletedIds: [result.deletedId],
+      mode: result.mode,
+      databaseMetrics: computeDatabaseMetrics(db),
+      lastUpdated: db.lastUpdated,
+      message: 'Data berhasil dihapus secara permanen.'
+    });
+  }
+
+  if (actionType === 'DELETE_RECORDS_BATCH') {
+    const collection = String(body.collection || '').trim();
+    if (!VALID_COLLECTIONS.includes(collection)) {
+      return res.status(400).json({ ok: false, error: `Koleksi "${collection}" tidak valid.` });
+    }
+    const rawIds = Array.isArray(body.ids)
+      ? body.ids
+      : Array.isArray(body.payload?.ids)
+      ? body.payload.ids
+      : [];
+    const uniqueIds = Array.from(
+      new Set(rawIds.map(x => String(x || '').trim()).filter(Boolean))
+    ).slice(0, 1000);
+
+    if (uniqueIds.length === 0) {
+      return res.status(400).json({ ok: false, error: 'Daftar ID data yang akan dihapus kosong.' });
+    }
+
+    for (const targetId of uniqueIds) {
+      const result = deleteUserIsolatedRecord(db, collection, targetId, {
+        isolationKey,
+        actorName,
+        actorRole,
+        isAdminRoot
+      });
+      if (!result.ok) {
+        return res.status(result.status || 400).json({ ok: false, error: result.error });
+      }
+    }
+
+    appendAuditLog(db, {
+      actor: actorName,
+      actorRole,
+      action: 'USER_BATCH_DELETE_RECORDS',
+      targetDatabase: collection,
+      targetId: `${uniqueIds.length} items`,
+      status: 'SUCCESS',
+      detail: `Menghapus permanen ${uniqueIds.length} data terpilih dari ${collection} untuk @${actorName}.`
+    });
+    await writeDb(db);
+    return res.status(200).json({
+      ok: true,
+      collection,
+      deletedIds: uniqueIds,
+      databaseMetrics: computeDatabaseMetrics(db),
+      lastUpdated: db.lastUpdated,
+      message: `${uniqueIds.length} data terpilih berhasil dihapus secara permanen.`
     });
   }
 

@@ -358,6 +358,7 @@ function buildFallbackSeedData() {
     userTupoksiDefinitions: {},
     userLibraryMemberStats: {},
     userServiceBackgrounds: {},
+    userHiddenRecords: {},
     customDatabaseRecords: {},
     databaseRegistry: buildDefaultDatabaseRegistry(),
     databaseQuotaBytes: DEFAULT_DATABASE_QUOTA_BYTES,
@@ -475,6 +476,11 @@ function migrateAndNormalizeDb(parsed) {
 
   if (!parsed.userServiceBackgrounds || typeof parsed.userServiceBackgrounds !== 'object') {
     parsed.userServiceBackgrounds = {};
+    patched = true;
+  }
+
+  if (!parsed.userHiddenRecords || typeof parsed.userHiddenRecords !== 'object') {
+    parsed.userHiddenRecords = {};
     patched = true;
   }
 
@@ -890,7 +896,7 @@ export function maybeRunScheduledBackup(db) {
   return false;
 }
 
-export function softDeleteRecord(db, { collection, id, actor = 'ADMIN', reason = 'Dihapus Admin' }) {
+export function softDeleteRecord(db, { collection, id, actor = 'ADMIN', actorRole = 'ADMIN', reason = 'Dihapus Admin' }) {
   const customDb = (db.databaseRegistry || []).find(d => d.code === collection && !d.isBuiltin);
   const list = customDb
     ? db.customDatabaseRecords?.[collection]
@@ -943,7 +949,7 @@ export function softDeleteRecord(db, { collection, id, actor = 'ADMIN', reason =
 
   appendAuditLog(db, {
     actor,
-    actorRole: 'ADMIN',
+    actorRole: actorRole || 'ADMIN',
     action: 'SOFT_DELETE',
     targetDatabase: collection,
     targetId: id,
@@ -1006,6 +1012,15 @@ export function restoreSoftDeletedRecord(db, { trashId, actor = 'ADMIN' }) {
   }
   if (targetCol === 'accessUsers') {
     db.deletedAccessUserIds = (db.deletedAccessUserIds || []).filter(d => d !== entry.originalId);
+  }
+  if (
+    entry.itemSnapshot?.ownerUserId &&
+    db.userHiddenRecords?.[entry.itemSnapshot.ownerUserId]?.[targetCol]
+  ) {
+    db.userHiddenRecords[entry.itemSnapshot.ownerUserId][targetCol] =
+      db.userHiddenRecords[entry.itemSnapshot.ownerUserId][targetCol].filter(
+        hid => hid !== entry.originalId && hid !== entry.itemSnapshot.forkedFromId
+      );
   }
   db.softDeletedItems = trashList.filter(t => t.trashId !== trashId);
 
@@ -1408,7 +1423,24 @@ export function buildStaffStateResponse(db, staffSession) {
     return false;
   };
 
-  const scopeCollectionForUser = (list) => {
+  const getHiddenIdsForCollection = (collectionName) => {
+    const hiddenSet = new Set();
+    const rawMap = db.userHiddenRecords && typeof db.userHiddenRecords === 'object' ? db.userHiddenRecords : {};
+    const keysToCheck = [staffSub, altStaffKey].filter(Boolean);
+    for (const k of keysToCheck) {
+      const colArr = rawMap?.[k]?.[collectionName];
+      if (Array.isArray(colArr)) {
+        for (const hiddenId of colArr) {
+          if (typeof hiddenId === 'string' && hiddenId) {
+            hiddenSet.add(hiddenId);
+          }
+        }
+      }
+    }
+    return hiddenSet;
+  };
+
+  const scopeCollectionForUser = (list, collectionName) => {
     if (!Array.isArray(list)) return [];
     const callerForkedBaseIds = new Set();
     for (const item of list) {
@@ -1416,13 +1448,14 @@ export function buildStaffStateResponse(db, staffSession) {
         callerForkedBaseIds.add(item.forkedFromId);
       }
     }
+    const hiddenIds = getHiddenIdsForCollection(collectionName);
     return list.filter(item => {
-      if (!item || typeof item !== 'object') return false;
+      if (!item || typeof item !== 'object' || item.deleted === true) return false;
       if (item.ownerUserId || item.ownerUsername) {
-        return isOwnedByCaller(item);
+        return isOwnedByCaller(item) && !hiddenIds.has(item.id);
       }
-      // Shared/base seed record: hide only if caller already created their own forked copy
-      return !callerForkedBaseIds.has(item.id);
+      // Shared/base seed record: hide if caller forked it or explicitly hid/deleted it
+      return !callerForkedBaseIds.has(item.id) && !hiddenIds.has(item.id);
     });
   };
 
@@ -1480,19 +1513,19 @@ export function buildStaffStateResponse(db, staffSession) {
 
   return {
     publicOnly: false,
-    tasks: scopeCollectionForUser(db.tasks),
-    inventories: scopeCollectionForUser(db.inventories),
-    monthlyReports: scopeCollectionForUser(db.monthlyReports),
-    annualReports: scopeCollectionForUser(db.annualReports),
+    tasks: scopeCollectionForUser(db.tasks, 'tasks'),
+    inventories: scopeCollectionForUser(db.inventories, 'inventories'),
+    monthlyReports: scopeCollectionForUser(db.monthlyReports, 'monthlyReports'),
+    annualReports: scopeCollectionForUser(db.annualReports, 'annualReports'),
     schoolConfig: scopedSchoolConfig,
-    archives: scopeCollectionForUser(db.archives),
+    archives: scopeCollectionForUser(db.archives, 'archives'),
     tupoksiDefinitions: effectiveTupoksi,
-    customCategories: scopeCollectionForUser(db.customCategories),
-    libraryBooks: scopeCollectionForUser(db.libraryBooks),
-    libraryMembers: scopeCollectionForUser(db.libraryMembers),
+    customCategories: scopeCollectionForUser(db.customCategories, 'customCategories'),
+    libraryBooks: scopeCollectionForUser(db.libraryBooks, 'libraryBooks'),
+    libraryMembers: scopeCollectionForUser(db.libraryMembers, 'libraryMembers'),
     libraryMemberStats: userMemberStats,
     userServiceBackgrounds: scopedUserBackgrounds,
-    beritaAcaraHistory: scopeCollectionForUser(db.beritaAcaraHistory),
+    beritaAcaraHistory: scopeCollectionForUser(db.beritaAcaraHistory, 'beritaAcaraHistory'),
     customDatabases: (db.databaseRegistry || []).filter(d => !d.isBuiltin),
     customDatabaseRecords: db.customDatabaseRecords || {},
     staffSubmissions: (db.staffSubmissions || []).filter(

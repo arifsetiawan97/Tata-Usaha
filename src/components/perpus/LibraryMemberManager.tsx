@@ -302,8 +302,10 @@ export const LibraryMemberManager: React.FC = () => {
   // Confirm Delete Member
   const handleConfirmDelete = () => {
     if (activeMember) {
+      const deletedId = activeMember.id;
       const deletedName = activeMember.nama;
-      deleteLibraryMember(activeMember.id);
+      deleteLibraryMember(deletedId);
+      setSelectedMemberIds(prev => prev.filter(id => id !== deletedId));
       setIsDeleteModalOpen(false);
       setActiveMember(null);
       setSuccessNotification(`Anggota "${deletedName}" telah dihapus. Sistem secara otomatis memperbarui rekapitulasi data anggota.`);
@@ -361,11 +363,15 @@ export const LibraryMemberManager: React.FC = () => {
   };
 
   // Bulk Selection Handlers
+  const allMembersSelected =
+    filteredMembers.length > 0 && filteredMembers.every(m => selectedMemberIds.includes(m.id));
+
   const handleToggleSelectAllMembers = () => {
-    if (selectedMemberIds.length === filteredMembers.length && filteredMembers.length > 0) {
-      setSelectedMemberIds([]);
+    if (allMembersSelected) {
+      const visibleSet = new Set(filteredMembers.map(m => m.id));
+      setSelectedMemberIds(prev => prev.filter(id => !visibleSet.has(id)));
     } else {
-      setSelectedMemberIds(filteredMembers.map(m => m.id));
+      setSelectedMemberIds(prev => Array.from(new Set([...prev, ...filteredMembers.map(m => m.id)])));
     }
   };
 
@@ -1463,7 +1469,7 @@ ANG-SW-003,Farhan Maulana,SISWA,Kelas VIII-C,0076543210,L,2026-07-20,08133344556
                     <th className="py-3 px-3 w-9 text-center">
                       <input
                         type="checkbox"
-                        checked={filteredMembers.length > 0 && selectedMemberIds.length === filteredMembers.length}
+                        checked={allMembersSelected}
                         onChange={handleToggleSelectAllMembers}
                         title="Pilih semua anggota yang tampil"
                         className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"

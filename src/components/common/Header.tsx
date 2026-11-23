@@ -125,100 +125,124 @@ export const SystemStatusBanners: React.FC = () => {
     clearActionFeedback
   } = useApp();
 
-  const hasAnyBanner =
+  const hasInlineBanner =
     (databaseCapacitySummary && databaseCapacitySummary.effectiveAlertLevel !== 'NORMAL') ||
     Boolean(connectionError) ||
     Boolean(sessionExpiredNotice) ||
-    Boolean(actionFeedback) ||
     Boolean(currentUser?.mustChangePassword);
 
-  if (!hasAnyBanner) return null;
+  if (!hasInlineBanner && !actionFeedback) return null;
 
   return (
-    <div className="space-y-2.5 mb-5 no-print">
-      {/* Database Capacity Warning / Lock Banner */}
-      {databaseCapacitySummary && databaseCapacitySummary.effectiveAlertLevel !== 'NORMAL' && (
-        <div
-          className={`rounded-xl border px-4 py-2.5 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs ${
-            databaseCapacitySummary.effectiveAlertLevel === 'FULL'
-              ? 'bg-rose-600 text-white border-rose-700'
-              : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
-              ? 'bg-rose-50 text-rose-900 border-rose-200'
-              : 'bg-amber-50 text-amber-950 border-amber-200'
-          }`}
-        >
-          <div className="flex items-center gap-2 font-semibold">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span className="tabular-nums">
-              {databaseCapacitySummary.effectiveAlertLevel === 'FULL'
-                ? `KAPASITAS DATABASE PENUH (${databaseCapacitySummary.totalPercentUsed}%) — Penulisan data baru dikunci otomatis. Hubungi Admin untuk perluasan kuota.`
-                : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
-                ? `PERINGATAN KRITIS KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Sisa ruang penyimpanan hampir habis.`
-                : `PERINGATAN KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Penggunaan Database Admin mencapai 80% atau lebih.`}
-            </span>
-          </div>
-          {isAdminAuthenticated && (
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
-              className={`px-3 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
+    <>
+      {hasInlineBanner && (
+        <div className="space-y-2.5 mb-5 no-print">
+          {/* Database Capacity Warning / Lock Banner */}
+          {databaseCapacitySummary && databaseCapacitySummary.effectiveAlertLevel !== 'NORMAL' && (
+            <div
+              className={`rounded-xl border px-4 py-2.5 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs ${
                 databaseCapacitySummary.effectiveAlertLevel === 'FULL'
-                  ? 'bg-white text-rose-700 hover:bg-rose-50'
-                  : 'bg-slate-900 text-white hover:bg-slate-800'
+                  ? 'bg-rose-600 text-white border-rose-700'
+                  : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
+                  ? 'bg-rose-50 text-rose-900 border-rose-200'
+                  : 'bg-amber-50 text-amber-950 border-amber-200'
               }`}
             >
-              Kelola Kapasitas
-            </button>
+              <div className="flex items-center gap-2 font-semibold">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span className="tabular-nums">
+                  {databaseCapacitySummary.effectiveAlertLevel === 'FULL'
+                    ? `KAPASITAS DATABASE PENUH (${databaseCapacitySummary.totalPercentUsed}%) — Penulisan data baru dikunci otomatis. Hubungi Admin untuk perluasan kuota.`
+                    : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
+                    ? `PERINGATAN KRITIS KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Sisa ruang penyimpanan hampir habis.`
+                    : `PERINGATAN KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Penggunaan Database Admin mencapai 80% atau lebih.`}
+                </span>
+              </div>
+              {isAdminAuthenticated && (
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
+                  className={`px-3 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
+                    databaseCapacitySummary.effectiveAlertLevel === 'FULL'
+                      ? 'bg-white text-rose-700 hover:bg-rose-50'
+                      : 'bg-slate-900 text-white hover:bg-slate-800'
+                  }`}
+                >
+                  Kelola Kapasitas
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Network Error + Retry Banner */}
+          {connectionError && (
+            <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-900 shadow-2xs">
+              <div className="flex items-center gap-2 font-medium">
+                <WifiOff className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{connectionError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => retryConnection()}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Coba Lagi</span>
+              </button>
+            </div>
+          )}
+
+          {/* Session Expiry Banner */}
+          {sessionExpiredNotice && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-amber-900 shadow-2xs">
+              <div className="flex items-center gap-2 font-medium">
+                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{formatApiErrorMessage(sessionExpiredNotice, '')}</span>
+              </div>
+              <button
+                type="button"
+                onClick={clearSessionExpiredNotice}
+                className="p-1 text-amber-700 hover:text-amber-950 cursor-pointer"
+                aria-label="Tutup peringatan sesi"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Temporary Password Reminder Banner */}
+          {currentUser?.mustChangePassword && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs shadow-2xs">
+              <div className="flex items-center gap-2 text-amber-900">
+                <KeyRound className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Sandi Sementara Aktif:</strong> Anda masuk menggunakan sandi reset sementara. Segera buat sandi baru pribadi Anda.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('siops-open-pin-modal'))}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-2xs cursor-pointer"
+              >
+                Ganti Sandi Sekarang
+              </button>
+            </div>
           )}
         </div>
       )}
 
-      {/* Network Error + Retry Banner */}
-      {connectionError && (
-        <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-900 shadow-2xs">
-          <div className="flex items-center gap-2 font-medium">
-            <WifiOff className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>{connectionError}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => retryConnection()}
-            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] flex items-center gap-1.5 cursor-pointer"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>Coba Lagi</span>
-          </button>
-        </div>
-      )}
-
-      {/* Session Expiry Banner */}
-      {sessionExpiredNotice && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-amber-900 shadow-2xs">
-          <div className="flex items-center gap-2 font-medium">
-            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>{formatApiErrorMessage(sessionExpiredNotice, '')}</span>
-          </div>
-          <button
-            type="button"
-            onClick={clearSessionExpiredNotice}
-            className="p-1 text-amber-700 hover:text-amber-950 cursor-pointer"
-            aria-label="Tutup peringatan sesi"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* Action Feedback Banner */}
+      {/* Floating Action Feedback Toast (Visible at any scroll position) */}
       {actionFeedback && (
         <div
-          className={`rounded-xl border px-4 py-2.5 text-xs flex items-center justify-between gap-2 shadow-2xs ${
+          role="status"
+          aria-live="polite"
+          className={`fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-[75] max-w-md w-[calc(100%-2rem)] sm:w-auto rounded-xl border px-4 py-3 text-xs flex items-center justify-between gap-3 shadow-xl no-print animate-fadeIn ${
             actionFeedback.ok
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              : 'bg-rose-50 border-rose-200 text-rose-900'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+              : 'bg-rose-50 border-rose-300 text-rose-950'
           }`}
         >
-          <div className="flex items-center gap-2 font-medium">
+          <div className="flex items-center gap-2.5 font-semibold leading-snug">
             {actionFeedback.ok ? (
               <Check className="w-4 h-4 text-emerald-600 shrink-0" />
             ) : (
@@ -229,33 +253,14 @@ export const SystemStatusBanners: React.FC = () => {
           <button
             type="button"
             onClick={clearActionFeedback}
-            className="p-1 opacity-70 hover:opacity-100 cursor-pointer"
+            className="p-1 opacity-70 hover:opacity-100 cursor-pointer shrink-0"
             aria-label="Tutup notifikasi"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
-
-      {/* Temporary Password Reminder Banner */}
-      {currentUser?.mustChangePassword && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs shadow-2xs">
-          <div className="flex items-center gap-2 text-amber-900">
-            <KeyRound className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              <strong>Sandi Sementara Aktif:</strong> Anda masuk menggunakan sandi reset sementara. Segera buat sandi baru pribadi Anda.
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('siops-open-pin-modal'))}
-            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-2xs cursor-pointer"
-          >
-            Ganti Sandi Sekarang
-          </button>
-        </div>
-      )}
-    </div>
+    </>
   );
 };
 
