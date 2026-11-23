@@ -140,7 +140,8 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
     archives,
     getCategoryLabel,
     customCategories,
-    syncStatus
+    syncStatus,
+    isAdminAuthenticated
   } = useApp();
 
   const effectiveRole: RoleType = currentRole || 'TU';
@@ -659,14 +660,18 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
             <span className="font-semibold text-slate-700">Pusat Cetak</span>
             <span aria-hidden="true">·</span>
             <span>{ROLE_LABELS[effectiveRole]}</span>
-            <span aria-hidden="true">·</span>
-            <span className={syncStatus === 'offline' ? 'text-rose-700 font-medium' : 'text-emerald-700 font-medium'}>
-              {syncStatus === 'saving'
-                ? 'Menyimpan...'
-                : syncStatus === 'offline'
-                ? 'Koneksi Terputus'
-                : 'Data Tersinkronisasi'}
-            </span>
+            {isAdminAuthenticated && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className={syncStatus === 'offline' ? 'text-rose-700 font-medium' : 'text-emerald-700 font-medium'}>
+                  {syncStatus === 'saving'
+                    ? 'Menyimpan...'
+                    : syncStatus === 'offline'
+                    ? 'Koneksi Terputus'
+                    : 'Data Tersinkronisasi'}
+                </span>
+              </>
+            )}
           </div>
           <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
             Pusat Cetak Laporan & Dokumen Resmi

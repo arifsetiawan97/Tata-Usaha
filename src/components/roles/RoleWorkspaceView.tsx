@@ -110,7 +110,8 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
     setRoleSubTab,
     tupoksiDefinitions,
     inventories,
-    syncStatus
+    syncStatus,
+    isAdminAuthenticated
   } = useApp();
 
   const currentSubTab = roleSubTabs[role] || 'tasks';
@@ -181,24 +182,26 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
                 <RoleIcon className="w-3 h-3" />
                 <span>{roleMeta.title}</span>
               </span>
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-semibold ${
-                  syncStatus === 'saving'
-                    ? 'bg-amber-50 border-amber-200 text-amber-800'
-                    : syncStatus === 'synced'
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                    : 'bg-rose-50 border-rose-200 text-rose-800'
-                }`}
-              >
-                <Database className="w-3 h-3" />
-                <span>
-                  {syncStatus === 'saving'
-                    ? 'Menyimpan...'
-                    : syncStatus === 'synced'
-                    ? 'Data Tersinkronisasi'
-                    : 'Koneksi Terputus'}
+              {isAdminAuthenticated && (
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-semibold ${
+                    syncStatus === 'saving'
+                      ? 'bg-amber-50 border-amber-200 text-amber-800'
+                      : syncStatus === 'synced'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  <Database className="w-3 h-3" />
+                  <span>
+                    {syncStatus === 'saving'
+                      ? 'Menyimpan...'
+                      : syncStatus === 'synced'
+                      ? 'Data Tersinkronisasi'
+                      : 'Koneksi Terputus'}
+                  </span>
                 </span>
-              </span>
+              )}
             </div>
 
             <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">

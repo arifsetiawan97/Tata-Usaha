@@ -558,26 +558,26 @@ export const Header: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-1 border-t border-black/5 text-[10px] font-semibold">
-              <span className="flex items-center gap-1 text-slate-700">
-                <Database
-                  className={`w-3 h-3 ${
-                    syncStatus === 'saving'
-                      ? 'text-amber-600'
+            {isAdminAuthenticated && (
+              <div className="flex items-center justify-between pt-1 border-t border-black/5 text-[10px] font-semibold">
+                <span className="flex items-center gap-1 text-slate-700">
+                  <Database
+                    className={`w-3 h-3 ${
+                      syncStatus === 'saving'
+                        ? 'text-amber-600'
+                        : syncStatus === 'synced'
+                        ? 'text-emerald-600'
+                        : 'text-rose-600'
+                    }`}
+                  />
+                  <span>
+                    {syncStatus === 'saving'
+                      ? 'Menyimpan ke server...'
                       : syncStatus === 'synced'
-                      ? 'text-emerald-600'
-                      : 'text-rose-600'
-                  }`}
-                />
-                <span>
-                  {syncStatus === 'saving'
-                    ? 'Menyimpan ke server...'
-                    : syncStatus === 'synced'
-                    ? 'Server Terhubung'
-                    : 'Koneksi Terputus'}
+                      ? 'Server Terhubung'
+                      : 'Koneksi Terputus'}
+                  </span>
                 </span>
-              </span>
-              {isAdminAuthenticated && (
                 <button
                   type="button"
                   onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
@@ -585,8 +585,8 @@ export const Header: React.FC = () => {
                 >
                   Admin{databaseCapacitySummary ? ` · ${databaseCapacitySummary.totalPercentUsed}%` : ''}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -760,18 +760,20 @@ export const Header: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <span
-            className={`px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1 ${
-              syncStatus === 'saving'
-                ? 'bg-amber-50 border-amber-200 text-amber-800'
-                : syncStatus === 'synced'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : 'bg-rose-50 border-rose-200 text-rose-800'
-            }`}
-          >
-            <Database className="w-3 h-3" />
-            <span>{syncStatus === 'saving' ? 'Simpan' : syncStatus === 'synced' ? 'Aktif' : 'Putus'}</span>
-          </span>
+          {isAdminAuthenticated && (
+            <span
+              className={`px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1 ${
+                syncStatus === 'saving'
+                  ? 'bg-amber-50 border-amber-200 text-amber-800'
+                  : syncStatus === 'synced'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-rose-50 border-rose-200 text-rose-800'
+              }`}
+            >
+              <Database className="w-3 h-3" />
+              <span>{syncStatus === 'saving' ? 'Simpan' : syncStatus === 'synced' ? 'Aktif' : 'Putus'}</span>
+            </span>
+          )}
 
           <button
             type="button"
