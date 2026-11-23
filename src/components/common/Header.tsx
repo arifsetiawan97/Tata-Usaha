@@ -32,7 +32,8 @@ import {
   ScrollText,
   Image as ImageIcon,
   LayoutGrid,
-  ChevronRight
+  ChevronRight,
+  Printer
 } from 'lucide-react';
 import { initialSchoolConfig } from '../../data/initialData';
 import { BERITA_ACARA_TEMPLATES } from '../../data/beritaAcaraTemplates';
@@ -51,7 +52,7 @@ const SecretAiGeneratorModal = lazy(() =>
 );
 
 interface NavDestination {
-  id: RoleSubTab | 'archive';
+  id: RoleSubTab | 'archive' | 'print_center';
   label: string;
   shortLabel: string;
   icon: React.ElementType;
@@ -380,8 +381,12 @@ export const Header: React.FC = () => {
     (libraryMemberStats?.guruPendidik || 0) +
     (libraryMemberStats?.staffTendik || 0);
 
-  const currentTab: RoleSubTab | 'archive' =
-    activeNavTab === 'archive' ? 'archive' : roleSubTabs[currentRole] || 'tasks';
+  const currentTab: RoleSubTab | 'archive' | 'print_center' =
+    activeNavTab === 'archive'
+      ? 'archive'
+      : activeNavTab === 'print_center'
+      ? 'print_center'
+      : roleSubTabs[currentRole] || 'tasks';
 
   const navItems: NavDestination[] = [
     {
@@ -447,6 +452,12 @@ export const Header: React.FC = () => {
         ]
       : []),
     {
+      id: 'print_center',
+      label: 'Pusat Cetak Laporan',
+      shortLabel: 'Cetak',
+      icon: Printer
+    },
+    {
       id: 'archive',
       label: 'Arsip Dokumen Resmi',
       shortLabel: 'Arsip',
@@ -456,15 +467,20 @@ export const Header: React.FC = () => {
   ];
 
   // 4 primary tabs for fixed mobile bottom navigation bar + 5th "Menu" drawer tab
-  const mobilePrimaryIds: Array<RoleSubTab | 'archive'> = ['tasks', 'monthly', 'inventory', 'archive'];
+  const mobilePrimaryIds: Array<RoleSubTab | 'archive' | 'print_center'> = [
+    'tasks',
+    'monthly',
+    'print_center',
+    'archive'
+  ];
   const mobilePrimaryTabs = navItems.filter(item => mobilePrimaryIds.includes(item.id));
   const mobileSecondaryTabs = navItems.filter(item => !mobilePrimaryIds.includes(item.id));
   const isSecondaryTabActive = mobileSecondaryTabs.some(item => item.id === currentTab);
   const activeNavItem = navItems.find(item => item.id === currentTab) || navItems[0];
 
-  const handleSelectMenu = (menuId: RoleSubTab | 'archive') => {
-    if (menuId === 'archive') {
-      setActiveNavTab('archive');
+  const handleSelectMenu = (menuId: RoleSubTab | 'archive' | 'print_center') => {
+    if (menuId === 'archive' || menuId === 'print_center') {
+      setActiveNavTab(menuId);
     } else {
       setActiveNavTab('dashboard');
       setRoleSubTab(currentRole, menuId);

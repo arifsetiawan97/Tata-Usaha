@@ -16,6 +16,9 @@ const PrintDocumentView = lazy(() =>
 const DocumentArchiveView = lazy(() =>
   import('./components/archive/DocumentArchiveView').then(m => ({ default: m.DocumentArchiveView }))
 );
+const PrintCenterView = lazy(() =>
+  import('./components/reports/PrintCenterView').then(m => ({ default: m.PrintCenterView }))
+);
 const AiAssistantModal = lazy(() =>
   import('./components/common/AiAssistantModal').then(m => ({ default: m.AiAssistantModal }))
 );
@@ -129,6 +132,13 @@ function MainLayout() {
     if (isInitialLoading) {
       return <SkeletonLoader variant="workspace" theme="light" />;
     }
+    if (activeNavTab === 'print_center') {
+      return (
+        <Suspense fallback={<LazyViewFallback />}>
+          <PrintCenterView onOpenFullDocument={handleOpenPrint} />
+        </Suspense>
+      );
+    }
     if (activeNavTab === 'archive') {
       return (
         <Suspense fallback={<LazyViewFallback />}>
@@ -151,7 +161,7 @@ function MainLayout() {
   );
 
   return (
-    <div className="relative min-h-screen bg-slate-50 overflow-x-hidden">
+    <div className="relative min-h-screen bg-slate-50 print:bg-white overflow-x-hidden print:overflow-visible">
       {/* Dynamic Per-User Service Workspace Background */}
       <div
         aria-hidden="true"
@@ -168,8 +178,8 @@ function MainLayout() {
       <Header />
 
       {/* Main App Content Shell (Offset for w-72 desktop sidebar & h-16 mobile bottom nav) */}
-      <div className="relative z-10 lg:pl-72 min-h-screen flex flex-col justify-between pb-20 lg:pb-0">
-        <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex-1">
+      <div className="relative z-10 lg:pl-72 print:pl-0 min-h-screen print:min-h-0 flex flex-col justify-between pb-20 lg:pb-0 print:pb-0">
+        <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex-1 print:p-0 print:m-0 print:max-w-none">
           <SystemStatusBanners />
           {renderActiveContent()}
         </main>

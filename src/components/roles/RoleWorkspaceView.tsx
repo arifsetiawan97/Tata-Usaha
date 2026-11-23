@@ -96,6 +96,7 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
     tasks,
     roleSubTabs,
     setRoleSubTab,
+    setActiveNavTab,
     tupoksiDefinitions,
     inventories,
     monthlyReports,
@@ -247,6 +248,16 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
               <Settings className="w-3.5 h-3.5 text-slate-600" />
               <span className="hidden sm:inline">Kop & Sekolah</span>
               <span className="sm:hidden">Kop</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveNavTab('print_center')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl transition-all cursor-pointer active:scale-95"
+              title="Buka halaman Pusat Cetak Laporan (Bulanan, Tahunan, Inventaris & Lainnya)"
+            >
+              <Printer className="w-3.5 h-3.5 text-sky-600" />
+              <span>Pusat Cetak</span>
             </button>
 
             <button
