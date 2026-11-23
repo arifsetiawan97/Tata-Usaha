@@ -1,7 +1,6 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { useApp, RoleSubTab } from '../../context/AppContext';
 import { RoleType } from '../../types';
-import { initialSchoolConfig } from '../../data/initialData';
 import {
   Shield,
   Building2,
@@ -13,13 +12,8 @@ import {
   FileText,
   Award,
   Boxes,
-  UserCheck,
-  Printer,
-  Bot,
   Users,
   ScrollText,
-  Image as ImageIcon,
-  Settings,
   Database,
   CheckCircle2
 } from 'lucide-react';
@@ -30,18 +24,35 @@ const TUView = lazy(() => import('./TUView').then(m => ({ default: m.TUView })))
 const ServiceView = lazy(() => import('./ServiceView').then(m => ({ default: m.ServiceView })));
 const PerpusView = lazy(() => import('./PerpusView').then(m => ({ default: m.PerpusView })));
 const LabIpaView = lazy(() => import('./LabIpaView').then(m => ({ default: m.LabIpaView })));
-const TupoksiManagerView = lazy(() => import('./TupoksiManagerView').then(m => ({ default: m.TupoksiManagerView })));
-const MonthlyReportView = lazy(() => import('../reports/MonthlyReportView').then(m => ({ default: m.MonthlyReportView })));
-const AnnualReportView = lazy(() => import('../reports/AnnualReportView').then(m => ({ default: m.AnnualReportView })));
-const InventoryTable = lazy(() => import('../common/InventoryTable').then(m => ({ default: m.InventoryTable })));
-const LibraryBookManager = lazy(() => import('../perpus/LibraryBookManager').then(m => ({ default: m.LibraryBookManager })));
-const LibraryMemberManager = lazy(() => import('../perpus/LibraryMemberManager').then(m => ({ default: m.LibraryMemberManager })));
-const BeritaAcaraManager = lazy(() => import('./BeritaAcaraManager').then(m => ({ default: m.BeritaAcaraManager })));
-const AiAssistantModal = lazy(() => import('../common/AiAssistantModal').then(m => ({ default: m.AiAssistantModal })));
+const TupoksiManagerView = lazy(() =>
+  import('./TupoksiManagerView').then(m => ({ default: m.TupoksiManagerView }))
+);
+const MonthlyReportView = lazy(() =>
+  import('../reports/MonthlyReportView').then(m => ({ default: m.MonthlyReportView }))
+);
+const AnnualReportView = lazy(() =>
+  import('../reports/AnnualReportView').then(m => ({ default: m.AnnualReportView }))
+);
+const InventoryTable = lazy(() =>
+  import('../common/InventoryTable').then(m => ({ default: m.InventoryTable }))
+);
+const LibraryBookManager = lazy(() =>
+  import('../perpus/LibraryBookManager').then(m => ({ default: m.LibraryBookManager }))
+);
+const LibraryMemberManager = lazy(() =>
+  import('../perpus/LibraryMemberManager').then(m => ({ default: m.LibraryMemberManager }))
+);
+const BeritaAcaraManager = lazy(() =>
+  import('./BeritaAcaraManager').then(m => ({ default: m.BeritaAcaraManager }))
+);
 
 interface RoleWorkspaceViewProps {
   role: RoleType;
-  onOpenPrint: (reportType: 'monthly' | 'annual', data: any, options?: { autoPrint?: boolean }) => void;
+  onOpenPrint: (
+    reportType: 'monthly' | 'annual',
+    data: any,
+    options?: { autoPrint?: boolean }
+  ) => void;
 }
 
 const ACTIVE_TAB_META: Record<
@@ -60,7 +71,8 @@ const ACTIVE_TAB_META: Record<
   },
   monthly: {
     title: 'Laporan Bulanan Resmi',
-    description: 'Susun, tinjau, dan cetak dokumen laporan bulanan lengkap dengan kop surat dan lembar pengesahan.',
+    description:
+      'Susun, tinjau, dan cetak dokumen laporan bulanan lengkap dengan kop surat dan lembar pengesahan.',
     icon: FileText
   },
   annual: {
@@ -75,7 +87,8 @@ const ACTIVE_TAB_META: Record<
   },
   berita_acara: {
     title: 'Berita Acara & Persuratan TU',
-    description: 'Buat dan kelola naskah dinas serta berita acara serah terima standar satuan pendidikan.',
+    description:
+      'Buat dan kelola naskah dinas serta berita acara serah terima standar satuan pendidikan.',
     icon: ScrollText
   },
   buku: {
@@ -92,39 +105,15 @@ const ACTIVE_TAB_META: Record<
 
 export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOpenPrint }) => {
   const {
-    effectiveSchoolConfig: schoolConfig,
     tasks,
     roleSubTabs,
     setRoleSubTab,
-    setActiveNavTab,
     tupoksiDefinitions,
     inventories,
-    monthlyReports,
-    generateMonthlyReportFromTasks,
-    syncStatus,
-    currentUser
+    syncStatus
   } = useApp();
 
-  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
-
-  const handleDirectPrintCurrentMonth = () => {
-    const currentMonth = new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
-    const existing = monthlyReports.find(
-      r => r.role === role && r.month === currentMonth && r.year === currentYear
-    );
-    const reportData = existing || generateMonthlyReportFromTasks(role, currentMonth, currentYear);
-    onOpenPrint('monthly', reportData, { autoPrint: true });
-  };
-
   const currentSubTab = roleSubTabs[role] || 'tasks';
-
-  const operator = schoolConfig.operatorProfiles?.[role] ||
-    initialSchoolConfig.operatorProfiles[role] || {
-      nama: 'Petugas Layanan Operasional',
-      nip: '-',
-      jabatan: 'Operator'
-    };
 
   const roleTasks = tasks.filter(t => t.role === role);
   const roleCompletedTasks = roleTasks.filter(t => t.status === 'selesai').length;
@@ -140,36 +129,31 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
       title: 'Penjaga Sekolah',
       icon: Shield,
       accentBadge: 'bg-blue-50 text-blue-800 border-blue-200',
-      iconWrap: 'bg-blue-600 text-white',
-      sublabel: 'Keamanan & Sapras'
+      iconWrap: 'bg-blue-600 text-white'
     },
     TU: {
       title: 'Tata Usaha (TU)',
       icon: Building2,
       accentBadge: 'bg-sky-50 text-sky-800 border-sky-200',
-      iconWrap: 'bg-sky-600 text-white',
-      sublabel: 'Administrasi & Persuratan'
+      iconWrap: 'bg-sky-600 text-white'
     },
     SERVICE: {
       title: 'Layanan Kebersihan (Service)',
       icon: Sparkles,
       accentBadge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-      iconWrap: 'bg-emerald-600 text-white',
-      sublabel: 'Sanitasi & Lingkungan'
+      iconWrap: 'bg-emerald-600 text-white'
     },
     PERPUS: {
       title: 'Layanan Perpustakaan',
       icon: BookOpen,
       accentBadge: 'bg-purple-50 text-purple-800 border-purple-200',
-      iconWrap: 'bg-purple-600 text-white',
-      sublabel: 'Literasi & Bahan Pustaka'
+      iconWrap: 'bg-purple-600 text-white'
     },
     LAB_IPA: {
       title: 'Laboratorium IPA',
       icon: FlaskConical,
       accentBadge: 'bg-teal-50 text-teal-800 border-teal-200',
-      iconWrap: 'bg-teal-600 text-white',
-      sublabel: 'Praktikum & Laboran IPA'
+      iconWrap: 'bg-teal-600 text-white'
     }
   }[role];
 
@@ -180,119 +164,49 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
   return (
     <div className="space-y-5">
       {/* =================================================================== */}
-      {/* ACTIVE PAGE HEADER CARD                                             */}
+      {/* ACTIVE PAGE HEADER CARD (Clean & Non-Duplicative with Sidebar)      */}
       {/* =================================================================== */}
       <section className="no-print bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs">
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5 min-w-0">
-            <div
-              className={`w-11 h-11 rounded-xl ${roleMeta.iconWrap} flex items-center justify-center shrink-0 shadow-xs`}
-            >
-              <ActiveSectionIcon className="w-5 h-5" />
-            </div>
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border text-[11px] font-bold ${roleMeta.accentBadge}`}
-                >
-                  <RoleIcon className="w-3 h-3" />
-                  <span>{roleMeta.title}</span>
-                </span>
-                <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-semibold ${
-                    syncStatus === 'saving'
-                      ? 'bg-amber-50 border-amber-200 text-amber-800'
-                      : syncStatus === 'synced'
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                      : 'bg-rose-50 border-rose-200 text-rose-800'
-                  }`}
-                >
-                  <Database className="w-3 h-3" />
-                  <span>
-                    {syncStatus === 'saving'
-                      ? 'Menyimpan...'
-                      : syncStatus === 'synced'
-                      ? 'Data Tersinkronisasi'
-                      : 'Koneksi Terputus'}
-                  </span>
-                </span>
-              </div>
-
-              <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-                {activeSection.title}
-              </h1>
-              <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
-                {activeSection.description}
-              </p>
-            </div>
+        <div className="flex items-start gap-3.5 min-w-0">
+          <div
+            className={`w-11 h-11 rounded-xl ${roleMeta.iconWrap} flex items-center justify-center shrink-0 shadow-xs`}
+          >
+            <ActiveSectionIcon className="w-5 h-5" />
           </div>
-
-          {/* Contextual Action Buttons + Operator Info */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('siops-open-bg-modal'))}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl transition-all cursor-pointer active:scale-95"
-              title="Ubah background tampilan layanan Anda"
-            >
-              <ImageIcon className="w-3.5 h-3.5 text-sky-600" />
-              <span>Background</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('siops-open-config-modal'))}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl transition-all cursor-pointer active:scale-95"
-              title="Atur Kop Surat & Pengesahan Pribadi"
-            >
-              <Settings className="w-3.5 h-3.5 text-slate-600" />
-              <span className="hidden sm:inline">Kop & Sekolah</span>
-              <span className="sm:hidden">Kop</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveNavTab('print_center')}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 text-xs font-semibold rounded-xl transition-all cursor-pointer active:scale-95"
-              title="Buka halaman Pusat Cetak Laporan (Bulanan, Tahunan, Inventaris & Lainnya)"
-            >
-              <Printer className="w-3.5 h-3.5 text-sky-600" />
-              <span>Pusat Cetak</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleDirectPrintCurrentMonth}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
-              title="Langsung cetak laporan bulanan resmi bulan ini"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Cetak Bulan Ini</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsAiAssistantOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
-              title="Buka Asisten AI SOP & Draf Surat"
-            >
-              <Bot className="w-3.5 h-3.5 text-amber-300" />
-              <span>Asisten AI</span>
-            </button>
-
-            <div className="hidden md:flex items-center gap-2.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-              <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700">
-                <UserCheck className="w-3.5 h-3.5" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-900 leading-tight">
-                  {currentUser?.namaLengkap || operator.nama}
-                </p>
-                <p className="text-[10px] text-slate-500 font-mono">
-                  {operator.nip}
-                </p>
-              </div>
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border text-[11px] font-bold ${roleMeta.accentBadge}`}
+              >
+                <RoleIcon className="w-3 h-3" />
+                <span>{roleMeta.title}</span>
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-semibold ${
+                  syncStatus === 'saving'
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : syncStatus === 'synced'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}
+              >
+                <Database className="w-3 h-3" />
+                <span>
+                  {syncStatus === 'saving'
+                    ? 'Menyimpan...'
+                    : syncStatus === 'synced'
+                    ? 'Data Tersinkronisasi'
+                    : 'Koneksi Terputus'}
+                </span>
+              </span>
             </div>
+
+            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
+              {activeSection.title}
+            </h1>
+            <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
+              {activeSection.description}
+            </p>
           </div>
         </div>
       </section>
@@ -405,7 +319,7 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
                 <div className="flex items-center gap-2">
                   <Boxes className="w-5 h-5 text-indigo-600" />
                   <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                    Daftar Sarana Prasarana & Alat Operasional ({operator.jabatan})
+                    Daftar Sarana Prasarana &amp; Alat Operasional ({roleMeta.title})
                   </h2>
                 </div>
                 <span className="text-xs font-mono tabular-nums text-slate-500">
@@ -423,17 +337,6 @@ export const RoleWorkspaceView: React.FC<RoleWorkspaceViewProps> = ({ role, onOp
           {currentSubTab === 'berita_acara' && role === 'TU' && <BeritaAcaraManager />}
         </Suspense>
       </div>
-
-      {/* AI Assistant Modal for this Role */}
-      {isAiAssistantOpen && (
-        <Suspense fallback={null}>
-          <AiAssistantModal
-            isOpen={isAiAssistantOpen}
-            onClose={() => setIsAiAssistantOpen(false)}
-            initialRole={role}
-          />
-        </Suspense>
-      )}
     </div>
   );
 };

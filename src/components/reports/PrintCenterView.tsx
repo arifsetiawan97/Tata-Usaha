@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RoleType } from '../../types';
 import { KopSurat } from '../common/KopSurat';
 import { OfficialApprovalSheet } from '../common/OfficialApprovalSheet';
+import { ROLE_OPERATIONAL_SPECS } from '../../data/roleOperationalSpecs';
+import { computeLibraryMemberRecap } from '../../utils/libraryStatsHelper';
 import {
   getTaskClassification,
   isTaskInMonth,
@@ -22,7 +24,50 @@ import {
 } from 'lucide-react';
 
 type ReportKind = 'monthly' | 'annual' | 'inventory' | 'other';
-type OtherDocKind = 'daily_journal' | 'tupoksi_list' | 'berita_acara' | 'library_books';
+type OtherDocKind =
+  | 'daily_journal'
+  | 'tupoksi_list'
+  | 'kpi_capaian'
+  | 'archive_register'
+  | 'library_members'
+  | 'library_books'
+  | 'berita_acara'
+  | 'tu_correspondence'
+  | 'penjaga_security'
+  | 'service_sanitation'
+  | 'lab_k3';
+
+const getAvailableOtherDocOptions = (
+  role: RoleType
+): Array<{ value: OtherDocKind; label: string }> => {
+  const roleSpecific: Record<RoleType, Array<{ value: OtherDocKind; label: string }>> = {
+    PERPUS: [
+      { value: 'library_members', label: 'Inventaris & Rekap Anggota Perpustakaan' },
+      { value: 'library_books', label: 'Inventaris Koleksi Buku Perpustakaan' }
+    ],
+    TU: [
+      { value: 'berita_acara', label: 'Rekap Berita Acara & Persuratan TU' },
+      { value: 'tu_correspondence', label: 'Buku Agenda Persuratan & Kearsipan TU' }
+    ],
+    PENJAGA: [
+      { value: 'penjaga_security', label: 'Log Patroli Keamanan, Gerbang & Inspeksi Malam' }
+    ],
+    SERVICE: [
+      { value: 'service_sanitation', label: 'Checklist Kebersihan & Sanitasi Lingkungan' }
+    ],
+    LAB_IPA: [
+      { value: 'lab_k3', label: 'Log Praktikum, Kalibrasi & Keselamatan K3 Lab' }
+    ]
+  };
+
+  return [
+    { value: 'daily_journal', label: 'Jurnal Tugas Harian (Periode)' },
+    ...(roleSpecific[role] || []),
+    { value: 'tupoksi_list', label: 'Daftar Uraian Tupoksi Resmi' },
+    { value: 'kpi_capaian', label: 'Rekap Indikator Kinerja Utama (KPI)' },
+    { value: 'archive_register', label: 'Register Arsip Dokumen Resmi' }
+  ];
+};
 
 interface PrintCenterViewProps {
   onOpenFullDocument?: (
@@ -90,6 +135,9 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
     generateAnnualReportFromMonthly,
     beritaAcaraHistory,
     libraryBooks,
+    libraryMembers,
+    libraryMemberStats,
+    archives,
     getCategoryLabel,
     customCategories,
     syncStatus
@@ -104,6 +152,18 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
   const [selectedKind, setSelectedKind] = useState<ReportKind>('monthly');
   const [otherDocKind, setOtherDocKind] = useState<OtherDocKind>('daily_journal');
 
+  const availableOtherDocOptions = useMemo(
+    () => getAvailableOtherDocOptions(effectiveRole),
+    [effectiveRole]
+  );
+
+  useEffect(() => {
+    const isAllowed = availableOtherDocOptions.some(opt => opt.value === otherDocKind);
+    if (!isAllowed) {
+      setOtherDocKind('daily_journal');
+    }
+  }, [availableOtherDocOptions, otherDocKind]);
+
   // Parameter / Filter State
   const [filterMonth, setFilterMonth] = useState<number>(currentMonth);
   const [filterYear, setFilterYear] = useState<number>(currentYear);
@@ -113,6 +173,11 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
   >('all');
   const [filterInventoryCondition, setFilterInventoryCondition] = useState<
     'all' | 'baik' | 'rusak_ringan' | 'rusak_berat'
+  >('all');
+  const [filterMemberType, setFilterMemberType] = useState<'all' | 'SISWA' | 'GURU' | 'STAFF'>('all');
+  const [filterMemberStatus, setFilterMemberStatus] = useState<'all' | 'aktif' | 'nonaktif' | 'tamat'>('all');
+  const [filterArchiveStatus, setFilterArchiveStatus] = useState<
+    'all' | 'draft' | 'diajukan' | 'disetujui_kasubag' | 'disahkan_kepsek'
   >('all');
   const [searchKeyword, setSearchKeyword] = useState<string>('');
 
@@ -227,10 +292,78 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
     });
   }, [roleInventories, filterInventoryCondition, searchKeyword]);
 
+  const libraryMemberRecap = useMemo(
+    () => computeLibraryMemberRecap(libraryMembers || [], libraryMemberStats),
+    [libraryMembers, libraryMemberStats]
+  );
+
+  const isTaskBasedOtherDoc =
+    otherDocKind === 'daily_journal' ||
+    otherDocKind === 'tu_correspondence' ||
+    otherDocKind === 'penjaga_security' ||
+    otherDocKind === 'service_sanitation' ||
+    otherDocKind === 'lab_k3';
+
   const filteredOtherRows = useMemo(() => {
     const q = searchKeyword.trim().toLowerCase();
-    if (otherDocKind === 'daily_journal') {
+
+    if (
+      otherDocKind === 'daily_journal' ||
+      otherDocKind === 'tu_correspondence' ||
+      otherDocKind === 'penjaga_security' ||
+      otherDocKind === 'service_sanitation' ||
+      otherDocKind === 'lab_k3'
+    ) {
+      const categoryFilters: Record<string, string[] | null> = {
+        daily_journal: null,
+        tu_correspondence: [
+          'surat_masuk',
+          'surat_keluar',
+          'kearsipan',
+          'layanan_umum',
+          'pelayanan_mutasi',
+          'legalisir_dokumen',
+          'pengarsipan_digital'
+        ],
+        penjaga_security: [
+          'keamanan',
+          'inspeksi_malam',
+          'tanggap_darurat',
+          'protokoler_tamu',
+          'pengawasan_anak',
+          'pengamanan_ujian',
+          'koordinasi_keamanan',
+          'penataan_parkir'
+        ],
+        service_sanitation: [
+          'kebersihan_wc',
+          'kebersihan_kantor',
+          'kebersihan_halaman',
+          'kebersihan_sampah',
+          'sanitasi_disinfeksi',
+          'perawatan_taman',
+          'pemeliharaan_taman',
+          'penyediaan_air',
+          'drainase_saluran',
+          'sterilisasi_ruang'
+        ],
+        lab_k3: [
+          'persiapan_praktikum',
+          'pemeliharaan_alat',
+          'inventaris_bahan',
+          'k3_laboratorium',
+          'kalibrasi_presisi',
+          'pengelolaan_limbah',
+          'pembuatan_reagen',
+          'perbaikan_alat',
+          'jadwal_lab',
+          'peragaan_sains',
+          'penataan_spesimen'
+        ]
+      };
+      const allowedCats = categoryFilters[otherDocKind];
       return roleTasks.filter(t => {
+        if (allowedCats && !allowedCats.includes(String(t.category || ''))) return false;
         if (filterMonth === 0) {
           if (!isTaskInYear(t.date, filterYear)) return false;
         } else if (!isTaskInMonth(t.date, filterMonth, filterYear)) {
@@ -238,12 +371,35 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
         }
         if (filterTaskStatus !== 'all' && (t.status || '').toLowerCase() !== filterTaskStatus) return false;
         if (q) {
-          const hay = `${t.title} ${t.description || ''} ${t.location || ''}`.toLowerCase();
+          const hay = `${t.title} ${t.description || ''} ${t.location || ''} ${t.petugas || ''}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
         return true;
       });
     }
+
+    if (otherDocKind === 'library_members') {
+      return (libraryMembers || []).filter(m => {
+        const rawType = (m.tipeAnggota || 'SISWA').trim().toUpperCase();
+        const normType = rawType.includes('GURU')
+          ? 'GURU'
+          : rawType.includes('STAF') || rawType.includes('TENDIK')
+          ? 'STAFF'
+          : 'SISWA';
+        if (filterMemberType !== 'all' && normType !== filterMemberType) return false;
+
+        const rawStatus = (m.status || 'aktif').trim().toLowerCase();
+        const normStatus = rawStatus === 'alumni' ? 'tamat' : rawStatus;
+        if (filterMemberStatus !== 'all' && normStatus !== filterMemberStatus) return false;
+
+        if (q) {
+          const hay = `${m.nomorAnggota || ''} ${m.nama || ''} ${m.kelasAtauJabatan || ''} ${m.nomorIdentitas || ''} ${m.keterangan || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
     if (otherDocKind === 'berita_acara') {
       return (beritaAcaraHistory || []).filter(item => {
         if (!q) return true;
@@ -252,6 +408,7 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
           .includes(q);
       });
     }
+
     if (otherDocKind === 'library_books') {
       return (libraryBooks || []).filter(book => {
         const condNorm = (book.kondisi || '').toLowerCase().replace(/\s+/g, '_');
@@ -264,6 +421,27 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
         return true;
       });
     }
+
+    if (otherDocKind === 'kpi_capaian') {
+      const kpis = ROLE_OPERATIONAL_SPECS[effectiveRole]?.operationalKPIs || [];
+      return kpis.filter(k => {
+        if (!q) return true;
+        return `${k.code} ${k.name} ${k.target} ${k.realization}`.toLowerCase().includes(q);
+      });
+    }
+
+    if (otherDocKind === 'archive_register') {
+      return (archives || []).filter(doc => {
+        if ((doc.role || '').toUpperCase() !== effectiveRole) return false;
+        if (filterArchiveStatus !== 'all' && doc.approvalStatus !== filterArchiveStatus) return false;
+        if (q) {
+          const hay = `${doc.regNumber} ${doc.title} ${doc.nomorSurat} ${doc.period} ${doc.operatorName || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
     // tupoksi_list
     const combined = [
       ...(roleTupoksi.tupoksiList || []).map((text, idx) => ({
@@ -290,9 +468,15 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
     filterYear,
     filterTaskStatus,
     searchKeyword,
+    libraryMembers,
+    filterMemberType,
+    filterMemberStatus,
     beritaAcaraHistory,
     libraryBooks,
     filterInventoryCondition,
+    effectiveRole,
+    archives,
+    filterArchiveStatus,
     roleTupoksi,
     filterClassification
   ]);
@@ -303,6 +487,9 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
     setFilterClassification('all');
     setFilterTaskStatus('all');
     setFilterInventoryCondition('all');
+    setFilterMemberType('all');
+    setFilterMemberStatus('all');
+    setFilterArchiveStatus('all');
     setSearchKeyword('');
     setCustomDocNumber('');
     setDocDate(defaultDocDate);
@@ -331,6 +518,14 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
       const data = existing || generateAnnualReportFromMonthly(effectiveRole, filterYear);
       onOpenFullDocument('annual', data);
     }
+  };
+
+  const otherMetaSummary: Record<RoleType, string> = {
+    PERPUS: 'Anggota · Buku · Jurnal · KPI',
+    TU: 'Berita Acara · Agenda Surat · KPI',
+    PENJAGA: 'Patroli Keamanan · Jurnal · KPI',
+    SERVICE: 'Checklist Sanitasi · Jurnal · KPI',
+    LAB_IPA: 'Log K3 & Praktikum · Jurnal · KPI'
   };
 
   const reportCards: Array<{
@@ -364,13 +559,8 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
     {
       id: 'other',
       title: 'Laporan Lainnya',
-      subtitle: 'Jurnal harian, uraian tupoksi & arsip khusus',
-      meta:
-        effectiveRole === 'TU'
-          ? 'Jurnal · Tupoksi · Berita Acara'
-          : effectiveRole === 'PERPUS'
-          ? 'Jurnal · Tupoksi · Koleksi Buku'
-          : 'Jurnal Harian · Daftar Tupoksi',
+      subtitle: 'Dokumen khusus layanan, anggota, KPI & arsip',
+      meta: otherMetaSummary[effectiveRole],
       icon: FileSpreadsheet
     }
   ];
@@ -385,11 +575,39 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
       ? `DAFTAR INVENTARIS SARANA PRASARANA (${ROLE_LABELS[effectiveRole].toUpperCase()})`
       : otherDocKind === 'daily_journal'
       ? `JURNAL KEGIATAN HARIAN ${ROLE_LABELS[effectiveRole].toUpperCase()}`
-      : otherDocKind === 'berita_acara'
-      ? 'REKAPITULASI BERITA ACARA & PERSURATAN TATA USAHA'
+      : otherDocKind === 'library_members'
+      ? 'DAFTAR INVENTARIS & REKAPITULASI ANGGOTA PERPUSTAKAAN'
       : otherDocKind === 'library_books'
       ? 'DAFTAR INVENTARIS KOLEKSI BUKU PERPUSTAKAAN'
+      : otherDocKind === 'berita_acara'
+      ? 'REKAPITULASI BERITA ACARA & PERSURATAN TATA USAHA'
+      : otherDocKind === 'tu_correspondence'
+      ? 'BUKU AGENDA PERSURATAN & KEARSIPAN TATA USAHA'
+      : otherDocKind === 'penjaga_security'
+      ? 'LOG PATROLI KEAMANAN, GERBANG & INSPEKSI MALAM'
+      : otherDocKind === 'service_sanitation'
+      ? 'CHECKLIST KEBERSIHAN, SANITASI & PEMELIHARAAN LINGKUNGAN'
+      : otherDocKind === 'lab_k3'
+      ? 'LOG PRAKTIKUM, KALIBRASI & KESELAMATAN K3 LABORATORIUM IPA'
+      : otherDocKind === 'kpi_capaian'
+      ? `REKAP INDIKATOR KINERJA UTAMA (KPI) ${ROLE_LABELS[effectiveRole].toUpperCase()}`
+      : otherDocKind === 'archive_register'
+      ? `REGISTER ARSIP DOKUMEN RESMI ${ROLE_LABELS[effectiveRole].toUpperCase()}`
       : `DAFTAR URAIAN TUGAS POKOK & TUGAS TAMBAHAN (${ROLE_LABELS[effectiveRole].toUpperCase()})`;
+
+  const otherDocNumberCode: Record<OtherDocKind, string> = {
+    daily_journal: 'JURNAL-OPS',
+    tupoksi_list: 'TUPOKSI',
+    kpi_capaian: 'REKAP-KPI',
+    archive_register: 'REG-ARSIP',
+    library_members: 'INV-ANGGOTA-PUS',
+    library_books: 'INV-BUKU-PUS',
+    berita_acara: 'REKAP-BA-TU',
+    tu_correspondence: 'AGENDA-SURAT-TU',
+    penjaga_security: 'LOG-PAM-SEK',
+    service_sanitation: 'LOG-SANITASI',
+    lab_k3: 'LOG-K3-LAB'
+  };
 
   const defaultAutoNumber = `800/${
     selectedKind === 'monthly'
@@ -398,10 +616,19 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
       ? 'LAP-THN'
       : selectedKind === 'inventory'
       ? 'KIR-SARPRAS'
-      : 'LAP-OPS'
+      : otherDocNumberCode[otherDocKind]
   }/${schoolConfig.npsn || 'SEKOLAH'}/${filterYear}`;
 
   const resolvedDocNumber = customDocNumber.trim() || defaultAutoNumber;
+
+  const hasLibraryAggregateFallback =
+    selectedKind === 'other' &&
+    otherDocKind === 'library_members' &&
+    filteredOtherRows.length === 0 &&
+    !libraryMemberRecap.isEmpty &&
+    filterMemberType === 'all' &&
+    filterMemberStatus === 'all' &&
+    !searchKeyword.trim();
 
   const activePreviewRowCount =
     selectedKind === 'monthly'
@@ -410,10 +637,16 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
       ? annualMonthlyRecap.length
       : selectedKind === 'inventory'
       ? filteredInventories.length
+      : hasLibraryAggregateFallback
+      ? 3
       : filteredOtherRows.length;
 
   const isEmptyDataset =
-    selectedKind === 'annual' ? filteredAnnualTasks.length === 0 : activePreviewRowCount === 0;
+    selectedKind === 'annual'
+      ? filteredAnnualTasks.length === 0
+      : hasLibraryAggregateFallback
+      ? false
+      : activePreviewRowCount === 0;
 
   return (
     <div className="space-y-5 print:space-y-0">
@@ -548,21 +781,18 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                 onChange={e => setOtherDocKind(e.target.value as OtherDocKind)}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
               >
-                <option value="daily_journal">Jurnal Tugas Harian (Periode)</option>
-                <option value="tupoksi_list">Daftar Uraian Tupoksi Resmi</option>
-                {effectiveRole === 'TU' && (
-                  <option value="berita_acara">Rekap Berita Acara & Persuratan TU</option>
-                )}
-                {effectiveRole === 'PERPUS' && (
-                  <option value="library_books">Inventaris Koleksi Buku Perpustakaan</option>
-                )}
+                {availableOtherDocOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
             </div>
           )}
 
           {/* Month & Year Period Selectors */}
           {(selectedKind === 'monthly' ||
-            (selectedKind === 'other' && otherDocKind === 'daily_journal')) && (
+            (selectedKind === 'other' && isTaskBasedOtherDoc)) && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="block text-xs font-semibold text-slate-700">Periode Bulan</label>
@@ -613,7 +843,70 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
             </div>
           )}
 
-          {/* Classification & Status Filters for Monthly / Annual / Tupoksi / Journal */}
+          {/* Library Member Category & Status Filters */}
+          {selectedKind === 'other' && otherDocKind === 'library_members' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700">Kategori Anggota</label>
+                <select
+                  value={filterMemberType}
+                  onChange={e =>
+                    setFilterMemberType(e.target.value as 'all' | 'SISWA' | 'GURU' | 'STAFF')
+                  }
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                >
+                  <option value="all">Semua Kategori</option>
+                  <option value="SISWA">Siswa / Peserta Didik</option>
+                  <option value="GURU">Guru / Pendidik</option>
+                  <option value="STAFF">Staf / Tendik</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700">Status Keanggotaan</label>
+                <select
+                  value={filterMemberStatus}
+                  onChange={e =>
+                    setFilterMemberStatus(e.target.value as 'all' | 'aktif' | 'nonaktif' | 'tamat')
+                  }
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                >
+                  <option value="all">Semua Status</option>
+                  <option value="aktif">Aktif</option>
+                  <option value="nonaktif">Nonaktif</option>
+                  <option value="tamat">Tamat / Alumni</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Archive Status Filter */}
+          {selectedKind === 'other' && otherDocKind === 'archive_register' && (
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-slate-700">Status Pengesahan Arsip</label>
+              <select
+                value={filterArchiveStatus}
+                onChange={e =>
+                  setFilterArchiveStatus(
+                    e.target.value as
+                      | 'all'
+                      | 'draft'
+                      | 'diajukan'
+                      | 'disetujui_kasubag'
+                      | 'disahkan_kepsek'
+                  )
+                }
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+              >
+                <option value="all">Semua Status Arsip</option>
+                <option value="disahkan_kepsek">Disahkan Kepala Sekolah</option>
+                <option value="disetujui_kasubag">Disetujui Kasubag / Koordinator</option>
+                <option value="diajukan">Diajukan</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+          )}
+
+          {/* Classification & Status Filters for Monthly / Annual / Tupoksi / Operational Logs */}
           {(selectedKind === 'monthly' ||
             selectedKind === 'annual' ||
             (selectedKind === 'other' && otherDocKind === 'tupoksi_list')) && (
@@ -648,7 +941,7 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
 
           {(selectedKind === 'monthly' ||
             selectedKind === 'annual' ||
-            (selectedKind === 'other' && otherDocKind === 'daily_journal')) && (
+            (selectedKind === 'other' && isTaskBasedOtherDoc)) && (
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-700">
                 Status Pelaksanaan
@@ -819,7 +1112,7 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                       ? `${MONTH_NAMES[filterMonth - 1]} ${filterYear}`
                       : selectedKind === 'annual'
                       ? `Tahun ${filterYear}`
-                      : selectedKind === 'other' && otherDocKind === 'daily_journal'
+                      : selectedKind === 'other' && isTaskBasedOtherDoc
                       ? filterMonth === 0
                         ? `Tahun ${filterYear}`
                         : `${MONTH_NAMES[filterMonth - 1]} ${filterYear}`
@@ -911,6 +1204,44 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                           i => (i.kondisi || '').toLowerCase() === 'baik'
                         ).length
                       }
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {selectedKind === 'other' && otherDocKind === 'library_members' && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 border border-slate-300 print:border-black divide-y sm:divide-y-0 sm:divide-x divide-slate-300 print:divide-black text-center text-xs">
+                  <div className="p-2.5">
+                    <p className="text-[11px] text-slate-500 print:text-black">Siswa (L / P)</p>
+                    <p className="text-base font-bold font-mono tabular-nums text-slate-950">
+                      {libraryMemberRecap.totalSiswa}{' '}
+                      <span className="text-[11px] font-normal text-slate-600 print:text-black">
+                        ({libraryMemberRecap.siswaLaki}/{libraryMemberRecap.siswaPerempuan})
+                      </span>
+                    </p>
+                  </div>
+                  <div className="p-2.5">
+                    <p className="text-[11px] text-slate-500 print:text-black">Guru / Pendidik</p>
+                    <p className="text-base font-bold font-mono tabular-nums text-slate-950">
+                      {libraryMemberRecap.totalGuru}{' '}
+                      <span className="text-[11px] font-normal text-slate-600 print:text-black">
+                        ({libraryMemberRecap.guruLaki}/{libraryMemberRecap.guruPerempuan})
+                      </span>
+                    </p>
+                  </div>
+                  <div className="p-2.5">
+                    <p className="text-[11px] text-slate-500 print:text-black">Staf / Tendik</p>
+                    <p className="text-base font-bold font-mono tabular-nums text-slate-950">
+                      {libraryMemberRecap.totalStaff}{' '}
+                      <span className="text-[11px] font-normal text-slate-600 print:text-black">
+                        ({libraryMemberRecap.staffLaki}/{libraryMemberRecap.staffPerempuan})
+                      </span>
+                    </p>
+                  </div>
+                  <div className="p-2.5">
+                    <p className="text-[11px] text-slate-500 print:text-black">Total Anggota Aktif</p>
+                    <p className="text-base font-bold font-mono tabular-nums text-slate-950">
+                      {libraryMemberRecap.grandTotal}
                     </p>
                   </div>
                 </div>
@@ -1121,7 +1452,7 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                   )}
 
                   {/* TABLE 4: OTHER REPORTS */}
-                  {selectedKind === 'other' && otherDocKind === 'daily_journal' && (
+                  {selectedKind === 'other' && isTaskBasedOtherDoc && (
                     <table className="w-full border-collapse text-xs">
                       <thead>
                         <tr className="bg-slate-100 print:bg-slate-200 text-slate-900">
@@ -1135,7 +1466,7 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                             Waktu
                           </th>
                           <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
-                            Uraian Kegiatan
+                            Kategori &amp; Uraian Kegiatan
                           </th>
                           <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
                             Lokasi
@@ -1159,6 +1490,9 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                             </td>
                             <td className="border border-slate-300 print:border-black px-2.5 py-1.5">
                               <p className="font-semibold">{task.title}</p>
+                              <p className="text-[11px] text-slate-500 print:text-black">
+                                {getCategoryLabel(task.category, effectiveRole)}
+                              </p>
                               {task.description && (
                                 <p className="text-[11px] text-slate-600 print:text-black mt-0.5">
                                   {task.description}
@@ -1177,6 +1511,130 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                     </table>
                   )}
 
+                  {selectedKind === 'other' && otherDocKind === 'library_members' && (
+                    <div className="space-y-4">
+                      {hasLibraryAggregateFallback ? (
+                        <table className="w-full border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-100 print:bg-slate-200 text-slate-900">
+                              <th className="border border-slate-300 print:border-black px-2 py-2 text-center w-10">
+                                No
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                                Kategori Keanggotaan
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-right">
+                                Laki-laki (L)
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-right">
+                                Perempuan (P)
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-right">
+                                Jumlah Total
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td className="border border-slate-300 print:border-black px-2 py-1.5 text-center font-mono tabular-nums">1</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 font-semibold">Siswa / Peserta Didik</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-right font-mono tabular-nums">{libraryMemberRecap.siswaLaki}</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-right font-mono tabular-nums">{libraryMemberRecap.siswaPerempuan}</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-right font-mono tabular-nums font-bold">{libraryMemberRecap.totalSiswa}</td>
+                            </tr>
+                            <tr>
+                              <td className="border border-slate-300 print:border-black px-2 py-1.5 text-center font-mono tabular-nums">2</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 font-semibold">Guru / Pendidik</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-right font-mono tabular-nums">{libraryMemberRecap.guruLaki}</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-right font-mono tabular-nums">{libraryMemberRecap.guruPerempuan}</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-right font-mono tabular-nums font-bold">{libraryMemberRecap.totalGuru}</td>
+                            </tr>
+                            <tr>
+                              <td className="border border-slate-300 print:border-black px-2 py-1.5 text-center font-mono tabular-nums">3</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 font-semibold">Staf / Tenaga Kependidikan</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-right font-mono tabular-nums">{libraryMemberRecap.staffLaki}</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-right font-mono tabular-nums">{libraryMemberRecap.staffPerempuan}</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-right font-mono tabular-nums font-bold">{libraryMemberRecap.totalStaff}</td>
+                            </tr>
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-slate-50 print:bg-slate-100 font-bold">
+                              <td colSpan={2} className="border border-slate-300 print:border-black px-2.5 py-2 text-right">
+                                TOTAL ANGGOTA AKTIF
+                              </td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-2 text-right font-mono tabular-nums">{libraryMemberRecap.totalLaki}</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-2 text-right font-mono tabular-nums">{libraryMemberRecap.totalPerempuan}</td>
+                              <td className="border border-slate-300 print:border-black px-2.5 py-2 text-right font-mono tabular-nums">{libraryMemberRecap.grandTotal}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      ) : (
+                        <table className="w-full border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-100 print:bg-slate-200 text-slate-900">
+                              <th className="border border-slate-300 print:border-black px-2 py-2 text-center w-10">
+                                No
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left whitespace-nowrap">
+                                No. Anggota
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                                Nama Lengkap
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-center">
+                                L/P
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                                Kategori &amp; Kelas/Jabatan
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                                Tgl Daftar
+                              </th>
+                              <th className="border border-slate-300 print:border-black px-2.5 py-2 text-center">
+                                Status
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(filteredOtherRows as any[]).map((member, idx) => (
+                              <tr key={member.id || idx}>
+                                <td className="border border-slate-300 print:border-black px-2 py-1.5 text-center font-mono tabular-nums">
+                                  {idx + 1}
+                                </td>
+                                <td className="border border-slate-300 print:border-black px-2.5 py-1.5 font-mono tabular-nums whitespace-nowrap">
+                                  {member.nomorAnggota || '-'}
+                                </td>
+                                <td className="border border-slate-300 print:border-black px-2.5 py-1.5">
+                                  <p className="font-semibold">{member.nama}</p>
+                                  {member.nomorIdentitas && (
+                                    <p className="text-[11px] font-mono text-slate-500 print:text-black">
+                                      ID: {member.nomorIdentitas}
+                                    </p>
+                                  )}
+                                </td>
+                                <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-center font-mono">
+                                  {member.jenisKelamin || '-'}
+                                </td>
+                                <td className="border border-slate-300 print:border-black px-2.5 py-1.5">
+                                  <span className="font-semibold uppercase">
+                                    {member.tipeAnggota || 'SISWA'}
+                                  </span>
+                                  {member.kelasAtauJabatan ? ` — ${member.kelasAtauJabatan}` : ''}
+                                </td>
+                                <td className="border border-slate-300 print:border-black px-2.5 py-1.5 font-mono tabular-nums whitespace-nowrap">
+                                  {formatDateShort(member.tanggalTerdaftar || member.tanggalBergabung)}
+                                </td>
+                                <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-center capitalize whitespace-nowrap">
+                                  {member.status || 'aktif'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+
                   {selectedKind === 'other' && otherDocKind === 'tupoksi_list' && (
                     <table className="w-full border-collapse text-xs">
                       <thead>
@@ -1188,7 +1646,7 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                             Jenis Tugas
                           </th>
                           <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
-                            Uraian Tugas Pokok & Tugas Tambahan
+                            Uraian Tugas Pokok &amp; Tugas Tambahan
                           </th>
                         </tr>
                       </thead>
@@ -1208,6 +1666,117 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                             </tr>
                           )
                         )}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {selectedKind === 'other' && otherDocKind === 'kpi_capaian' && (
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 print:bg-slate-200 text-slate-900">
+                          <th className="border border-slate-300 print:border-black px-2 py-2 text-center w-10">
+                            No
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left whitespace-nowrap">
+                            Kode KPI
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                            Indikator Kinerja Layanan
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                            Target
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                            Realisasi
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-center">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(filteredOtherRows as any[]).map((kpi, idx) => (
+                          <tr key={kpi.code || idx}>
+                            <td className="border border-slate-300 print:border-black px-2 py-1.5 text-center font-mono tabular-nums">
+                              {idx + 1}
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5 font-mono whitespace-nowrap">
+                              {kpi.code}
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5 font-semibold">
+                              {kpi.name}
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5">
+                              {kpi.target}
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5">
+                              {kpi.realization}
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-center font-semibold whitespace-nowrap">
+                              {kpi.status === 'tercapai' ? 'Tercapai' : 'Dalam Proses'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {selectedKind === 'other' && otherDocKind === 'archive_register' && (
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 print:bg-slate-200 text-slate-900">
+                          <th className="border border-slate-300 print:border-black px-2 py-2 text-center w-10">
+                            No
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left whitespace-nowrap">
+                            No. Registrasi
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                            Nomor Surat &amp; Judul Arsip
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                            Periode
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
+                            Tgl Arsip
+                          </th>
+                          <th className="border border-slate-300 print:border-black px-2.5 py-2 text-center">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(filteredOtherRows as any[]).map((doc, idx) => (
+                          <tr key={doc.id || idx}>
+                            <td className="border border-slate-300 print:border-black px-2 py-1.5 text-center font-mono tabular-nums">
+                              {idx + 1}
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5 font-mono whitespace-nowrap">
+                              {doc.regNumber || '-'}
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5">
+                              <p className="font-semibold">{doc.title}</p>
+                              <p className="text-[11px] font-mono text-slate-600 print:text-black">
+                                {doc.nomorSurat || '-'}
+                              </p>
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5">
+                              {doc.period || '-'}
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5 font-mono tabular-nums whitespace-nowrap">
+                              {formatDateShort(doc.dateArchived)}
+                            </td>
+                            <td className="border border-slate-300 print:border-black px-2.5 py-1.5 text-center whitespace-nowrap">
+                              {doc.approvalStatus === 'disahkan_kepsek'
+                                ? 'Disahkan Kepsek'
+                                : doc.approvalStatus === 'disetujui_kasubag'
+                                ? 'Disetujui Kasubag'
+                                : doc.approvalStatus === 'diajukan'
+                                ? 'Diajukan'
+                                : 'Draft'}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   )}
@@ -1272,7 +1841,7 @@ export const PrintCenterView: React.FC<PrintCenterViewProps> = ({ onOpenFullDocu
                             Kode Buku
                           </th>
                           <th className="border border-slate-300 print:border-black px-2.5 py-2 text-left">
-                            Judul & Penulis
+                            Judul &amp; Penulis
                           </th>
                           <th className="border border-slate-300 print:border-black px-2.5 py-2 text-right">
                             Eks.
