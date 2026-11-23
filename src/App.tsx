@@ -1,9 +1,10 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
-import { Header } from './components/common/Header';
+import { Header, SystemStatusBanners } from './components/common/Header';
 import { RoleSelectView } from './components/common/RoleSelectView';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
-import { Bot, Loader2, Sparkles } from 'lucide-react';
+import { SkeletonLoader } from './components/common/SkeletonLoader';
+import { Bot, Sparkles } from 'lucide-react';
 import { resolveBackgroundPresentation, SERVICE_BACKGROUND_PRESETS } from './utils/backgroundHelper';
 
 const RoleWorkspaceView = lazy(() =>
@@ -22,15 +23,10 @@ const AdminAccessPanelModal = lazy(() =>
   import('./components/common/AdminAccessPanelModal').then(m => ({ default: m.AdminAccessPanelModal }))
 );
 
-const LazyViewFallback = () => (
-  <div className="min-h-[240px] flex items-center justify-center p-8 text-slate-500 text-xs gap-2">
-    <Loader2 className="w-4 h-4 animate-spin text-sky-500" />
-    <span>Memuat modul layanan...</span>
-  </div>
-);
+const LazyViewFallback = () => <SkeletonLoader variant="workspace" theme="light" />;
 
 function MainLayout() {
-  const { currentRole, activeNavTab, getServiceBackground } = useApp();
+  const { currentRole, activeNavTab, getServiceBackground, isInitialLoading } = useApp();
   const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
   const [isOwnerAdminOpen, setIsOwnerAdminOpen] = useState(false);
 
@@ -130,6 +126,9 @@ function MainLayout() {
   };
 
   const renderActiveContent = () => {
+    if (isInitialLoading) {
+      return <SkeletonLoader variant="workspace" theme="light" />;
+    }
     if (activeNavTab === 'archive') {
       return (
         <Suspense fallback={<LazyViewFallback />}>
@@ -152,7 +151,7 @@ function MainLayout() {
   );
 
   return (
-    <div className="relative min-h-screen bg-slate-50 flex flex-col justify-between overflow-x-hidden">
+    <div className="relative min-h-screen bg-slate-50 overflow-x-hidden">
       {/* Dynamic Per-User Service Workspace Background */}
       <div
         aria-hidden="true"
@@ -165,33 +164,38 @@ function MainLayout() {
         style={serviceBgPresentation.overlayStyle}
       />
 
-      <div className="relative z-10">
-        <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Fixed Desktop Sidebar + Mobile Sticky Top Bar & Fixed Bottom Nav */}
+      <Header />
+
+      {/* Main App Content Shell (Offset for w-72 desktop sidebar & h-16 mobile bottom nav) */}
+      <div className="relative z-10 lg:pl-72 min-h-screen flex flex-col justify-between pb-20 lg:pb-0">
+        <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex-1">
+          <SystemStatusBanners />
           {renderActiveContent()}
         </main>
+
+        <footer className="border-t border-slate-200/80 bg-white/90 backdrop-blur-xs py-4 mt-8 no-print">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600">
+            <p>
+              Sistem Informasi Operator Layanan Operasional (TU, Penjaga, Service, Perpustakaan, Lab IPA) · Standar Tata Kelola Satuan Pendidikan
+            </p>
+            <p className="font-mono text-[11px] text-slate-500">
+              Kop 3 Kolom · Lembar Pengesahan NIP/NIPPK · Tanda Tangan Basah
+            </p>
+          </div>
+        </footer>
       </div>
 
-      <footer className="relative z-10 border-t border-slate-200/80 bg-white/90 backdrop-blur-xs py-4 mt-12 no-print">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600">
-          <p>
-            Sistem Informasi Operator Layanan Operasional (TU, Penjaga, Service, Perpustakaan, Lab IPA) · Standar Tata Kelola Satuan Pendidikan
-          </p>
-          <p className="font-mono text-[11px] text-slate-500">
-            Kop 3 Kolom · Lembar Pengesahan NIP/NIPPK · Tanda Tangan Basah
-          </p>
-        </div>
-      </footer>
-
-      {/* Floating Global AI Assistant Trigger */}
+      {/* Floating Global AI Assistant Trigger (Positioned above mobile bottom nav) */}
       <button
         type="button"
         onClick={() => setIsFloatingAiOpen(true)}
-        className="fixed bottom-6 right-6 z-40 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer no-print ring-4 ring-indigo-400/20"
+        className="fixed bottom-20 lg:bottom-6 right-4 lg:right-6 z-30 bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-full shadow-xl border border-slate-700 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer no-print"
         title="Buka Asisten Cerdas AI SI-OPS"
       >
-        <Bot className="w-5 h-5 text-amber-300" />
-        <span className="text-xs tracking-wide">Asisten AI SI-OPS</span>
+        <Bot className="w-4 h-4 text-amber-300" />
+        <span className="text-xs tracking-wide hidden sm:inline">Asisten AI SI-OPS</span>
+        <span className="text-xs tracking-wide sm:hidden">AI</span>
         <Sparkles className="w-3.5 h-3.5 text-amber-300" />
       </button>
 

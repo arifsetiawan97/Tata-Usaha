@@ -1,14 +1,14 @@
 import React, { Suspense, lazy, useState, useRef, useEffect } from 'react';
 import { useApp, RoleSubTab } from '../../context/AppContext';
-import { 
-  Building2, 
-  Shield, 
-  Sparkles, 
+import {
+  Building2,
+  Shield,
+  Sparkles,
   BookOpen,
   FlaskConical,
-  Settings, 
-  LogOut, 
-  Boxes, 
+  Settings,
+  LogOut,
+  Boxes,
   CalendarDays,
   RotateCcw,
   Archive,
@@ -24,11 +24,21 @@ import {
   RefreshCw,
   WifiOff,
   ShieldCheck,
-  X
+  X,
+  CheckSquare,
+  FileText,
+  Award,
+  Users,
+  ScrollText,
+  Image as ImageIcon,
+  LayoutGrid,
+  ChevronRight
 } from 'lucide-react';
 import { initialSchoolConfig } from '../../data/initialData';
+import { BERITA_ACARA_TEMPLATES } from '../../data/beritaAcaraTemplates';
 import { LogoKabupatenDefault } from './KopSurat';
 import { formatApiErrorMessage } from '../../services/storageService';
+import { ServiceBackgroundModal } from './BackgroundCustomizer';
 
 const SchoolConfigModal = lazy(() =>
   import('../settings/SchoolConfigModal').then(m => ({ default: m.SchoolConfigModal }))
@@ -40,11 +50,219 @@ const SecretAiGeneratorModal = lazy(() =>
   import('./SecretAiGeneratorModal').then(m => ({ default: m.SecretAiGeneratorModal }))
 );
 
+interface NavDestination {
+  id: RoleSubTab | 'archive';
+  label: string;
+  shortLabel: string;
+  icon: React.ElementType;
+  count?: string | number;
+}
+
+const ROLE_META_MAP = {
+  TU: {
+    label: 'Tata Usaha (TU)',
+    shortLabel: 'Tata Usaha',
+    icon: Building2,
+    accentBg: 'bg-sky-600',
+    activeItemClass: 'bg-sky-50 text-sky-900 border-sky-200 font-bold',
+    activeIndicator: 'bg-sky-600',
+    activeIconClass: 'bg-sky-600 text-white',
+    badgeClass: 'bg-sky-50 text-sky-900 border-sky-200'
+  },
+  PENJAGA: {
+    label: 'Penjaga Sekolah',
+    shortLabel: 'Penjaga',
+    icon: Shield,
+    accentBg: 'bg-blue-600',
+    activeItemClass: 'bg-blue-50 text-blue-900 border-blue-200 font-bold',
+    activeIndicator: 'bg-blue-600',
+    activeIconClass: 'bg-blue-600 text-white',
+    badgeClass: 'bg-blue-50 text-blue-900 border-blue-200'
+  },
+  SERVICE: {
+    label: 'Service (Kebersihan)',
+    shortLabel: 'Kebersihan',
+    icon: Sparkles,
+    accentBg: 'bg-emerald-600',
+    activeItemClass: 'bg-emerald-50 text-emerald-900 border-emerald-200 font-bold',
+    activeIndicator: 'bg-emerald-600',
+    activeIconClass: 'bg-emerald-600 text-white',
+    badgeClass: 'bg-emerald-50 text-emerald-900 border-emerald-200'
+  },
+  PERPUS: {
+    label: 'Perpustakaan',
+    shortLabel: 'Perpustakaan',
+    icon: BookOpen,
+    accentBg: 'bg-purple-600',
+    activeItemClass: 'bg-purple-50 text-purple-900 border-purple-200 font-bold',
+    activeIndicator: 'bg-purple-600',
+    activeIconClass: 'bg-purple-600 text-white',
+    badgeClass: 'bg-purple-50 text-purple-900 border-purple-200'
+  },
+  LAB_IPA: {
+    label: 'Laboratorium IPA',
+    shortLabel: 'Lab IPA',
+    icon: FlaskConical,
+    accentBg: 'bg-teal-600',
+    activeItemClass: 'bg-teal-50 text-teal-900 border-teal-200 font-bold',
+    activeIndicator: 'bg-teal-600',
+    activeIconClass: 'bg-teal-600 text-white',
+    badgeClass: 'bg-teal-50 text-teal-900 border-teal-200'
+  }
+};
+
+export const SystemStatusBanners: React.FC = () => {
+  const {
+    currentUser,
+    databaseCapacitySummary,
+    isAdminAuthenticated,
+    connectionError,
+    retryConnection,
+    sessionExpiredNotice,
+    clearSessionExpiredNotice,
+    actionFeedback,
+    clearActionFeedback
+  } = useApp();
+
+  const hasAnyBanner =
+    (databaseCapacitySummary && databaseCapacitySummary.effectiveAlertLevel !== 'NORMAL') ||
+    Boolean(connectionError) ||
+    Boolean(sessionExpiredNotice) ||
+    Boolean(actionFeedback) ||
+    Boolean(currentUser?.mustChangePassword);
+
+  if (!hasAnyBanner) return null;
+
+  return (
+    <div className="space-y-2.5 mb-5 no-print">
+      {/* Database Capacity Warning / Lock Banner */}
+      {databaseCapacitySummary && databaseCapacitySummary.effectiveAlertLevel !== 'NORMAL' && (
+        <div
+          className={`rounded-xl border px-4 py-2.5 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs ${
+            databaseCapacitySummary.effectiveAlertLevel === 'FULL'
+              ? 'bg-rose-600 text-white border-rose-700'
+              : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
+              ? 'bg-rose-50 text-rose-900 border-rose-200'
+              : 'bg-amber-50 text-amber-950 border-amber-200'
+          }`}
+        >
+          <div className="flex items-center gap-2 font-semibold">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span className="tabular-nums">
+              {databaseCapacitySummary.effectiveAlertLevel === 'FULL'
+                ? `KAPASITAS DATABASE PENUH (${databaseCapacitySummary.totalPercentUsed}%) — Penulisan data baru dikunci otomatis. Hubungi Admin untuk perluasan kuota.`
+                : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
+                ? `PERINGATAN KRITIS KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Sisa ruang penyimpanan hampir habis.`
+                : `PERINGATAN KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Penggunaan Database Admin mencapai 80% atau lebih.`}
+            </span>
+          </div>
+          {isAdminAuthenticated && (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
+              className={`px-3 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
+                databaseCapacitySummary.effectiveAlertLevel === 'FULL'
+                  ? 'bg-white text-rose-700 hover:bg-rose-50'
+                  : 'bg-slate-900 text-white hover:bg-slate-800'
+              }`}
+            >
+              Kelola Kapasitas
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Network Error + Retry Banner */}
+      {connectionError && (
+        <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-900 shadow-2xs">
+          <div className="flex items-center gap-2 font-medium">
+            <WifiOff className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{connectionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => retryConnection()}
+            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>Coba Lagi</span>
+          </button>
+        </div>
+      )}
+
+      {/* Session Expiry Banner */}
+      {sessionExpiredNotice && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-amber-900 shadow-2xs">
+          <div className="flex items-center gap-2 font-medium">
+            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{formatApiErrorMessage(sessionExpiredNotice, '')}</span>
+          </div>
+          <button
+            type="button"
+            onClick={clearSessionExpiredNotice}
+            className="p-1 text-amber-700 hover:text-amber-950 cursor-pointer"
+            aria-label="Tutup peringatan sesi"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Action Feedback Banner */}
+      {actionFeedback && (
+        <div
+          className={`rounded-xl border px-4 py-2.5 text-xs flex items-center justify-between gap-2 shadow-2xs ${
+            actionFeedback.ok
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : 'bg-rose-50 border-rose-200 text-rose-900'
+          }`}
+        >
+          <div className="flex items-center gap-2 font-medium">
+            {actionFeedback.ok ? (
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{formatApiErrorMessage(actionFeedback.text, '')}</span>
+          </div>
+          <button
+            type="button"
+            onClick={clearActionFeedback}
+            className="p-1 opacity-70 hover:opacity-100 cursor-pointer"
+            aria-label="Tutup notifikasi"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Temporary Password Reminder Banner */}
+      {currentUser?.mustChangePassword && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs shadow-2xs">
+          <div className="flex items-center gap-2 text-amber-900">
+            <KeyRound className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Sandi Sementara Aktif:</strong> Anda masuk menggunakan sandi reset sementara. Segera buat sandi baru pribadi Anda.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('siops-open-pin-modal'))}
+            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-2xs cursor-pointer"
+          >
+            Ganti Sandi Sekarang
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const Header: React.FC = () => {
-  const { 
-    currentRole, 
-    activeNavTab, 
-    setActiveNavTab, 
+  const {
+    currentRole,
+    activeNavTab,
+    setActiveNavTab,
     roleSubTabs,
     setRoleSubTab,
     effectiveSchoolConfig: schoolConfig,
@@ -52,6 +270,9 @@ export const Header: React.FC = () => {
     tasks,
     inventories,
     archives,
+    tupoksiDefinitions,
+    libraryBooks,
+    libraryMemberStats,
     updateRolePin,
     currentUser,
     logoutAccessUser,
@@ -61,18 +282,17 @@ export const Header: React.FC = () => {
     syncStatus,
     databaseCapacitySummary,
     isAdminAuthenticated,
-    actionFeedback,
-    clearActionFeedback,
-    sessionExpiredNotice,
-    clearSessionExpiredNotice,
-    connectionError,
-    retryConnection
+    getServiceBackground,
+    saveServiceBackground,
+    resetServiceBackground
   } = useApp();
 
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [isBgModalOpen, setIsBgModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [newPinInput, setNewPinInput] = useState('');
   const [confirmPinInput, setConfirmPinInput] = useState('');
   const [showPinInput, setShowPinInput] = useState(false);
@@ -81,7 +301,7 @@ export const Header: React.FC = () => {
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const [isSecretAiOpen, setIsSecretAiOpen] = useState(false);
 
-  // Automatically open in-service "Buat Sandi Baru" modal when user enters with temporary reset password
+  // Automatically open in-service password modal when entering with temp reset password
   useEffect(() => {
     if (currentRole && currentUser?.mustChangePassword) {
       setNewPinInput('');
@@ -91,6 +311,34 @@ export const Header: React.FC = () => {
       setIsPinModalOpen(true);
     }
   }, [currentRole, currentUser?.id, currentUser?.mustChangePassword]);
+
+  // Listen to modal trigger events from Page Header action buttons
+  useEffect(() => {
+    const openBg = () => setIsBgModalOpen(true);
+    const openCfg = () => setIsConfigModalOpen(true);
+    const openAi = () => setIsAiAssistantOpen(true);
+    const openSecretAi = () => setIsSecretAiOpen(true);
+    const openPin = () => {
+      setNewPinInput('');
+      setConfirmPinInput('');
+      setShowPinInput(false);
+      setPinChangeNotice(null);
+      setIsPinModalOpen(true);
+    };
+
+    window.addEventListener('siops-open-bg-modal', openBg);
+    window.addEventListener('siops-open-config-modal', openCfg);
+    window.addEventListener('siops-open-ai-modal', openAi);
+    window.addEventListener('siops-open-secret-ai-modal', openSecretAi);
+    window.addEventListener('siops-open-pin-modal', openPin);
+    return () => {
+      window.removeEventListener('siops-open-bg-modal', openBg);
+      window.removeEventListener('siops-open-config-modal', openCfg);
+      window.removeEventListener('siops-open-ai-modal', openAi);
+      window.removeEventListener('siops-open-secret-ai-modal', openSecretAi);
+      window.removeEventListener('siops-open-pin-modal', openPin);
+    };
+  }, []);
 
   const logoTapRef = useRef<{ count: number; lastTap: number }>({ count: 0, lastTap: 0 });
   const handleLogoTap = () => {
@@ -109,86 +357,110 @@ export const Header: React.FC = () => {
 
   if (!currentRole) return null;
 
-  const operator = schoolConfig.operatorProfiles?.[currentRole] || initialSchoolConfig.operatorProfiles[currentRole] || {
-    nama: 'Petugas Layanan Operasional',
-    nip: '-',
-    jabatan: 'Operator'
-  };
+  const operator =
+    schoolConfig.operatorProfiles?.[currentRole] ||
+    initialSchoolConfig.operatorProfiles[currentRole] || {
+      nama: 'Petugas Layanan Operasional',
+      nip: '-',
+      jabatan: 'Operator'
+    };
 
-  const roleMeta = {
-    TU: {
-      label: 'Tata Usaha (TU)',
-      icon: Building2,
-      badgeClass: 'bg-sky-50 text-sky-800 border-sky-300',
-      activeTabClass: 'border-sky-600 text-sky-800 bg-sky-50/80 ring-1 ring-sky-500/20 font-bold',
-      iconBg: 'bg-sky-100 text-sky-800'
-    },
-    PENJAGA: {
-      label: 'Penjaga Sekolah',
-      icon: Shield,
-      badgeClass: 'bg-blue-50 text-blue-800 border-blue-300',
-      activeTabClass: 'border-blue-600 text-blue-800 bg-blue-50/80 ring-1 ring-blue-500/20 font-bold',
-      iconBg: 'bg-blue-100 text-blue-800'
-    },
-    SERVICE: {
-      label: 'Service (Kebersihan)',
-      icon: Sparkles,
-      badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300',
-      activeTabClass: 'border-emerald-600 text-emerald-800 bg-emerald-50/80 ring-1 ring-emerald-500/20 font-bold',
-      iconBg: 'bg-emerald-100 text-emerald-800'
-    },
-    PERPUS: {
-      label: 'Perpustakaan',
-      icon: BookOpen,
-      badgeClass: 'bg-purple-50 text-purple-800 border-purple-300',
-      activeTabClass: 'border-purple-600 text-purple-800 bg-purple-50/80 ring-1 ring-purple-500/20 font-bold',
-      iconBg: 'bg-purple-100 text-purple-800'
-    },
-    LAB_IPA: {
-      label: 'Laboratorium IPA',
-      icon: FlaskConical,
-      badgeClass: 'bg-teal-50 text-teal-800 border-teal-300',
-      activeTabClass: 'border-teal-600 text-teal-800 bg-teal-50/80 ring-1 ring-teal-500/20 font-bold',
-      iconBg: 'bg-teal-100 text-teal-800'
-    }
-  }[currentRole];
-
+  const roleMeta = ROLE_META_MAP[currentRole];
   const CurrentRoleIcon = roleMeta.icon;
 
   const roleTasks = tasks.filter(t => t.role === currentRole);
   const roleInventories = inventories.filter(i => i.role === currentRole);
   const roleArchives = archives.filter(a => a.role === currentRole);
+  const roleTupoksiItems =
+    (tupoksiDefinitions[currentRole]?.tupoksiList?.length || 0) +
+    (tupoksiDefinitions[currentRole]?.tugasTambahanList?.length || 0);
+  const totalPerpusMembers =
+    (libraryMemberStats?.siswaLaki || 0) +
+    (libraryMemberStats?.siswaPerempuan || 0) +
+    (libraryMemberStats?.guruPendidik || 0) +
+    (libraryMemberStats?.staffTendik || 0);
 
-  const currentTab = activeNavTab === 'archive' ? 'archive' : (roleSubTabs[currentRole] || 'tasks');
+  const currentTab: RoleSubTab | 'archive' =
+    activeNavTab === 'archive' ? 'archive' : roleSubTabs[currentRole] || 'tasks';
 
-  // Top navigation bar:
-  // "kelola tugas pokok dan tambahan", "lapor bulanan", and "lapor tahunan" have been removed from the top bar as requested!
-  // They are strictly accessible inside each respective operational role's workspace menu.
-  const operationalMenus: Array<{
-    id: RoleSubTab | 'archive';
-    label: string;
-    icon: React.ElementType;
-    count?: number;
-  }> = [
+  const navItems: NavDestination[] = [
     {
       id: 'tasks',
       label: 'Jurnal Tugas Harian',
+      shortLabel: 'Tugas',
       icon: CalendarDays,
       count: roleTasks.length
     },
     {
+      id: 'tupoksi',
+      label: 'Tugas Pokok & Tambahan',
+      shortLabel: 'Tupoksi',
+      icon: CheckSquare,
+      count: roleTupoksiItems
+    },
+    {
+      id: 'monthly',
+      label: 'Laporan Bulanan',
+      shortLabel: 'Bulanan',
+      icon: FileText
+    },
+    {
+      id: 'annual',
+      label: 'Laporan Tahunan',
+      shortLabel: 'Tahunan',
+      icon: Award
+    },
+    {
       id: 'inventory',
       label: 'Inventaris Sarpras',
+      shortLabel: 'Inventaris',
       icon: Boxes,
       count: roleInventories.length
     },
+    ...(currentRole === 'TU'
+      ? [
+          {
+            id: 'berita_acara' as RoleSubTab,
+            label: 'Berita Acara & Surat',
+            shortLabel: 'Berita Acara',
+            icon: ScrollText,
+            count: BERITA_ACARA_TEMPLATES.length
+          }
+        ]
+      : []),
+    ...(currentRole === 'PERPUS'
+      ? [
+          {
+            id: 'buku' as RoleSubTab,
+            label: 'Inventaris Buku',
+            shortLabel: 'Buku',
+            icon: BookOpen,
+            count: libraryBooks?.length || 0
+          },
+          {
+            id: 'anggota' as RoleSubTab,
+            label: 'Anggota Perpus',
+            shortLabel: 'Anggota',
+            icon: Users,
+            count: totalPerpusMembers
+          }
+        ]
+      : []),
     {
       id: 'archive',
-      label: 'Arsip Dokumen',
+      label: 'Arsip Dokumen Resmi',
+      shortLabel: 'Arsip',
       icon: Archive,
       count: roleArchives.length
     }
   ];
+
+  // 4 primary tabs for fixed mobile bottom navigation bar + 5th "Menu" drawer tab
+  const mobilePrimaryIds: Array<RoleSubTab | 'archive'> = ['tasks', 'monthly', 'inventory', 'archive'];
+  const mobilePrimaryTabs = navItems.filter(item => mobilePrimaryIds.includes(item.id));
+  const mobileSecondaryTabs = navItems.filter(item => !mobilePrimaryIds.includes(item.id));
+  const isSecondaryTabActive = mobileSecondaryTabs.some(item => item.id === currentTab);
+  const activeNavItem = navItems.find(item => item.id === currentTab) || navItems[0];
 
   const handleSelectMenu = (menuId: RoleSubTab | 'archive') => {
     if (menuId === 'archive') {
@@ -197,6 +469,8 @@ export const Header: React.FC = () => {
       setActiveNavTab('dashboard');
       setRoleSubTab(currentRole, menuId);
     }
+    setIsMobileDrawerOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleLogout = () => {
@@ -204,348 +478,528 @@ export const Header: React.FC = () => {
     setIsLogoutConfirmOpen(false);
   };
 
+  const activeServiceBg = getServiceBackground(currentRole);
+
   return (
     <>
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs no-print">
-        {/* Top Identity & Account Bar */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 gap-3">
-            {/* Left: School Identity */}
-            <div
-              onClick={handleLogoTap}
-              className="flex items-center gap-3 min-w-0 select-none touch-manipulation"
-            >
-              <div className="w-10 h-10 shrink-0 flex items-center justify-center">
-                {schoolConfig.logoAplikasiUrl ? (
-                  <img 
-                    src={schoolConfig.logoAplikasiUrl} 
-                    alt="Logo Aplikasi" 
-                    className="max-h-9 max-w-[40px] object-contain rounded"
-                  />
-                ) : schoolConfig.logoSekolahUrl ? (
-                  <img 
-                    src={schoolConfig.logoSekolahUrl} 
-                    alt="Logo Sekolah" 
-                    className="max-h-9 max-w-[40px] object-contain"
-                  />
-                ) : (
-                  <LogoKabupatenDefault className="w-8 h-10" />
-                )}
-              </div>
+      {/* =================================================================== */}
+      {/* 1. DESKTOP FIXED SIDEBAR (lg:flex)                                  */}
+      {/* =================================================================== */}
+      <aside className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:w-72 z-30 bg-white/95 backdrop-blur-md border-r border-slate-200/90 shadow-xs no-print">
+        {/* School Brand Header */}
+        <div className="p-4 border-b border-slate-200/80 space-y-3">
+          <div
+            onClick={handleLogoTap}
+            className="flex items-center gap-3 min-w-0 select-none touch-manipulation cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 shrink-0 flex items-center justify-center p-1">
+              {schoolConfig.logoAplikasiUrl ? (
+                <img
+                  src={schoolConfig.logoAplikasiUrl}
+                  alt="Logo Aplikasi"
+                  className="max-h-8 max-w-full object-contain rounded"
+                />
+              ) : schoolConfig.logoSekolahUrl ? (
+                <img
+                  src={schoolConfig.logoSekolahUrl}
+                  alt="Logo Sekolah"
+                  className="max-h-8 max-w-full object-contain"
+                />
+              ) : (
+                <LogoKabupatenDefault className="w-7 h-9" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-extrabold text-slate-900 truncate">
+                {schoolConfig.namaSekolah}
+              </p>
+              <p className="text-[11px] text-slate-500 truncate">
+                SI-OPS · {roleMeta.shortLabel}
+              </p>
+            </div>
+          </div>
 
-              <div className="min-w-0">
-                <h1 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                  {schoolConfig.namaSekolah}
-                </h1>
-                <p className="text-[10px] sm:text-xs text-slate-500 truncate hidden xs:block">
-                  Sistem Informasi Operator Layanan Operasional Sekolah (SI-OPS)
-                </p>
+          {/* Logged-in Operator & Server Status */}
+          <div className={`p-2.5 rounded-xl border ${roleMeta.badgeClass} space-y-1.5`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-6 h-6 rounded-lg bg-white/80 flex items-center justify-center shrink-0">
+                  <CurrentRoleIcon className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold truncate">
+                    {currentUser ? currentUser.namaLengkap : operator.nama}
+                  </p>
+                  <p className="text-[10px] opacity-80 truncate font-mono">
+                    {currentUser ? `@${currentUser.username}` : operator.nip}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Right: Active Role Account Profile & Logout (Protected Role Isolation) */}
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              {/* Database Server Sync & Mode Indicator (non-clickable for regular users) */}
-              {isAdminAuthenticated ? (
+            <div className="flex items-center justify-between pt-1 border-t border-black/5 text-[10px] font-semibold">
+              <span className="flex items-center gap-1 text-slate-700">
+                <Database
+                  className={`w-3 h-3 ${
+                    syncStatus === 'saving'
+                      ? 'text-amber-600'
+                      : syncStatus === 'synced'
+                      ? 'text-emerald-600'
+                      : 'text-rose-600'
+                  }`}
+                />
+                <span>
+                  {syncStatus === 'saving'
+                    ? 'Menyimpan ke server...'
+                    : syncStatus === 'synced'
+                    ? 'Server Terhubung'
+                    : 'Koneksi Terputus'}
+                </span>
+              </span>
+              {isAdminAuthenticated && (
                 <button
                   type="button"
                   onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer tabular-nums bg-amber-50 text-amber-900 border-amber-300"
-                  title="Buka Konsol Database Admin"
+                  className="text-amber-800 hover:underline font-bold cursor-pointer tabular-nums"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-                  <span>
-                    Admin DB Aktif
-                    {databaseCapacitySummary ? ` · ${databaseCapacitySummary.totalPercentUsed}%` : ''}
-                  </span>
+                  Admin{databaseCapacitySummary ? ` · ${databaseCapacitySummary.totalPercentUsed}%` : ''}
                 </button>
-              ) : (
-                <div
-                  className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold tabular-nums ${
-                    syncStatus === 'synced'
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      : syncStatus === 'saving'
-                      ? 'bg-amber-50 text-amber-800 border-amber-200'
-                      : 'bg-slate-100 text-slate-700 border-slate-200'
-                  }`}
-                  title="Status koneksi server terpusat"
-                >
-                  <Database className={`w-3.5 h-3.5 ${syncStatus === 'saving' ? 'text-amber-600' : syncStatus === 'synced' ? 'text-emerald-600' : 'text-slate-500'}`} />
-                  <span>
-                    {syncStatus === 'saving'
-                      ? 'Menyimpan...'
-                      : syncStatus === 'synced'
-                      ? 'Server Terhubung'
-                      : 'Koneksi Terputus'}
-                  </span>
-                </div>
               )}
-
-              {/* Operator Profile Tag */}
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs ${roleMeta.badgeClass} shadow-2xs`}>
-                <div className="p-1 rounded-md bg-white/70">
-                  <CurrentRoleIcon className="w-3.5 h-3.5" />
-                </div>
-                <div className="text-left">
-                  <p className="font-extrabold leading-tight">
-                    {roleMeta.label}
-                  </p>
-                  <p className="text-[10px] opacity-80 truncate max-w-[140px] sm:max-w-[190px]">
-                    {currentUser ? `${currentUser.namaLengkap} (@${currentUser.username})` : operator.nama}
-                  </p>
-                </div>
-              </div>
-
-              {/* Change Password / PIN Security Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setNewPinInput('');
-                  setConfirmPinInput('');
-                  setShowPinInput(false);
-                  setPinChangeNotice(null);
-                  setIsPinModalOpen(true);
-                }}
-                className="p-2 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors border border-slate-200 cursor-pointer"
-                title="Ganti Sandi Akun Ini"
-              >
-                <KeyRound className="w-4 h-4" />
-              </button>
-
-              {/* Asisten Cerdas AI Button */}
-              <button
-                type="button"
-                onClick={() => setIsAiAssistantOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 rounded-lg transition-all shadow-xs cursor-pointer"
-                title="Buka Asisten Cerdas AI SI-OPS untuk seluruh lini operasional"
-              >
-                <Bot className="w-3.5 h-3.5 text-amber-300" />
-                <span className="hidden sm:inline">Asisten AI</span>
-              </button>
-
-              {/* Fitur Kecerdasan Tersembunyi (Akses Khusus: ARIF SETIAWAN) */}
-              <button
-                type="button"
-                onClick={() => setIsSecretAiOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-black text-amber-950 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 border border-amber-500/40 rounded-lg transition-all shadow-xs cursor-pointer"
-                title="Kecerdasan Tersembunyi: Generator Instan Lapor Bulanan & Rekap Tugas Operasional (Otorisasi: ARIF SETIAWAN)"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-900 animate-pulse" />
-                <span className="hidden md:inline">Kecerdasan Tersembunyi</span>
-              </button>
-
-              {/* Settings Button */}
-              <button
-                type="button"
-                onClick={() => setIsConfigModalOpen(true)}
-                className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
-                title="Pengaturan Kop Surat & Identitas Sekolah"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-
-              {/* Reset Data Button (Admin Only) */}
-              <button
-                type="button"
-                onClick={() => setIsResetConfirmOpen(true)}
-                className={`p-2 rounded-lg transition-colors cursor-pointer ${
-                  isAdminAuthenticated
-                    ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'
-                    : 'text-slate-300 hover:text-slate-500'
-                }`}
-                title={isAdminAuthenticated ? 'Reset ke Data Bawaan (Admin)' : 'Reset Data (Hanya Admin Database)'}
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-
-              {/* Logout / Switch Account Button */}
-              <button
-                type="button"
-                onClick={() => setIsLogoutConfirmOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
-                title="Kunci akun dan keluar ke halaman masuk"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Keluar Akun</span>
-              </button>
             </div>
-          </div>
-
-          {/* Navigation Bar - Exclusively for Active Operational Role */}
-          <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto border-t border-slate-100 py-1.5 -mb-px">
-            <span className="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider px-1 shrink-0 hidden md:inline">
-              Menu {roleMeta.label}:
-            </span>
-
-            {operationalMenus.map(menu => {
-              const ItemIcon = menu.icon;
-              const isActive = currentTab === menu.id;
-
-              return (
-                <button
-                  key={menu.id}
-                  type="button"
-                  onClick={() => handleSelectMenu(menu.id)}
-                  className={`flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer ${
-                    isActive
-                      ? `${roleMeta.activeTabClass} shadow-2xs`
-                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <span className={`p-1 rounded-md transition-colors ${isActive ? roleMeta.iconBg : 'bg-slate-100 text-slate-600'}`}>
-                    <ItemIcon className="w-3.5 h-3.5" />
-                  </span>
-                  <span>{menu.label}</span>
-                  {menu.count !== undefined && (
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
-                      isActive ? 'bg-white/90 text-slate-900 shadow-2xs' : 'bg-slate-200 text-slate-700'
-                    }`}>
-                      {menu.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
           </div>
         </div>
 
-        {/* Automatic Database Capacity Warning / Lock Banner (>=80%, >=95%, 100%) */}
-        {databaseCapacitySummary &&
-          databaseCapacitySummary.effectiveAlertLevel !== 'NORMAL' && (
-            <div
-              className={`border-t text-xs ${
-                databaseCapacitySummary.effectiveAlertLevel === 'FULL'
-                  ? 'bg-rose-600 text-white border-rose-700'
-                  : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
-                  ? 'bg-rose-50 text-rose-900 border-rose-200'
-                  : 'bg-amber-50 text-amber-950 border-amber-200'
-              }`}
-            >
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 font-semibold">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span className="tabular-nums">
-                    {databaseCapacitySummary.effectiveAlertLevel === 'FULL'
-                      ? `KAPASITAS DATABASE PENUH (${databaseCapacitySummary.totalPercentUsed}%) — Penulisan data baru dikunci otomatis oleh sistem. Hubungi Admin untuk perluasan kuota atau pengarsipan.`
-                      : databaseCapacitySummary.effectiveAlertLevel === 'CRITICAL'
-                      ? `PERINGATAN KRITIS KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Sisa ruang penyimpanan hampir habis. Segera hubungi Admin.`
-                      : `PERINGATAN KAPASITAS DATABASE (${databaseCapacitySummary.totalPercentUsed}%) — Penggunaan Database Admin telah mencapai 80% atau lebih.`}
-                  </span>
-                </div>
-                {isAdminAuthenticated && (
-                  <button
-                    type="button"
-                    onClick={() => window.dispatchEvent(new CustomEvent('siops-open-owner-panel'))}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
-                      databaseCapacitySummary.effectiveAlertLevel === 'FULL'
-                        ? 'bg-white text-rose-700 hover:bg-rose-50'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
+        {/* Main Vertical Navigation Links */}
+        <nav className="flex-1 overflow-y-auto p-3 space-y-1" aria-label="Navigasi Utama Layanan">
+          <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Menu Utama {roleMeta.shortLabel}
+          </p>
+          {navItems.map(item => {
+            const ItemIcon = item.icon;
+            const isActive = currentTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleSelectMenu(item.id)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`relative w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs transition-all border cursor-pointer group ${
+                  isActive
+                    ? `${roleMeta.activeItemClass} shadow-2xs`
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
+                }`}
+              >
+                {isActive && (
+                  <span
+                    aria-hidden="true"
+                    className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full ${roleMeta.activeIndicator}`}
+                  />
+                )}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                      isActive
+                        ? roleMeta.activeIconClass
+                        : 'bg-slate-100 text-slate-600 group-hover:bg-white'
                     }`}
                   >
-                    Kelola Kapasitas (Admin)
-                  </button>
+                    <ItemIcon className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="truncate whitespace-nowrap">{item.label}</span>
+                </div>
+                {item.count !== undefined && (
+                  <span
+                    className={`text-[11px] font-mono tabular-nums shrink-0 ${
+                      isActive ? 'text-slate-900 font-bold' : 'text-slate-400'
+                    }`}
+                  >
+                    {item.count}
+                  </span>
                 )}
-              </div>
-            </div>
-          )}
-
-        {/* Network Error + Retry Banner */}
-        {connectionError && (
-          <div className="bg-rose-50 border-t border-rose-200">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-900">
-              <div className="flex items-center gap-2">
-                <WifiOff className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>{connectionError}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => retryConnection()}
-                className="px-3 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Coba Lagi</span>
               </button>
-            </div>
-          </div>
-        )}
+            );
+          })}
+        </nav>
 
-        {/* Session Expiry Banner */}
-        {sessionExpiredNotice && (
-          <div className="bg-amber-50 border-t border-amber-200">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2 text-xs text-amber-900">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>{formatApiErrorMessage(sessionExpiredNotice, '')}</span>
-              </div>
-              <button
-                type="button"
-                onClick={clearSessionExpiredNotice}
-                className="p-1 text-amber-700 hover:text-amber-950 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
+        {/* Sidebar Utility Controls */}
+        <div className="p-3 border-t border-slate-200/80 bg-slate-50/70 space-y-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsBgModalOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-700 cursor-pointer transition-colors"
+              title="Ubah background layanan Anda"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+              <span className="truncate">Background</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsConfigModalOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-700 cursor-pointer transition-colors"
+              title="Pengaturan Kop Surat & Identitas Sekolah"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+              <span className="truncate">Kop & Sekolah</span>
+            </button>
           </div>
-        )}
 
-        {/* Action Feedback Banner (Staff Proposal Queue / Admin Guard Notice) */}
-        {actionFeedback && (
-          <div
-            className={`border-t text-xs ${
-              actionFeedback.ok
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                : 'bg-rose-50 border-rose-200 text-rose-900'
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsAiAssistantOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold cursor-pointer transition-colors"
+            >
+              <Bot className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span className="truncate">Asisten AI</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSecretAiOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-bold cursor-pointer transition-colors"
+              title="Generator Instan Lapor Bulanan (ARIF SETIAWAN)"
+            >
+              <Sparkles className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Cepat AI</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setNewPinInput('');
+                setConfirmPinInput('');
+                setShowPinInput(false);
+                setPinChangeNotice(null);
+                setIsPinModalOpen(true);
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-700 cursor-pointer"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-slate-500" />
+              <span>Sandi</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsResetConfirmOpen(true)}
+              className={`p-2 rounded-xl border bg-white cursor-pointer ${
+                isAdminAuthenticated
+                  ? 'border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50'
+                  : 'border-slate-200 text-slate-400 hover:text-slate-600'
+              }`}
+              title={isAdminAuthenticated ? 'Reset ke Data Bawaan (Admin)' : 'Reset Data (Hanya Admin Database)'}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsLogoutConfirmOpen(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[11px] font-bold text-rose-700 cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Keluar</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* =================================================================== */}
+      {/* 2. MOBILE COMPACT TOP BAR (lg:hidden, height 56px)                  */}
+      {/* =================================================================== */}
+      <header className="lg:hidden sticky top-0 z-30 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 flex items-center justify-between gap-2 shadow-2xs no-print">
+        <div
+          onClick={handleLogoTap}
+          className="flex items-center gap-2.5 min-w-0 select-none touch-manipulation"
+        >
+          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0 p-1">
+            {schoolConfig.logoAplikasiUrl ? (
+              <img
+                src={schoolConfig.logoAplikasiUrl}
+                alt="Logo"
+                className="max-h-6 max-w-full object-contain rounded"
+              />
+            ) : schoolConfig.logoSekolahUrl ? (
+              <img
+                src={schoolConfig.logoSekolahUrl}
+                alt="Logo Sekolah"
+                className="max-h-6 max-w-full object-contain"
+              />
+            ) : (
+              <LogoKabupatenDefault className="w-5 h-7" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-extrabold text-slate-900 truncate">
+              {activeNavItem.label}
+            </p>
+            <p className="text-[10px] text-slate-500 truncate">
+              {roleMeta.shortLabel} · {currentUser ? `@${currentUser.username}` : schoolConfig.namaSekolah}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className={`px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1 ${
+              syncStatus === 'saving'
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : syncStatus === 'synced'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-rose-50 border-rose-200 text-rose-800'
             }`}
           >
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 font-medium">
-                {actionFeedback.ok ? (
-                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                )}
-                <span>{formatApiErrorMessage(actionFeedback.text, '')}</span>
+            <Database className="w-3 h-3" />
+            <span>{syncStatus === 'saving' ? 'Simpan' : syncStatus === 'synced' ? 'Aktif' : 'Putus'}</span>
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setIsBgModalOpen(true)}
+            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 cursor-pointer"
+            title="Atur Background Layanan"
+            aria-label="Atur Background Layanan"
+          >
+            <ImageIcon className="w-4 h-4 text-sky-600" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsLogoutConfirmOpen(true)}
+            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 cursor-pointer"
+            title="Keluar Akun"
+            aria-label="Keluar Akun"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* =================================================================== */}
+      {/* 3. MOBILE FIXED BOTTOM NAVIGATION BAR (lg:hidden, height 64px)      */}
+      {/* =================================================================== */}
+      <nav
+        aria-label="Navigasi Bawah Layanan"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 h-16 bg-white/95 backdrop-blur-md border-t border-slate-200 grid grid-cols-5 items-center px-1 shadow-lg no-print"
+      >
+        {mobilePrimaryTabs.map(item => {
+          const ItemIcon = item.icon;
+          const isActive = currentTab === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => handleSelectMenu(item.id)}
+              aria-current={isActive ? 'page' : undefined}
+              className={`relative min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl transition-colors cursor-pointer ${
+                isActive ? 'text-sky-700' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              {isActive && (
+                <span
+                  aria-hidden="true"
+                  className={`absolute top-0.5 w-7 h-1 rounded-full ${roleMeta.activeIndicator}`}
+                />
+              )}
+              <span
+                className={`p-1 rounded-lg transition-colors ${
+                  isActive ? 'bg-sky-50 text-sky-700' : ''
+                }`}
+              >
+                <ItemIcon className="w-5 h-5" />
+              </span>
+              <span className={`text-[10px] leading-none truncate max-w-full px-1 ${isActive ? 'font-bold' : 'font-medium'}`}>
+                {item.shortLabel}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* 5th Tab: More / Menu Sheet Trigger */}
+        <button
+          type="button"
+          onClick={() => setIsMobileDrawerOpen(true)}
+          className={`relative min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-xl transition-colors cursor-pointer ${
+            isSecondaryTabActive || isMobileDrawerOpen ? 'text-sky-700' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          {isSecondaryTabActive && (
+            <span
+              aria-hidden="true"
+              className={`absolute top-0.5 w-7 h-1 rounded-full ${roleMeta.activeIndicator}`}
+            />
+          )}
+          <span
+            className={`p-1 rounded-lg transition-colors ${
+              isSecondaryTabActive || isMobileDrawerOpen ? 'bg-sky-50 text-sky-700' : ''
+            }`}
+          >
+            <LayoutGrid className="w-5 h-5" />
+          </span>
+          <span className={`text-[10px] leading-none ${isSecondaryTabActive ? 'font-bold' : 'font-medium'}`}>
+            Menu
+          </span>
+        </button>
+      </nav>
+
+      {/* =================================================================== */}
+      {/* 4. MOBILE ACTION SHEET / MORE DRAWER                                */}
+      {/* =================================================================== */}
+      {isMobileDrawerOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex items-end bg-slate-950/60 backdrop-blur-xs no-print">
+          <div className="bg-white w-full rounded-t-3xl border-t border-slate-200 max-h-[85vh] overflow-y-auto p-5 space-y-4 shadow-2xl">
+            <div className="w-10 h-1.5 bg-slate-300 rounded-full mx-auto -mt-1 mb-1" />
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Menu Layanan · {roleMeta.label}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Pilih modul layanan atau pengaturan akun
+                </p>
               </div>
               <button
                 type="button"
-                onClick={clearActionFeedback}
-                className="p-1 opacity-70 hover:opacity-100 cursor-pointer"
+                onClick={() => setIsMobileDrawerOpen(false)}
+                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 cursor-pointer"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
-          </div>
-        )}
 
-        {/* In-service Reminder Banner when logged in with Temporary Reset Password */}
-        {currentUser?.mustChangePassword && (
-          <div className="bg-amber-50 border-t border-amber-200">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2 text-amber-900">
-                <KeyRound className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>
-                  <strong>Sandi Sementara Aktif:</strong> Anda saat ini masuk ke layanan menggunakan sandi reset sementara dari Admin. Segera buat sandi baru pribadi Anda agar tercatat di Admin.
-                </span>
-              </div>
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Seluruh Modul Layanan
+              </p>
+              {navItems.map(item => {
+                const ItemIcon = item.icon;
+                const isActive = currentTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectMenu(item.id)}
+                    className={`w-full min-h-[48px] flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs transition-all cursor-pointer ${
+                      isActive
+                        ? roleMeta.activeItemClass
+                        : 'border-slate-200 bg-slate-50/70 text-slate-700 hover:bg-slate-100 font-semibold'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                          isActive ? roleMeta.activeIconClass : 'bg-white border border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <ItemIcon className="w-4 h-4" />
+                      </span>
+                      <span>{item.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {item.count !== undefined && (
+                        <span className="text-xs font-mono tabular-nums text-slate-500">
+                          {item.count}
+                        </span>
+                      )}
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => {
+                  setIsMobileDrawerOpen(false);
+                  setIsBgModalOpen(true);
+                }}
+                className="min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 cursor-pointer"
+              >
+                <ImageIcon className="w-4 h-4 text-sky-600" />
+                <span>Atur Background</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileDrawerOpen(false);
+                  setIsConfigModalOpen(true);
+                }}
+                className="min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 cursor-pointer"
+              >
+                <Settings className="w-4 h-4 text-slate-600" />
+                <span>Kop & Sekolah</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileDrawerOpen(false);
+                  setIsAiAssistantOpen(true);
+                }}
+                className="min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
+              >
+                <Bot className="w-4 h-4 text-amber-300" />
+                <span>Asisten AI</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileDrawerOpen(false);
+                  setIsSecretAiOpen(true);
+                }}
+                className="min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-400 text-slate-950 text-xs font-bold cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Cepat AI</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileDrawerOpen(false);
                   setNewPinInput('');
                   setConfirmPinInput('');
                   setShowPinInput(false);
                   setPinChangeNotice(null);
                   setIsPinModalOpen(true);
                 }}
-                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-2xs cursor-pointer"
+                className="min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 cursor-pointer"
               >
-                Ganti ke Sandi Baru Sekarang
+                <KeyRound className="w-4 h-4 text-blue-600" />
+                <span>Ganti Sandi</span>
               </button>
+              {isAdminAuthenticated ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    window.dispatchEvent(new CustomEvent('siops-open-owner-panel'));
+                  }}
+                  className="min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-amber-300 bg-amber-50 text-xs font-bold text-amber-900 cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4 text-amber-700" />
+                  <span>Konsol Admin</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    setIsLogoutConfirmOpen(true);
+                  }}
+                  className="min-h-[44px] flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Keluar Akun</span>
+                </button>
+              )}
             </div>
           </div>
-        )}
-      </header>
+        </div>
+      )}
 
-      {/* Settings Modal */}
+      {/* =================================================================== */}
+      {/* 5. WORKSPACE MODALS (Shared by Sidebar, Top Bar & Page Header)      */}
+      {/* =================================================================== */}
       {isConfigModalOpen && (
         <Suspense fallback={null}>
           <SchoolConfigModal
@@ -555,9 +1009,21 @@ export const Header: React.FC = () => {
         </Suspense>
       )}
 
-      {/* In-UI Reset Data Confirmation Modal */}
+      {isBgModalOpen && (
+        <ServiceBackgroundModal
+          isOpen={isBgModalOpen}
+          onClose={() => setIsBgModalOpen(false)}
+          serviceLabel={roleMeta.label}
+          usernameLabel={currentUser?.username}
+          initialConfig={activeServiceBg}
+          onSave={cfg => saveServiceBackground(currentRole, cfg)}
+          onReset={() => resetServiceBackground(currentRole)}
+        />
+      )}
+
+      {/* Reset Data Confirmation Modal */}
       {isResetConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-2xs p-4 animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-2xs p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
@@ -595,9 +1061,9 @@ export const Header: React.FC = () => {
         </div>
       )}
 
-      {/* In-UI Logout Confirmation Modal */}
+      {/* Logout Confirmation Modal */}
       {isLogoutConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-2xs p-4 animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-2xs p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
@@ -608,7 +1074,7 @@ export const Header: React.FC = () => {
                   Keluar dari Akun {roleMeta.label}?
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Sesi ruang kerja Anda akan dikunci. Untuk masuk kembali atau beralih ke peran lain, diperlukan verifikasi PIN keamanan akun.
+                  Sesi ruang kerja Anda akan dikunci. Untuk masuk kembali, diperlukan verifikasi sandi keamanan akun.
                 </p>
               </div>
             </div>
@@ -631,9 +1097,10 @@ export const Header: React.FC = () => {
           </div>
         </div>
       )}
-      {/* In-UI Change Password Modal (Also used after entering service with Temp Reset Password) */}
+
+      {/* Change Password Modal */}
       {isPinModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-2xs p-4 animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-2xs p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-sm w-full p-5 space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
@@ -649,16 +1116,16 @@ export const Header: React.FC = () => {
                 </h3>
                 <p className="text-xs text-slate-500 leading-relaxed">
                   {currentUser?.mustChangePassword
-                    ? 'Anda sudah masuk ke layanan menggunakan sandi sementara. Buat sandi baru Anda agar otomatis tercatat di Admin.'
+                    ? 'Anda sudah masuk menggunakan sandi sementara. Buat sandi baru Anda agar tercatat di Admin.'
                     : accessRules.enforceUniquePassword
-                    ? 'Setiap sandi bersifat unik dan hanya bisa dikaitkan dengan satu nama pengguna saja.'
+                    ? 'Setiap sandi bersifat unik dan hanya dikaitkan dengan satu akun.'
                     : 'Masukkan sandi baru minimal 4 karakter.'}
                 </p>
               </div>
             </div>
 
             <form
-              onSubmit={async (e) => {
+              onSubmit={async e => {
                 e.preventDefault();
                 if (!newPinInput.trim() || isSubmittingPin) return;
                 setIsSubmittingPin(true);
@@ -667,14 +1134,20 @@ export const Header: React.FC = () => {
                     if (newPinInput.trim() !== confirmPinInput.trim()) {
                       setPinChangeNotice({
                         ok: false,
-                        text: 'Konfirmasi sandi baru tidak cocok. Pastikan kedua kolom sandi baru sama.'
+                        text: 'Konfirmasi sandi baru tidak cocok. Pastikan kedua kolom sandi sama.'
                       });
                       return;
                     }
-                    const res = await completePasswordResetWithNewPassword(currentUser.id, newPinInput.trim());
+                    const res = await completePasswordResetWithNewPassword(
+                      currentUser.id,
+                      newPinInput.trim()
+                    );
                     setPinChangeNotice({
                       ok: res.ok,
-                      text: formatApiErrorMessage(res.message, res.ok ? 'Sandi diperbarui.' : 'Gagal memperbarui sandi.')
+                      text: formatApiErrorMessage(
+                        res.message,
+                        res.ok ? 'Sandi diperbarui.' : 'Gagal memperbarui sandi.'
+                      )
                     });
                     if (res.ok) {
                       setTimeout(() => {
@@ -686,7 +1159,10 @@ export const Header: React.FC = () => {
                     const res = await updateAccessUserPassword(currentUser.id, newPinInput.trim());
                     setPinChangeNotice({
                       ok: res.ok,
-                      text: formatApiErrorMessage(res.message, res.ok ? 'Sandi diperbarui.' : 'Gagal memperbarui sandi.')
+                      text: formatApiErrorMessage(
+                        res.message,
+                        res.ok ? 'Sandi diperbarui.' : 'Gagal memperbarui sandi.'
+                      )
                     });
                     if (res.ok) {
                       setTimeout(() => {
@@ -720,7 +1196,7 @@ export const Header: React.FC = () => {
                     minLength={4}
                     maxLength={24}
                     value={newPinInput}
-                    onChange={(e) => {
+                    onChange={e => {
                       setNewPinInput(e.target.value);
                       if (pinChangeNotice) setPinChangeNotice(null);
                     }}
@@ -748,7 +1224,7 @@ export const Header: React.FC = () => {
                     minLength={4}
                     maxLength={24}
                     value={confirmPinInput}
-                    onChange={(e) => {
+                    onChange={e => {
                       setConfirmPinInput(e.target.value);
                       if (pinChangeNotice) setPinChangeNotice(null);
                     }}
@@ -796,7 +1272,6 @@ export const Header: React.FC = () => {
         </div>
       )}
 
-      {/* AI Assistant Modal */}
       {isAiAssistantOpen && (
         <Suspense fallback={null}>
           <AiAssistantModal
@@ -807,14 +1282,13 @@ export const Header: React.FC = () => {
         </Suspense>
       )}
 
-      {/* Secret AI Generator Modal (Otorisasi: ARIF SETIAWAN) */}
       {isSecretAiOpen && (
         <Suspense fallback={null}>
           <SecretAiGeneratorModal
             isOpen={isSecretAiOpen}
             onClose={() => setIsSecretAiOpen(false)}
             defaultRole={currentRole}
-            onOpenReport={(m, y, r) => {
+            onOpenReport={() => {
               setActiveNavTab('monthly');
             }}
           />
